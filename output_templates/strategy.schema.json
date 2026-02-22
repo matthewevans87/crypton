@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Crypton Trading Strategy",
+  "description": "Schema for the strategy.json file produced by the Synthesis Agent",
+  "type": "object",
+  "required": ["mode", "validUntil", "posture", "risk", "positions"],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["paper", "live"],
+      "description": "Execution mode: paper (simulated) or live (real capital)"
+    },
+    "validUntil": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 datetime when this strategy expires"
+    },
+    "posture": {
+      "type": "string",
+      "enum": ["aggressive", "moderate", "defensive", "flat", "exit_all"],
+      "description": "Overall risk stance for this strategy cycle"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Brief prose explanation of the overall strategy logic"
+    },
+    "risk": {
+      "type": "object",
+      "required": ["maxDrawdown", "dailyLossLimit", "maxExposure", "maxPositionSize"],
+      "properties": {
+        "maxDrawdown": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum portfolio drawdown threshold (0.1 = 10%)"
+        },
+        "dailyLossLimit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum daily loss before suspending trading (0.03 = 3%)"
+        },
+        "maxExposure": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum total portfolio exposure (0.7 = 70%)"
+        },
+        "maxPositionSize": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Maximum size for any single position (0.15 = 15%)"
+        },
+        "safeModeTrigger": {
+          "type": "string",
+          "enum": ["consecutive_losses", "max_drawdown", "manual"],
+          "description": "Condition that triggers safe mode"
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "description": "Array of positions to open, manage, or close",
+      "items": {
+        "type": "object",
+        "required": ["asset", "direction", "allocation", "entryType"],
+        "properties": {
+          "asset": {
+            "type": "string",
+            "description": "Trading pair (e.g., 'BTC/USD', 'ETH/USD')"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["long", "short", "close"],
+            "description": "Trade direction"
+          },
+          "allocation": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Capital allocation percentage (0.10 = 10%)"
+          },
+          "entryType": {
+            "type": "string",
+            "enum": ["market", "limit", "conditional"],
+            "description": "Order type for entry"
+          },
+          "entryConditions": {
+            "type": "object",
+            "description": "Conditions for conditional entry (evaluated against live indicator data)",
+            "properties": {
+              "indicator": {
+                "type": "string",
+                "description": "Indicator name (e.g., 'RSI', 'MACD')"
+              },
+              "operator": {
+                "type": "string",
+                "enum": ["gt", "lt", "eq", "gte", "lte", "crosses_above", "crosses_below"]
+              },
+              "value": {
+                "type": "number"
+              }
+            }
+          },
+          "takeProfit": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["target", "percentage"],
+              "properties": {
+                "target": {
+                  "type": "number",
+                  "description": "Price target for partial close"
+                },
+                "percentage": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Percentage of position to close at this target"
+                }
+              }
+            }
+          },
+          "stopLoss": {
+            "type": "number",
+            "description": "Stop loss price (null if no stop loss)"
+          },
+          "trailingStop": {
+            "type": "number",
+            "description": "Trailing stop percentage (e.g., 0.02 = 2%)"
+          },
+          "timeBasedExit": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Exit position at this time if still open"
+          },
+          "invalidationCondition": {
+            "type": "object",
+            "description": "Market state that signals the thesis is wrong",
+            "properties": {
+              "indicator": {
+                "type": "string"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
