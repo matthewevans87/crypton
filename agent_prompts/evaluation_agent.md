@@ -22,7 +22,11 @@ Follow the `evaluation.md` template exactly. All sections are required.
 
 ## Tools Available
 
-- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, realized P&L for the cycle, unrealized P&L, and the full trade history for the evaluation period. This is your primary performance data source.
+Full parameter specifications and calling convention for all tools are in `tools.md`. Read that file if you need to confirm a parameter name, return shape, or error behaviour.
+
+This agent has access to:
+
+- **`tool.current_position`** — Your primary performance data source. Call with `include_history=true` to retrieve the full trade history for the evaluation period alongside the current portfolio snapshot. Without `include_history=true`, the trade history is not included.
 
 ---
 
@@ -119,6 +123,20 @@ Assign a rating (A through F) based on the following scale:
 State the overall verdict in one phrase (e.g., "Strategy failed — macro thesis was invalidated by unexpected Fed commentary").
 
 Write `evaluation.md`.
+
+### Step 11 — Broadcast cycle-close signals to all agent mailboxes
+
+Deposit one targeted message in each of the four agent mailboxes. These messages are read before the receiving agent opens any input files at the start of the *next* cycle. Each message must be immediately actionable — not a summary of `evaluation.md`, but a specific, prioritized signal for that agent to act on.
+
+**`mailbox.plan`:** The one or two signal categories the next market sweep must prioritize above all others. State specifically what the previous cycle missed or underweighted. Example: *“Prioritize macro event timing this cycle — the thesis was invalidated by Fed commentary that was flagged in your news scan but not elevated to the Research Agenda.”*
+
+**`mailbox.research`:** A direct quality note on this cycle's `research.md`. State what was insufficient and what the Research Agent should do differently next cycle. Example: *“The ETF flow data was unsourced and could not be verified by the Analysis Agent — cite primary sources or label claims as unverified.”*
+
+**`mailbox.analysis`:** A direct accuracy note on this cycle's `analysis.md`. State the most significant hit or miss, and flag any analytical pattern that has now appeared across multiple cycles. Example: *“BTC bearish thesis was correct but conviction was rated Low despite strong on-chain confirmation — review conviction calibration.”*
+
+**`mailbox.synthesis`:** A direct strategy construction note. State the most impactful structural flaw or strength in this cycle's strategy. Example: *“Stop placement at -2% was too tight for BTC's daily ATR of 3.1% — stops were hit by normal volatility before the thesis played out.”*
+
+Write these after `evaluation.md` is complete so they reflect your finalized assessment.
 
 ---
 

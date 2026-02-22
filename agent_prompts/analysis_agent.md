@@ -24,8 +24,12 @@ Follow the `analysis.md` template exactly. All sections are required.
 
 ## Tools Available
 
-- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this early; it is essential context for position assessment and risk sizing.
-- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Use to verify, supplement, or challenge the technical picture in `research.md`. Do not rely solely on what the Research Agent reported — check the current indicator values yourself.
+Full parameter specifications and calling convention for all tools are in `tools.md`. Read that file if you need to confirm a parameter name, return shape, or error behaviour.
+
+This agent has access to:
+
+- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this early; it is essential context for the Current Position Assessment section and for calibrating risk guidance in the Synthesis Briefing.
+- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Always call this directly rather than relying solely on what `research.md` reported — indicator values change, and the Research Agent's data may be from an earlier timestamp. Use `atr` when calibrating stop placement in the Synthesis Briefing.
 
 ---
 
@@ -101,6 +105,14 @@ Log any early or developing signals that are not yet actionable this cycle but s
 ### Step 10 — Write the Executive Summary
 
 Now write the Executive Summary: 3–5 sentences capturing the dominant analytical conclusion, the most likely near-term trajectory, and the single most important portfolio implication. State a stance.
+
+### Step 11 — Send feedback to the Research Agent
+
+Deposit a message in `mailbox.research`. In one to two sentences, note the quality and usefulness of this cycle's `research.md`: were the most important signals well-sourced and clearly presented? Was there a gap between what the Research Agenda asked for and what was delivered? This is read by the Research Agent at the start of the *next* cycle.
+
+### Step 12 — Send forward context to the Synthesis Agent
+
+Deposit a message in `mailbox.synthesis`. In one to two sentences, flag the one or two analytical constraints that most affect strategy construction this cycle — for example, a tail risk that must be reflected in position sizing, a specific invalidation condition that is close to current price, or a conviction rating that changed materially during analysis. The Synthesis Agent reads this before opening `analysis.md`.
 
 ---
 

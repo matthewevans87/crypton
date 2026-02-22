@@ -22,7 +22,11 @@ Follow the `strategy.json` template exactly. Use the `_comment` fields in the te
 
 ## Tools Available
 
-- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. This is essential input — you cannot size positions or set risk limits without knowing the current state.
+Full parameter specifications and calling convention for all tools are in `tools.md`. Read that file if you need to confirm a parameter name, return shape, or error behaviour.
+
+This agent has access to:
+
+- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this before generating any position entries. You cannot set `allocation_pct`, define entry conditions, or respect `max_total_exposure_pct` without knowing what is already deployed.
 
 ---
 
@@ -126,6 +130,12 @@ Before finalizing, review your `strategy.json` against the following checklist:
 - [ ] The sum of all position `allocation_pct` values does not exceed `risk_management.max_total_exposure_pct`.
 - [ ] All entry conditions reference valid indicators, operators, and timeframes per the schema.
 - [ ] `validity_window.expires_at` is set to a future datetime.
+
+### Step 10 — Send mailbox messages
+
+**Feedback to the Analysis Agent:** Deposit a message in `mailbox.analysis`. In one to two sentences, note whether `analysis.md` gave you what you needed to construct a decisive strategy — specifically, whether the Synthesis Briefing was actionable and whether conviction ratings and invalidation conditions were clear enough to translate into strategy schema fields.
+
+**Forward context to the Evaluation Agent:** Deposit a message in `mailbox.evaluation`. In one to two sentences, note any deliberate deviations from the Analysis Agent's recommendations (e.g., reduced position size despite high conviction, or a different entry approach than the analysis implied) and the rationale. The Evaluation Agent reads this before comparing `strategy.json` against `analysis.md` — without it, intentional deviations are indistinguishable from errors.
 
 ---
 

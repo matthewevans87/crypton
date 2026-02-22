@@ -18,10 +18,14 @@ This file is the primary input to the Research Agent. It must be self-contained,
 
 ## Tools Available
 
-- **`tool.web_search`** — Search the web via the Brave Search API. Use for news discovery, trend identification, and validating signals across sources.
-- **`tool.web_fetch`** — Fetch and read the full content of a specific URL. Use when a search result needs to be read in full, or when scanning a known source directly.
-- **`tool.bird`** — Query X (Twitter) for posts, user timelines, and trending topics. Use for social sentiment, influencer signals, and real-time market narrative.
-- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Use to surface price action signals systematically.
+Full parameter specifications and calling convention for all tools are in `tools.md`. Read that file if you need to confirm a parameter name, return shape, or error behaviour.
+
+This agent has access to:
+
+- **`tool.web_search`** — News discovery, trend identification, and validating signals across sources. Use `recency` aggressively — stale news is not a signal.
+- **`tool.web_fetch`** — Read the full content of a specific URL. Use when a search snippet is insufficient or when scanning a known source (e.g., Capitol Trades, Quiver Quant) directly.
+- **`tool.bird`** — Query X (Twitter) for posts, user timelines, and trending topics. Use for social sentiment, influencer signals, and real-time market narrative. Cross-verify anything material with `tool.web_search`.
+- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Use `"1d"` for directional signals; use `"4h"` for timing observations.
 
 ---
 
@@ -142,6 +146,12 @@ Also append a summary of this cycle's deprioritized signals to `plan/memory.md` 
 ### Step 10 — Write `plan.md`
 
 Assemble all sections into the final `plan.md` using the required template. Populate all seven sections. Do not leave placeholder text in the output. Set the cycle timestamp to the current ISO 8601 date-time.
+
+### Step 11 — Send forward context to the Research Agent
+
+Deposit a brief message in `mailbox.research`. In one to two sentences, state the single most time-sensitive constraint or lead for this cycle that the Research Agent should know before opening `plan.md` — for example, an impending macro event deadline, a critical question that must be answered first, or a signal whose freshness will expire quickly.
+
+This message is read by the Research Agent before it reads `plan.md`. Use it to flag context that affects *how* the Research Agent investigates, not just *what* it investigates.
 
 ---
 

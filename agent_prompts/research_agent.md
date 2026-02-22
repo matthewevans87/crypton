@@ -22,10 +22,14 @@ Write the **Executive Summary last**, after all investigation sections are compl
 
 ## Tools Available
 
-- **`tool.web_search`** — Search the web via the Brave Search API. Use for discovering sources, finding corroborating evidence, and verifying claims across multiple outlets.
-- **`tool.web_fetch`** — Fetch and read the full content of a specific URL. Use to read articles, reports, data pages, or primary sources in full when a snippet is insufficient.
-- **`tool.bird`** — Query X (Twitter) for posts, user timelines, and trending topics. Use for real-time sentiment, influencer commentary, and first-hand accounts from market participants.
-- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Use if a research question requires confirming or elaborating on a technical signal.
+Full parameter specifications and calling convention for all tools are in `tools.md`. Read that file if you need to confirm a parameter name, return shape, or error behaviour.
+
+This agent has access to:
+
+- **`tool.web_search`** — Your primary discovery tool. Use for finding sources, corroborating claims, and verifying signals across multiple outlets. Always prefer specific queries with asset names, dates, and key terms.
+- **`tool.web_fetch`** — Read articles, reports, data pages, or primary sources in full when a snippet is insufficient. Essential for anything that must be cited with precision.
+- **`tool.bird`** — Real-time sentiment, influencer commentary, and first-hand accounts from market participants. Use `timeline` mode for known high-signal accounts; keyword search for trend discovery.
+- **`tool.technical_indicators`** — Use only if a Research Agenda item explicitly requires confirming or elaborating on a technical signal. Technical interpretation is the Analysis Agent's job — keep usage targeted.
 
 ---
 
@@ -103,6 +107,14 @@ This is the first thing the Analysis Agent reads. Make it count.
 ### Step 10 — Update `research/memory.md`
 
 Append notes from this cycle covering: dead ends, unreliable sources encountered, leads that should be revisited, and any standing patterns you are tracking.
+
+### Step 11 — Send feedback to the Plan Agent
+
+Deposit a message in `mailbox.plan`. In one to two sentences, note the quality of this cycle's Research Agenda: was it specific enough to act on? Were important areas missing? Were any items so broad that meaningful investigation was impossible? This is read by the Plan Agent at the start of the *next* cycle.
+
+### Step 12 — Send forward context to the Analysis Agent
+
+Deposit a message in `mailbox.analysis`. In one to two sentences, state the single most important verified finding from this cycle and any unresolved uncertainty the Analysis Agent should weigh carefully when reading `research.md`. This message sets the frame before the Analysis Agent opens the file.
 
 ---
 

@@ -27,7 +27,14 @@ The `strategy.json` file is the formal contract between the Learning Loop and th
 
 ### Inter-Agent Communication
 
-Each agent maintains a private inbox (`mailbox.<agent>`). Adjacent agents may deposit short, targeted messages (one to two sentences) into a downstream agent's inbox to carry forward context or flag high-priority signals across duty cycles.
+Each agent maintains a private inbox (`mailbox.<agent>`). Two mailbox patterns are supported:
+
+- **Forward signals:** An agent deposits short context or priority flags into the *next* agent's mailbox to carry important information forward within the same cycle — for example, the Research Agent flagging a time-sensitive finding for the Analysis Agent before it opens `research.md`.
+- **Backward feedback:** An agent deposits short quality feedback into the *previous* agent's mailbox for use in the next cycle — for example, the Analysis Agent noting that an item in `research.md` was insufficiently sourced.
+
+The `Evaluation Agent` is the exception: at the close of each cycle it broadcasts targeted signals to *all* agent mailboxes, surfacing specific improvement guidance for each agent before the next cycle begins.
+
+All mailbox messages are limited to one to two sentences. The last 5 messages per agent inbox are retained.
 
 ### Exchange Support
 
@@ -55,7 +62,7 @@ The Learning Loop is the intelligence core of Crypton. It runs as a continuous c
 
 The `Plan Agent` opens each learning cycle with a broad, first-pass scan across market data, on-chain activity, news, and other high-signal sources. Its goal is to surface research leads and signals worth deeper investigation, then translate those findings into a prioritized research agenda for the Research Agent to execute. It outputs a `plan.md` file.
 
-**Inputs:** `plan_agent.md`, `mailbox.plan`, `plan/memory.md`, prior evaluation summaries  
+**Inputs:** `plan_agent.md`, `tools.md`, `mailbox.plan`, `plan/memory.md`, prior evaluation summaries  
 **Output:** `plan.md`
 
 **Steps:**
@@ -76,6 +83,7 @@ The `Plan Agent` opens each learning cycle with a broad, first-pass scan across 
 8. Using all findings from steps 3–7, construct a prioritized **Research Agenda** for the Research Agent. For each investigation item, specify: a clear title, why it is important (which signal prompted it), the specific questions that must be answered, and suggested sources or search strategies. Rank items by estimated market impact and time sensitivity into three tiers: investigate immediately, investigate if time permits, and monitor only. This becomes **Section 6** of `plan.md`.
 9. Log all observed signals that were considered but did not make the Research Agenda. Record a brief note on why each was deprioritized. This becomes **Section 7** of `plan.md`, and a summary should also be appended to `plan/memory.md` for future cycle awareness.
 10. Produce the final `plan.md` containing all seven sections.
+11. Deposit a brief forward-context message in `mailbox.research` summarizing the single most time-sensitive constraint or lead for this cycle — for example, a macro event deadline or a signal that must be clarified before analysis can proceed. One to two sentences.
 
 ### Research
 
@@ -83,7 +91,7 @@ The `Plan Agent` opens each learning cycle with a broad, first-pass scan across 
 
 While the `Plan Agent` performs a broad full-spectrum sweep, the `Research Agent` conducts a deep, focused investigation of the specific leads and signals identified in `plan.md`. Its goal is to gather high-quality, well-sourced, and well-organized information that gives the Analysis Agent everything it needs to form a complete market picture — without requiring the Analysis Agent to do any further data gathering.
 
-**Inputs:** `research_agent.md`, `mailbox.research`, `plan.md`  
+**Inputs:** `research_agent.md`, `tools.md`, `mailbox.research`, `plan.md`  
 **Output:** `research.md`
 
 **Steps:**
@@ -103,6 +111,8 @@ While the `Plan Agent` performs a broad full-spectrum sweep, the `Research Agent
 8. List any questions that could not be answered this cycle and recommend how the Plan Agent might pursue them next cycle.
 9. Write the **Executive Summary** last: 3–5 sentences capturing the most important findings, whether key signals were confirmed or contradicted, and the overall character of the market environment.
 10. Update `research/memory.md` with self-notes, dead ends, source quality observations, and leads worth revisiting in future cycles.
+11. Deposit a feedback message in `mailbox.plan` rating the usability of this cycle's Research Agenda: was it specific and actionable? Were important areas omitted? One to two sentences.
+12. Deposit a brief forward-context message in `mailbox.analysis` highlighting the single most significant verified finding and any active uncertainty the Analysis Agent should weigh carefully. One to two sentences.
 
 ### Analysis
 
@@ -110,7 +120,7 @@ While the `Plan Agent` performs a broad full-spectrum sweep, the `Research Agent
 
 The `Analysis Agent` performs a deep, structured analysis of the research findings in the context of current positions and technical data. Where the `Plan Agent` identifies *what* is happening and the `Research Agent` establishes *why*, the `Analysis Agent` determines *what it means* and *what is likely to happen next*. Its output must be opinionated enough for the Synthesis Agent to generate a decisive strategy.
 
-**Inputs:** `analysis_agent.md`, `mailbox.analysis`, `research.md`, `tool.current_position`, `tool.technical_indicators`  
+**Inputs:** `analysis_agent.md`, `tools.md`, `mailbox.analysis`, `research.md`, `tool.current_position`, `tool.technical_indicators`  
 **Output:** `analysis.md`
 
 **Steps:**
@@ -127,6 +137,8 @@ The `Analysis Agent` performs a deep, structured analysis of the research findin
 10. Synthesize all conclusions into a direct **Synthesis Briefing**: a consolidated, unambiguous brief that states the market stance, recommended posture, per-asset direction and conviction, risk budget guidance, and stop/exit conditions.
 11. Note any **Emerging Signals** — early or developing signals not yet actionable but worth tracking in the next cycle.
 12. Write the **Executive Summary** last, once the full analysis is complete.
+13. Deposit a feedback message in `mailbox.research` noting the quality and usefulness of this cycle's `research.md`: were key signals well-sourced and clearly presented? Was there a significant gap between what was requested and what was delivered? One to two sentences.
+14. Deposit a brief forward-context message in `mailbox.synthesis` flagging the one or two analytical constraints that most affect strategy construction this cycle — for example, a tail risk that must be reflected in sizing, or an invalidation condition close to current price. One to two sentences.
 
 ### Synthesize
 
@@ -134,7 +146,7 @@ The `Analysis Agent` performs a deep, structured analysis of the research findin
 
 The `Synthesis Agent` is the decision-maker of the Learning Loop. It reads the full analysis and current portfolio state, weighs all factors, and produces a `strategy.json` file — the formal, machine-readable contract that the Execution Service will carry out. Every valid outcome is available, including "flat" (no new trades), "exit_all", and "hold existing positions". The Synthesis Agent must commit to a course of action; a non-decision is itself a decision.
 
-**Inputs:** `synthesis_agent.md`, `mailbox.synthesis`, `analysis.md`, `tool.current_position`  
+**Inputs:** `synthesis_agent.md`, `tools.md`, `mailbox.synthesis`, `analysis.md`, `tool.current_position`  
 **Output:** `strategy.json`
 
 **Steps:**
@@ -157,6 +169,8 @@ The `Synthesis Agent` is the decision-maker of the Learning Loop. It reads the f
      - Optional time-based exit
      - Invalidation condition (the market state that signals the thesis is wrong)
    - **Strategy rationale:** a brief prose explanation of the overall logic for logging and dashboard display
+7. Deposit a feedback message in `mailbox.analysis` noting whether `analysis.md` provided sufficient clarity for strategy construction — specifically, whether the Synthesis Briefing was actionable and whether conviction ratings and invalidation conditions were clear. One to two sentences.
+8. Deposit a brief forward-context message in `mailbox.evaluation` noting any deliberate deviations from the Analysis Agent's recommendations and the rationale, so the Evaluation Agent can properly assess intent versus outcome. One to two sentences.
 
 
 ### Execute
@@ -173,7 +187,7 @@ Full requirements for the Execution Service are defined in the [Execution Servic
 
 The `Evaluation Agent` closes each Learning Loop cycle and seeds the next. It approaches strategy performance with purely logical, dispassionate rigor — the analytical mind of a Vulcan — assessing outcomes against intent without bias toward preserving a failing strategy. Its `evaluation.md` report is a primary input to the `Plan Agent`'s meta-signal analysis in the following cycle.
 
-**Inputs:** `evaluation_agent.md`, `mailbox.evaluation`, `tool.current_position`, `analysis.md`, `strategy.json`, prior `evaluation.md` files  
+**Inputs:** `evaluation_agent.md`, `tools.md`, `mailbox.evaluation`, `tool.current_position`, `analysis.md`, `strategy.json`, prior `evaluation.md` files  
 **Output:** `evaluation.md`
 
 **Steps:**
@@ -191,6 +205,12 @@ The `Evaluation Agent` closes each Learning Loop cycle and seeds the next. It ap
 11. Write the **Overall Assessment**: a 3–5 sentence diagnosis of what happened, why, and the state of the portfolio entering the next cycle.
 12. Write **Recommendations for Next Cycle**: direct, actionable guidance for the Plan Agent, Analysis Agent, and Synthesis Agent covering what to prioritize, what errors to avoid, and the recommended portfolio stance.
 13. Assign a performance rating (A through F) and overall verdict. Write `evaluation.md`.
+14. Deposit targeted mailbox messages to all four agent inboxes:
+    - **`mailbox.plan`:** The one or two signal areas the next research cycle must prioritize above all others, and what the previous cycle missed or underweighted.
+    - **`mailbox.research`:** A specific quality note on this cycle's `research.md` — what was done well, what was insufficient, and what to improve next cycle.
+    - **`mailbox.analysis`:** A specific accuracy note — the most significant analytical hit or miss, and any pattern that has now appeared across multiple cycles.
+    - **`mailbox.synthesis`:** A specific strategy construction note — the most impactful structural flaw or success this cycle.
+    Each message is one to two sentences. Write these after `evaluation.md` is complete so they reflect your finalized assessment.
 
 
 ## Execution Service
