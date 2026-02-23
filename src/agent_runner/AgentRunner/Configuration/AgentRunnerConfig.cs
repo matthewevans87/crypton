@@ -18,6 +18,7 @@ public class CycleConfig
     public int ScheduleIntervalMinutes { get; set; } = 360;
     public bool EnableParallelExecution { get; set; } = false;
     public string Schedule { get; set; } = string.Empty;
+    public Dictionary<string, int> StepTimeoutOverrides { get; set; } = new();
 }
 
 public class ResilienceConfig

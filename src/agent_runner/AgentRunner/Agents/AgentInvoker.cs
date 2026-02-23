@@ -119,7 +119,14 @@ public class AgentInvoker
             _ => _config.Agents.Plan
         };
 
-        return TimeSpan.FromMinutes(settings.TimeoutMinutes);
+        var baseTimeout = TimeSpan.FromMinutes(settings.TimeoutMinutes);
+        
+        if (_config.Cycle.StepTimeoutOverrides.TryGetValue(agentName.ToLower(), out var overrideMinutes))
+        {
+            return TimeSpan.FromMinutes(overrideMinutes);
+        }
+
+        return baseTimeout;
     }
 
     private async Task<string> CallLlmAsync(string prompt, string agentName, CancellationToken cancellationToken)

@@ -1,0 +1,17 @@
+[Unit]
+Description=Agent Runner - Crypton Learning Loop Orchestration Service
+After=network.target
+
+[Service]
+Type=simple
+User=crypton
+WorkingDirectory=/opt/crypton
+ExecStart=/usr/bin/dotnet /opt/crypton/AgentRunner.dll
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/crypton/agent_runner.log
+StandardError=append:/var/log/crypton/agent_runner_error.log
+Environment=ASPNETCORE_ENVIRONMENT=Production
+
+[Install]
+WantedBy=multi-user.target
