@@ -1,0 +1,77 @@
+name: Deploy Agent Runner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: crypton-agent-runner
+  CONTAINER_NAME: crypton-agent-runner
+  REGISTRY: localhost:5000
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag ${{ env.IMAGE_NAME }}:latest \
+            --tag ${{ env.IMAGE_NAME }}:$(git rev-parse --short HEAD) \
+            -f src/agent_runner/Dockerfile .
+
+      - name: Prune old images
+        run: |
+          echo "Pruning dangling images..."
+          docker image prune -f
+          
+          echo "Pruning old tagged images (keep last 5)..."
+          docker images --format '{{.Repository}}:{{.Tag}}' | grep '${{ env.IMAGE_NAME }}' | tail -n +6 | xargs -r docker rmi || true
+
+      - name: Stop and remove existing container
+        run: |
+          if [ "$(docker ps -aq -f name=${{ env.CONTAINER_NAME }})" ]; then
+            echo "Stopping existing container..."
+            docker stop ${{ env.CONTAINER_NAME }}
+          fi
+          
+          if [ "$(docker ps -aq -f name=${{ env.CONTAINER_NAME }})" ]; then
+            echo "Removing existing container..."
+            docker rm ${{ env.CONTAINER_NAME }}
+          fi
+
+      - name: Create and start new container
+        run: |
+          docker run -d \
+            --name ${{ env.CONTAINER_NAME }} \
+            --restart unless-stopped \
+            -p 8080:8080 \
+            -v $(pwd)/artifacts:/app/artifacts \
+            -v $(pwd)/logs:/app/logs \
+            -v $(pwd)/config.yaml:/app/config.yaml:ro \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Verify container is running
+        run: |
+          docker ps | grep ${{ env.CONTAINER_NAME }}
+          
+          echo "Container logs (last 20 lines):"
+          docker logs --tail 20 ${{ env.CONTAINER_NAME }}
+
+      - name: Report success
+        run: |
+          echo "✅ Deployment complete!"
+          echo "Container: ${{ env.CONTAINER_NAME }}"
+          echo "Image: ${{ env.IMAGE_NAME }}:latest"
+          echo "Ports: 8080:8080"
