@@ -75,3 +75,4 @@ jobs:
           echo "Container: ${{ env.CONTAINER_NAME }}"
           echo "Image: ${{ env.IMAGE_NAME }}:latest"
           echo "Ports: 8080:8080"
+# test
