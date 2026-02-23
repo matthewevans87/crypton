@@ -31,6 +31,7 @@ public class AgentContextBuilder
         var tools = _toolRegistry.GetToolDescriptionsJson();
         var mailbox = _mailboxManager.GetMessages("plan", _config.Storage.MaxMailboxMessages);
         var memory = _artifactManager.ReadMemory("plan");
+        var sharedMemory = _artifactManager.ReadSharedMemory();
         var recentEvaluations = _artifactManager.GetRecentEvaluations(7);
         var outputTemplate = LoadOutputTemplate("plan.md");
 
@@ -42,6 +43,7 @@ public class AgentContextBuilder
             Tools = tools,
             MailboxMessages = mailbox,
             Memory = memory,
+            SharedMemory = sharedMemory,
             RecentEvaluations = recentEvaluations,
             OutputTemplate = outputTemplate,
             AvailableTools = new[] { "web_search", "web_fetch", "bird", "technical_indicators" }
@@ -55,6 +57,7 @@ public class AgentContextBuilder
         var mailbox = _mailboxManager.GetMessages("research", _config.Storage.MaxMailboxMessages);
         var plan = _artifactManager.ReadArtifact(cycleId, "plan.md");
         var memory = _artifactManager.ReadMemory("research");
+        var sharedMemory = _artifactManager.ReadSharedMemory();
         var outputTemplate = LoadOutputTemplate("research.md");
 
         return new AgentContext
@@ -69,6 +72,7 @@ public class AgentContextBuilder
                 ["plan.md"] = plan ?? ""
             },
             Memory = memory,
+            SharedMemory = sharedMemory,
             OutputTemplate = outputTemplate,
             AvailableTools = new[] { "web_search", "web_fetch", "bird", "technical_indicators" }
         };
@@ -81,6 +85,7 @@ public class AgentContextBuilder
         var mailbox = _mailboxManager.GetMessages("analysis", _config.Storage.MaxMailboxMessages);
         var research = _artifactManager.ReadArtifact(cycleId, "research.md");
         var memory = _artifactManager.ReadMemory("analysis");
+        var sharedMemory = _artifactManager.ReadSharedMemory();
         var outputTemplate = LoadOutputTemplate("analysis.md");
 
         return new AgentContext
@@ -95,6 +100,7 @@ public class AgentContextBuilder
                 ["research.md"] = research ?? ""
             },
             Memory = memory,
+            SharedMemory = sharedMemory,
             OutputTemplate = outputTemplate,
             AvailableTools = new[] { "current_position", "technical_indicators" }
         };
@@ -107,6 +113,7 @@ public class AgentContextBuilder
         var mailbox = _mailboxManager.GetMessages("synthesis", _config.Storage.MaxMailboxMessages);
         var analysis = _artifactManager.ReadArtifact(cycleId, "analysis.md");
         var memory = _artifactManager.ReadMemory("synthesis");
+        var sharedMemory = _artifactManager.ReadSharedMemory();
         var outputTemplate = LoadOutputTemplate("strategy.json");
 
         return new AgentContext
@@ -121,6 +128,7 @@ public class AgentContextBuilder
                 ["analysis.md"] = analysis ?? ""
             },
             Memory = memory,
+            SharedMemory = sharedMemory,
             OutputTemplate = outputTemplate,
             AvailableTools = new[] { "current_position" }
         };
@@ -133,6 +141,7 @@ public class AgentContextBuilder
         var mailbox = _mailboxManager.GetMessages("evaluation", _config.Storage.MaxMailboxMessages);
         var strategy = _artifactManager.ReadArtifact(cycleId, "strategy.json");
         var analysis = _artifactManager.ReadArtifact(cycleId, "analysis.md");
+        var sharedMemory = _artifactManager.ReadSharedMemory();
         var recentEvaluations = _artifactManager.GetRecentEvaluations(3);
         var outputTemplate = LoadOutputTemplate("evaluation.md");
 
@@ -148,6 +157,7 @@ public class AgentContextBuilder
                 ["strategy.json"] = strategy ?? "",
                 ["analysis.md"] = analysis ?? ""
             },
+            SharedMemory = sharedMemory,
             RecentEvaluations = recentEvaluations,
             OutputTemplate = outputTemplate,
             AvailableTools = new[] { "current_position" }
@@ -183,6 +193,7 @@ public class AgentContext
     public string Tools { get; set; } = string.Empty;
     public List<MailboxMessage> MailboxMessages { get; set; } = new();
     public string? Memory { get; set; }
+    public string? SharedMemory { get; set; }
     public List<string> RecentEvaluations { get; set; } = new();
     public Dictionary<string, string> InputArtifacts { get; set; } = new();
     public string OutputTemplate { get; set; } = string.Empty;
@@ -214,6 +225,13 @@ public class AgentContext
         {
             sb.AppendLine("# Memory");
             sb.AppendLine(Memory);
+            sb.AppendLine();
+        }
+        
+        if (!string.IsNullOrEmpty(SharedMemory))
+        {
+            sb.AppendLine("# Shared Memory (Cross-Cycle Context)");
+            sb.AppendLine(SharedMemory);
             sb.AppendLine();
         }
         

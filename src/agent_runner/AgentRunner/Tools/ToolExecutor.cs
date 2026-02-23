@@ -42,6 +42,7 @@ public class ToolExecutor
         {
             return new ToolResult
             {
+                CallId = call.Id,
                 Success = false,
                 Error = $"Tool '{call.ToolName}' not found"
             };
@@ -53,6 +54,7 @@ public class ToolExecutor
         {
             return new ToolResult
             {
+                CallId = call.Id,
                 Success = false,
                 Error = $"Circuit breaker is open for tool '{call.ToolName}'. Too many recent failures."
             };
@@ -65,6 +67,7 @@ public class ToolExecutor
             var result = await ExecuteWithTimeoutAsync(tool, call.Parameters, timeout, cancellationToken);
             stopwatch.Stop();
 
+            result.CallId = call.Id;
             result.Duration = stopwatch.Elapsed;
             circuitBreaker.RecordSuccess();
 
@@ -77,6 +80,7 @@ public class ToolExecutor
             
             return new ToolResult
             {
+                CallId = call.Id,
                 Success = false,
                 Error = "Tool execution was cancelled",
                 Duration = stopwatch.Elapsed
@@ -89,6 +93,7 @@ public class ToolExecutor
 
             return new ToolResult
             {
+                CallId = call.Id,
                 Success = false,
                 Error = ex.Message,
                 Duration = stopwatch.Elapsed

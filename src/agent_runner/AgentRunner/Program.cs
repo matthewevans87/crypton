@@ -25,6 +25,14 @@ Log.Logger = new LoggerConfiguration()
 
 Log.Information("Starting Agent Runner...");
 
+var apiKeyManager = new ApiKeyManager();
+if (!apiKeyManager.ValidateApiKeys())
+{
+    Log.Warning("One or more API keys are not configured. Set environment variables: BRAVE_SEARCH_API_KEY");
+}
+
+apiKeyManager.StartAutoReload(TimeSpan.FromMinutes(5));
+
 configLoader.StartWatching();
 
 var artifactManager = new ArtifactManager(config.Storage);

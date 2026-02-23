@@ -59,6 +59,30 @@ public class ToolRegistry
             WriteIndented = true
         });
     }
+
+    public string GetToolsOpenAIFormat()
+    {
+        var tools = _executor.GetAllTools().Values
+            .Select(tool => tool.ToOpenAIFunction())
+            .ToList();
+
+        var wrapper = new Dictionary<string, object>
+        {
+            ["tools"] = tools
+        };
+
+        return JsonSerializer.Serialize(wrapper, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+    }
+
+    public List<object> GetToolsAsOpenAIFunctions()
+    {
+        return _executor.GetAllTools().Values
+            .Select(tool => tool.ToOpenAIFunction())
+            .ToList();
+    }
 }
 
 public class ToolDefinition

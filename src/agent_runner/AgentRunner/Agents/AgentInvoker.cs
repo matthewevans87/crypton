@@ -30,35 +30,63 @@ public class AgentInvoker
         try
         {
             var prompt = context.ToPrompt();
-            var output = await CallLlmAsync(prompt, context.AgentName, cts.Token);
-            
-            var toolCalls = ParseToolCalls(output);
-            
-            if (!toolCalls.Any())
+            var conversationHistory = new List<ConversationMessage>
             {
-                return new AgentInvocationResult
+                new() { Role = "user", Content = prompt }
+            };
+            
+            var allToolCalls = new List<ToolCall>();
+            var allToolResults = new List<ToolResult>();
+            
+            for (int iteration = 0; iteration < _maxToolIterations; iteration++)
+            {
+                var output = await CallLlmAsync(conversationHistory, context.AgentName, cts.Token);
+                
+                conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = output });
+                
+                var toolCalls = ParseToolCalls(output);
+                
+                if (!toolCalls.Any())
                 {
-                    Success = true,
-                    Output = output,
-                    ToolCalls = new List<ToolCall>()
-                };
+                    return new AgentInvocationResult
+                    {
+                        Success = true,
+                        Output = output,
+                        ToolCalls = allToolCalls,
+                        ToolResults = allToolResults,
+                        Iterations = iteration + 1
+                    };
+                }
+
+                allToolCalls.AddRange(toolCalls);
+                
+                var executedTools = await ExecuteToolsWithRetryAsync(toolCalls, cts.Token);
+                allToolResults.AddRange(executedTools);
+                
+                foreach (var call in toolCalls)
+                {
+                    var result = executedTools.First(r => r.CallId == call.Id);
+                    var resultContent = result.Success 
+                        ? JsonSerializer.Serialize(result.Data)
+                        : $"Error: {result.Error}";
+                    
+                    conversationHistory.Add(new ConversationMessage
+                    {
+                        Role = "user",
+                        Content = $"Tool '{call.ToolName}' result: {resultContent}"
+                    });
+                }
             }
 
-            var executedTools = await ExecuteToolsWithRetryAsync(toolCalls, cts.Token);
+            var finalOutput = conversationHistory.LastOrDefault(m => m.Role == "assistant")?.Content ?? "";
             
-            var finalOutput = await ContinueConversationAsync(
-                prompt, 
-                output, 
-                executedTools, 
-                context.AgentName, 
-                cts.Token);
-
             return new AgentInvocationResult
             {
                 Success = true,
                 Output = finalOutput,
-                ToolCalls = toolCalls,
-                ToolResults = executedTools
+                ToolCalls = allToolCalls,
+                ToolResults = allToolResults,
+                Iterations = _maxToolIterations
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -96,6 +124,11 @@ public class AgentInvoker
 
     private async Task<string> CallLlmAsync(string prompt, string agentName, CancellationToken cancellationToken)
     {
+        return await CallLlmAsync(new List<ConversationMessage> { new() { Role = "user", Content = prompt } }, agentName, cancellationToken);
+    }
+
+    private async Task<string> CallLlmAsync(List<ConversationMessage> conversation, string agentName, CancellationToken cancellationToken)
+    {
         var settings = agentName.ToLower() switch
         {
             "plan" => _config.Agents.Plan,
@@ -106,13 +139,12 @@ public class AgentInvoker
             _ => _config.Agents.Plan
         };
 
+        var messages = conversation.Select(m => new { role = m.Role, content = m.Content }).ToArray();
+        
         var requestBody = new
         {
             model = settings.Model,
-            messages = new[]
-            {
-                new { role = "user", content = prompt }
-            },
+            messages = messages,
             temperature = settings.Temperature,
             max_tokens = settings.MaxTokens
         };
@@ -216,4 +248,11 @@ public class AgentInvocationResult
     public string? Error { get; set; }
     public List<ToolCall> ToolCalls { get; set; } = new();
     public List<ToolResult> ToolResults { get; set; } = new();
+    public int Iterations { get; set; }
+}
+
+public class ConversationMessage
+{
+    public string Role { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
 }

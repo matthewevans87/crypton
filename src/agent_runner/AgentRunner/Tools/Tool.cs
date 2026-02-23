@@ -7,10 +7,51 @@ public abstract class Tool
     public abstract ToolParameterSchema? Parameters { get; }
 
     public abstract Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters, CancellationToken cancellationToken = default);
+
+    public object ToOpenAIFunction()
+    {
+        var properties = new Dictionary<string, object>();
+        
+        if (Parameters?.Properties != null)
+        {
+            foreach (var (key, prop) in Parameters.Properties)
+            {
+                var propDict = new Dictionary<string, object>
+                {
+                    ["type"] = prop.Type
+                };
+                if (!string.IsNullOrEmpty(prop.Description))
+                {
+                    propDict["description"] = prop.Description;
+                }
+                if (prop.Default != null)
+                {
+                    propDict["default"] = prop.Default;
+                }
+                properties[key] = propDict;
+            }
+        }
+
+        var function = new Dictionary<string, object>
+        {
+            ["description"] = Description,
+            ["name"] = Name,
+            ["parameters"] = new Dictionary<string, object>
+            {
+                ["type"] = Parameters?.Type ?? "object",
+                ["properties"] = properties,
+                ["required"] = Parameters?.Required ?? new List<string>()
+            }
+        };
+
+        return function;
+    }
 }
 
 public class ToolResult
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string CallId { get; set; } = string.Empty;
     public bool Success { get; set; }
     public string? Error { get; set; }
     public object? Data { get; set; }

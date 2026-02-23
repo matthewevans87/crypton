@@ -155,6 +155,37 @@ public class ArtifactManager
         return Path.Combine(dir, "memory.md");
     }
 
+    public string GetSharedMemoryPath()
+    {
+        var path = Path.Combine(GetMemoryDirectory(), "shared.md");
+        if (!File.Exists(path))
+        {
+            File.WriteAllText(path, "# Shared Memory\n\nCross-cycle context and learnings.\n");
+        }
+        return path;
+    }
+
+    public void AppendToSharedMemory(string content)
+    {
+        var path = GetSharedMemoryPath();
+        var existing = File.ReadAllText(path);
+        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC");
+        var separator = string.IsNullOrEmpty(existing) ? "" : "\n\n---\n\n";
+        var newEntry = $"[{timestamp}]\n{content}";
+        File.WriteAllText(path, existing + separator + newEntry);
+    }
+
+    public string? ReadSharedMemory()
+    {
+        var path = GetSharedMemoryPath();
+        return File.Exists(path) ? File.ReadAllText(path) : null;
+    }
+
+    public List<MemorySearchResult> SearchSharedMemory(string query, int maxResults = 10)
+    {
+        return SearchMemory("shared", query, maxResults);
+    }
+
     public void AppendToMemory(string agentName, string content)
     {
         var path = GetMemoryPath(agentName);
