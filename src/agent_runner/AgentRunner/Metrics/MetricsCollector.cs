@@ -83,4 +83,53 @@ public class MetricsCollector
     {
         CycleCount.Inc();
     }
+
+    public Dictionary<string, double> GetCycleCount()
+    {
+        return new Dictionary<string, double>
+        {
+            ["count"] = CycleCount.Value
+        };
+    }
+
+    public Dictionary<string, double> GetStepSuccess()
+    {
+        return new Dictionary<string, double>
+        {
+            ["plan"] = StepSuccessTotal.WithLabels("Plan").Value,
+            ["research"] = StepSuccessTotal.WithLabels("Research").Value,
+            ["analyze"] = StepSuccessTotal.WithLabels("Analyze").Value,
+            ["synthesize"] = StepSuccessTotal.WithLabels("Synthesize").Value,
+            ["evaluate"] = StepSuccessTotal.WithLabels("Evaluate").Value
+        };
+    }
+
+    public Dictionary<string, double> GetStepFailure()
+    {
+        return new Dictionary<string, double>
+        {
+            ["plan"] = StepFailureTotal.WithLabels("Plan").Value,
+            ["research"] = StepFailureTotal.WithLabels("Research").Value,
+            ["analyze"] = StepFailureTotal.WithLabels("Analyze").Value,
+            ["synthesize"] = StepFailureTotal.WithLabels("Synthesize").Value,
+            ["evaluate"] = StepFailureTotal.WithLabels("Evaluate").Value
+        };
+    }
+
+    public Dictionary<string, object> GetToolExecution()
+    {
+        var tools = new[] { "web_search", "web_fetch", "bird", "current_position", "technical_indicators" };
+        var result = new Dictionary<string, object>();
+        
+        foreach (var tool in tools)
+        {
+            result[tool] = new
+            {
+                success = ToolExecutionTotal.WithLabels(tool, "success").Value,
+                failure = ToolExecutionTotal.WithLabels(tool, "failure").Value
+            };
+        }
+        
+        return result;
+    }
 }

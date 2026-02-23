@@ -3,6 +3,7 @@ using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Mailbox;
 using AgentRunner.StateMachine;
+using AgentRunner.Telemetry;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -42,15 +43,18 @@ public class StatusController : ControllerBase
     private readonly AgentRunnerService _agentRunner;
     private readonly Artifacts.ArtifactManager _artifactManager;
     private readonly Mailbox.MailboxManager _mailboxManager;
+    private readonly MetricsCollector _metrics;
 
     public StatusController(
         AgentRunnerService agentRunner,
         Artifacts.ArtifactManager artifactManager,
-        Mailbox.MailboxManager mailboxManager)
+        Mailbox.MailboxManager mailboxManager,
+        MetricsCollector metrics)
     {
         _agentRunner = agentRunner;
         _artifactManager = artifactManager;
         _mailboxManager = mailboxManager;
+        _metrics = metrics;
     }
 
     [HttpGet("status")]
@@ -140,6 +144,18 @@ public class StatusController : ControllerBase
         }
 
         return Ok(errors);
+    }
+
+    [HttpGet("metrics")]
+    public IActionResult GetMetrics()
+    {
+        return Ok(new
+        {
+            cycleCount = _metrics.GetCycleCount(),
+            stepSuccess = _metrics.GetStepSuccess(),
+            stepFailure = _metrics.GetStepFailure(),
+            toolExecution = _metrics.GetToolExecution()
+        });
     }
 
     [HttpGet("mailboxes")]

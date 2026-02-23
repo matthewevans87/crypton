@@ -8,11 +8,15 @@ public class ToolExecutor
     private readonly int _defaultTimeoutSeconds;
     private readonly Dictionary<string, CircuitBreaker> _circuitBreakers = new();
     private readonly int _maxConcurrentExecutions;
+    private readonly int _maxRetries;
+    private readonly bool _enableRetry;
 
-    public ToolExecutor(int defaultTimeoutSeconds = 30, int maxConcurrentExecutions = 5)
+    public ToolExecutor(int defaultTimeoutSeconds = 30, int maxConcurrentExecutions = 5, int maxRetries = 3, bool enableRetry = true)
     {
         _defaultTimeoutSeconds = defaultTimeoutSeconds;
         _maxConcurrentExecutions = maxConcurrentExecutions;
+        _maxRetries = maxRetries;
+        _enableRetry = enableRetry;
     }
 
     public void RegisterTool(Tool tool)
@@ -61,44 +65,93 @@ public class ToolExecutor
         }
 
         var stopwatch = Stopwatch.StartNew();
-        try
+        ToolResult? lastResult = null;
+        
+        for (int attempt = 0; attempt <= _maxRetries; attempt++)
         {
-            var timeout = TimeSpan.FromSeconds(_defaultTimeoutSeconds);
-            var result = await ExecuteWithTimeoutAsync(tool, call.Parameters, timeout, cancellationToken);
-            stopwatch.Stop();
-
-            result.CallId = call.Id;
-            result.Duration = stopwatch.Elapsed;
-            circuitBreaker.RecordSuccess();
-
-            return result;
-        }
-        catch (OperationCanceledException)
-        {
-            stopwatch.Stop();
-            circuitBreaker.RecordFailure();
-            
-            return new ToolResult
+            try
             {
-                CallId = call.Id,
-                Success = false,
-                Error = "Tool execution was cancelled",
-                Duration = stopwatch.Elapsed
-            };
-        }
-        catch (Exception ex)
-        {
-            stopwatch.Stop();
-            circuitBreaker.RecordFailure();
-
-            return new ToolResult
+                var timeout = TimeSpan.FromSeconds(_defaultTimeoutSeconds);
+                var result = await ExecuteWithTimeoutAsync(tool, call.Parameters, timeout, cancellationToken);
+                
+                result.CallId = call.Id;
+                result.Duration = stopwatch.Elapsed;
+                
+                if (result.Success || !IsTransientError(result.Error))
+                {
+                    circuitBreaker.RecordSuccess();
+                    return result;
+                }
+                
+                lastResult = result;
+                
+                if (attempt < _maxRetries)
+                {
+                    var delay = CalculateBackoff(attempt);
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                CallId = call.Id,
-                Success = false,
-                Error = ex.Message,
-                Duration = stopwatch.Elapsed
-            };
+                stopwatch.Stop();
+                circuitBreaker.RecordFailure();
+                
+                return new ToolResult
+                {
+                    CallId = call.Id,
+                    Success = false,
+                    Error = "Tool execution was cancelled",
+                    Duration = stopwatch.Elapsed
+                };
+            }
+            catch (Exception ex)
+            {
+                lastResult = new ToolResult
+                {
+                    CallId = call.Id,
+                    Success = false,
+                    Error = ex.Message,
+                    Duration = stopwatch.Elapsed
+                };
+                
+                if (attempt < _maxRetries && _enableRetry)
+                {
+                    var delay = CalculateBackoff(attempt);
+                    try { await Task.Delay(delay, cancellationToken); }
+                    catch { break; }
+                }
+            }
         }
+
+        stopwatch.Stop();
+        circuitBreaker.RecordFailure();
+        
+        return lastResult ?? new ToolResult
+        {
+            CallId = call.Id,
+            Success = false,
+            Error = "Tool execution failed after retries",
+            Duration = stopwatch.Elapsed
+        };
+    }
+
+    private bool IsTransientError(string? error)
+    {
+        if (string.IsNullOrEmpty(error)) return false;
+        
+        var transientPatterns = new[]
+        {
+            "timeout", "timed out", "504", "502", "503", "500",
+            "network", "connection", "unavailable", "too many requests",
+            "rate limit", "temporary"
+        };
+        
+        return transientPatterns.Any(p => error.Contains(p, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private TimeSpan CalculateBackoff(int attempt)
+    {
+        return TimeSpan.FromSeconds(Math.Pow(2, attempt) * 1);
     }
 
     private async Task<ToolResult> ExecuteWithTimeoutAsync(

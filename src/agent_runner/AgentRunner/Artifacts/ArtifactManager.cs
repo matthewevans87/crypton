@@ -152,7 +152,14 @@ public class ArtifactManager
     {
         var dir = Path.Combine(GetMemoryDirectory(), agentName);
         Directory.CreateDirectory(dir);
-        return Path.Combine(dir, "memory.md");
+        var path = Path.Combine(dir, "memory.md");
+        
+        if (!File.Exists(path))
+        {
+            File.WriteAllText(path, $"# {agentName.ToUpper()} Memory\n\nAgent-specific memory and learnings.\n");
+        }
+        
+        return path;
     }
 
     public string GetSharedMemoryPath()
