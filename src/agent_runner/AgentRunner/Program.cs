@@ -4,9 +4,11 @@ using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
+using AgentRunner.Telemetry;
 using AgentRunner.StateMachine;
 using AgentRunner.Tools;
 using Microsoft.Extensions.Hosting;
+using Prometheus;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +25,8 @@ Log.Logger = new LoggerConfiguration()
 
 Log.Information("Starting Agent Runner...");
 
+configLoader.StartWatching();
+
 var artifactManager = new ArtifactManager(config.Storage);
 var mailboxManager = new MailboxManager(config.Storage);
 var toolRegistry = new ToolRegistry(config);
@@ -30,6 +34,7 @@ var stateMachine = new LoopStateMachine();
 var statePersistence = new StatePersistence("state.json");
 var contextBuilder = new AgentContextBuilder(artifactManager, mailboxManager, toolRegistry, config);
 var agentInvoker = new AgentInvoker(config, toolRegistry.Executor);
+var metricsCollector = new MetricsCollector();
 var agentRunnerService = new AgentRunnerService(
     config,
     stateMachine,
@@ -38,7 +43,8 @@ var agentRunnerService = new AgentRunnerService(
     mailboxManager,
     contextBuilder,
     agentInvoker,
-    logger);
+    logger,
+    metricsCollector);
 
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(artifactManager);
@@ -49,6 +55,8 @@ builder.Services.AddSingleton(statePersistence);
 builder.Services.AddSingleton(contextBuilder);
 builder.Services.AddSingleton(agentInvoker);
 builder.Services.AddSingleton(agentRunnerService);
+builder.Services.AddSingleton(configLoader);
+builder.Services.AddSingleton(metricsCollector);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -58,6 +66,9 @@ var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseRouting();
+app.MapMetrics();
 
 app.MapControllers();
 
@@ -78,6 +89,7 @@ lifetime.ApplicationStopping.Register(async () =>
 {
     try
     {
+        configLoader.StopWatching();
         await agentRunnerService.StopAsync();
     }
     catch (Exception ex)

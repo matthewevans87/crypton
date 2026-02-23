@@ -31,11 +31,13 @@ public class ToolRegistry
         var technicalIndicatorsTool = new TechnicalIndicatorsTool(
             httpClient, 
             config.Tools.CacheTtlSeconds);
+        var birdTool = new BirdTool(config.Tools.DefaultTimeoutSeconds);
 
         _executor.RegisterTool(webSearchTool);
         _executor.RegisterTool(webFetchTool);
         _executor.RegisterTool(currentPositionTool);
         _executor.RegisterTool(technicalIndicatorsTool);
+        _executor.RegisterTool(birdTool);
 
         foreach (var tool in _executor.GetAllTools().Values)
         {

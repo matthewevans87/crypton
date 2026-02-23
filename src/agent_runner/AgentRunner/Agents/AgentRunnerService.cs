@@ -3,6 +3,7 @@ using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
+using AgentRunner.Telemetry;
 using AgentRunner.StateMachine;
 using AgentRunner.Tools;
 
@@ -18,6 +19,7 @@ public class AgentRunnerService
     private readonly AgentInvoker _agentInvoker;
     private readonly AgentRunnerConfig _config;
     private readonly IEventLogger _logger;
+    private readonly MetricsCollector _metrics;
     private LoopHealthMonitor? _healthMonitor;
 
     private CycleContext? _currentCycle;
@@ -45,7 +47,8 @@ public class AgentRunnerService
         MailboxManager mailboxManager,
         AgentContextBuilder contextBuilder,
         AgentInvoker agentInvoker,
-        IEventLogger logger)
+        IEventLogger logger,
+        MetricsCollector metrics)
     {
         _config = config;
         _stateMachine = stateMachine;
@@ -55,6 +58,7 @@ public class AgentRunnerService
         _contextBuilder = contextBuilder;
         _agentInvoker = agentInvoker;
         _logger = logger;
+        _metrics = metrics;
 
         _stateMachine.StateTransition += OnStateTransition;
     }
@@ -138,15 +142,29 @@ public class AgentRunnerService
 
             if (_stateMachine.CurrentState == LoopState.WaitingForNextCycle)
             {
-                var interval = TimeSpan.FromMinutes(_config.Cycle.ScheduleIntervalMinutes);
-                _logger.LogInfo($"Waiting {interval.TotalMinutes} minutes before next cycle...");
-                await Task.Delay(interval, cancellationToken);
-                
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    _stateMachine.TransitionTo(LoopState.Plan);
-                }
+                await HandleNextCycleDelayAsync(cancellationToken);
                 continue;
+            }
+
+            // Check for forced cycle timeout (FR-007)
+            if (_currentCycle != null && _currentCycle.CycleStartTime != default)
+            {
+                var elapsed = DateTime.UtcNow - _currentCycle.CycleStartTime;
+                var maxDuration = TimeSpan.FromMinutes(_config.Cycle.MaxDurationMinutes);
+                
+                if (elapsed >= maxDuration)
+                {
+                    _logger.LogWarning($"Forced cycle timeout exceeded ({maxDuration.TotalMinutes} min). Transitioning to Evaluation.");
+                    
+                    // Skip to evaluation if not already there
+                    if (_stateMachine.CurrentState != LoopState.Evaluate)
+                    {
+                        _stateMachine.TransitionTo(LoopState.Evaluate);
+                        await ExecuteStepAsync(cancellationToken);
+                        await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
+                        continue;
+                    }
+                }
             }
 
             var nextState = _stateMachine.GetNextRequiredState();
@@ -169,13 +187,184 @@ public class AgentRunnerService
                 break;
             }
 
-            await ExecuteStepAsync(cancellationToken);
+            // Check for parallel execution (FR-169-170)
+            if (_config.Cycle.EnableParallelExecution && nextState == LoopState.Research)
+            {
+                await ExecuteParallelResearchAndAnalysisAsync(cancellationToken);
+            }
+            else
+            {
+                await ExecuteStepAsync(cancellationToken);
+            }
             
             await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
         }
 
         // Loop exited - attempt auto-restart
         await HandleLoopExitAsync(cancellationToken);
+    }
+
+    private async Task ExecuteParallelResearchAndAnalysisAsync(CancellationToken cancellationToken)
+    {
+        // Execute Research step first
+        _logger.LogInfo("Executing Research step (parallel mode)...");
+        var researchResult = await ExecuteAgentAsync(LoopState.Research, cancellationToken);
+        
+        // Store research artifact
+        if (researchResult.Success)
+        {
+            _artifactManager.SaveArtifact(_currentCycle!.CycleId, "research.md", researchResult.Output ?? "");
+            
+            var validationResult = ValidateArtifact(LoopState.Research, researchResult.Output ?? "");
+            if (!validationResult.IsValid)
+            {
+                _logger.LogWarning($"Research validation failed: {string.Join(", ", validationResult.Errors)}");
+                researchResult.Success = false;
+                researchResult.Error = $"Validation failed: {string.Join("; ", validationResult.Errors)}";
+            }
+            
+            await HandleMailboxMessagesAsync(LoopState.Research, researchResult);
+            
+            if (_currentCycle != null)
+            {
+                _currentCycle.Steps[LoopState.Research.ToString()] = new StepRecord
+                {
+                    Step = LoopState.Research,
+                    StartTime = DateTime.UtcNow.AddMinutes(-5),
+                    EndTime = DateTime.UtcNow,
+                    Outcome = researchResult.Success ? StepOutcome.Success : StepOutcome.Failed,
+                    ErrorMessage = researchResult.Error
+                };
+            }
+        }
+
+        // If Research succeeded, run Analysis in parallel
+        if (researchResult.Success)
+        {
+            _logger.LogInfo("Executing Analysis step (parallel mode)...");
+            
+            // Set state to Analyze
+            _stateMachine.TransitionTo(LoopState.Analyze);
+            
+            var analyzeResult = await ExecuteAgentAsync(LoopState.Analyze, cancellationToken);
+            
+            if (analyzeResult.Success)
+            {
+                _artifactManager.SaveArtifact(_currentCycle!.CycleId, "analysis.md", analyzeResult.Output ?? "");
+                
+                var validationResult = ValidateArtifact(LoopState.Analyze, analyzeResult.Output ?? "");
+                if (!validationResult.IsValid)
+                {
+                    _logger.LogWarning($"Analysis validation failed: {string.Join(", ", validationResult.Errors)}");
+                    analyzeResult.Success = false;
+                    analyzeResult.Error = $"Validation failed: {string.Join("; ", validationResult.Errors)}";
+                }
+                
+                await HandleMailboxMessagesAsync(LoopState.Analyze, analyzeResult);
+                
+                if (_currentCycle != null)
+                {
+                    _currentCycle.Steps[LoopState.Analyze.ToString()] = new StepRecord
+                    {
+                        Step = LoopState.Analyze,
+                        StartTime = DateTime.UtcNow,
+                        EndTime = DateTime.UtcNow,
+                        Outcome = analyzeResult.Success ? StepOutcome.Success : StepOutcome.Failed,
+                        ErrorMessage = analyzeResult.Error
+                    };
+                }
+            }
+            
+            // Handle completion for both steps
+            if (researchResult.Success && analyzeResult.Success)
+            {
+                await HandleStepCompletionAsync(LoopState.Analyze, StepOutcome.Success, cancellationToken);
+            }
+            else
+            {
+                var failedState = !analyzeResult.Success ? LoopState.Analyze : LoopState.Research;
+                var outcome = (!analyzeResult.Success ? analyzeResult : researchResult).Success ? StepOutcome.Success : StepOutcome.Failed;
+                await HandleStepCompletionAsync(failedState, outcome, cancellationToken);
+            }
+        }
+        else
+        {
+            // Research failed, handle failure
+            await HandleStepCompletionAsync(LoopState.Research, StepOutcome.Failed, cancellationToken);
+        }
+    }
+
+    private async Task HandleNextCycleDelayAsync(CancellationToken cancellationToken)
+    {
+        var schedule = _config.Cycle.Schedule;
+        
+        if (!string.IsNullOrEmpty(schedule))
+        {
+            var nextRun = GetNextCronRun(schedule);
+            if (nextRun.HasValue)
+            {
+                var delay = nextRun.Value - DateTime.UtcNow;
+                if (delay > TimeSpan.Zero)
+                {
+                    _logger.LogInfo($"Next scheduled run at {nextRun.Value:u}");
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+            else
+            {
+                // Fallback to interval
+                var interval = TimeSpan.FromMinutes(_config.Cycle.ScheduleIntervalMinutes);
+                _logger.LogInfo($"Waiting {interval.TotalMinutes} minutes before next cycle...");
+                await Task.Delay(interval, cancellationToken);
+            }
+        }
+        else
+        {
+            var interval = TimeSpan.FromMinutes(_config.Cycle.ScheduleIntervalMinutes);
+            _logger.LogInfo($"Waiting {interval.TotalMinutes} minutes before next cycle...");
+            await Task.Delay(interval, cancellationToken);
+        }
+        
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            _stateMachine.TransitionTo(LoopState.Plan);
+        }
+    }
+
+    private DateTime? GetNextCronRun(string cronExpression)
+    {
+        try
+        {
+            var parts = cronExpression.Split(' ');
+            if (parts.Length < 5) return null;
+            
+            var now = DateTime.UtcNow;
+            
+            // Parse simple cron: minute hour day month dayofweek
+            // Support: "* * * * *" (min hour day month dow)
+            if (int.TryParse(parts[0], out var minute) && 
+                int.TryParse(parts[1], out var hour) &&
+                int.TryParse(parts[2], out var day) &&
+                int.TryParse(parts[3], out var month))
+            {
+                // Simple daily cron: run at specific hour:minute daily
+                if (minute >= 0 && minute <= 59 && hour >= 0 && hour <= 23)
+                {
+                    var next = now.Date.AddHours(hour).AddMinutes(minute);
+                    if (next <= now)
+                    {
+                        next = next.AddDays(1);
+                    }
+                    return next;
+                }
+            }
+            
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task HandleLoopExitAsync(CancellationToken cancellationToken)

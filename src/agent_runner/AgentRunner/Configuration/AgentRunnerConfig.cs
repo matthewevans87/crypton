@@ -17,6 +17,7 @@ public class CycleConfig
     public int MaxDurationMinutes { get; set; } = 1440;
     public int ScheduleIntervalMinutes { get; set; } = 360;
     public bool EnableParallelExecution { get; set; } = false;
+    public string Schedule { get; set; } = string.Empty;
 }
 
 public class ResilienceConfig

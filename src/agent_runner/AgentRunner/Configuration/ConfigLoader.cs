@@ -7,6 +7,13 @@ namespace AgentRunner.Configuration;
 public class ConfigLoader
 {
     private readonly string _configPath;
+    private FileSystemWatcher? _watcher;
+    private AgentRunnerConfig? _cachedConfig;
+    private DateTime _lastLoaded = DateTime.MinValue;
+    private readonly object _lock = new();
+    private readonly TimeSpan _reloadDebounce = TimeSpan.FromSeconds(2);
+
+    public event EventHandler<AgentRunnerConfig>? ConfigChanged;
 
     public ConfigLoader(string configPath = "config.yaml")
     {
@@ -15,17 +22,79 @@ public class ConfigLoader
 
     public AgentRunnerConfig Load()
     {
-        if (!File.Exists(_configPath))
+        lock (_lock)
         {
-            return CreateDefaultConfig();
+            if (!File.Exists(_configPath))
+            {
+                _cachedConfig = CreateDefaultConfig();
+                return _cachedConfig;
+            }
+
+            var fileInfo = new FileInfo(_configPath);
+            if (fileInfo.LastWriteTime <= _lastLoaded && _cachedConfig != null)
+            {
+                return _cachedConfig;
+            }
+
+            var yaml = File.ReadAllText(_configPath);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .Build();
+
+            _cachedConfig = deserializer.Deserialize<AgentRunnerConfig>(yaml) ?? CreateDefaultConfig();
+            _lastLoaded = DateTime.UtcNow;
+            
+            return _cachedConfig;
+        }
+    }
+
+    public void StartWatching()
+    {
+        if (_watcher != null) return;
+
+        var directory = Path.GetDirectoryName(_configPath);
+        var fileName = Path.GetFileName(_configPath);
+
+        if (string.IsNullOrEmpty(directory))
+        {
+            directory = ".";
         }
 
-        var yaml = File.ReadAllText(_configPath);
-        var deserializer = new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .Build();
+        _watcher = new FileSystemWatcher(directory, fileName)
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+            EnableRaisingEvents = true
+        };
 
-        return deserializer.Deserialize<AgentRunnerConfig>(yaml) ?? CreateDefaultConfig();
+        _watcher.Changed += OnConfigFileChanged;
+    }
+
+    public void StopWatching()
+    {
+        _watcher?.Dispose();
+        _watcher = null;
+    }
+
+    private void OnConfigFileChanged(object sender, FileSystemEventArgs e)
+    {
+        Task.Run(async () =>
+        {
+            await Task.Delay(_reloadDebounce);
+
+            try
+            {
+                var oldConfig = _cachedConfig;
+                var newConfig = Load();
+
+                if (oldConfig != null && newConfig != oldConfig)
+                {
+                    ConfigChanged?.Invoke(this, newConfig);
+                }
+            }
+            catch (Exception)
+            {
+            }
+        });
     }
 
     public void Save(AgentRunnerConfig config)
@@ -35,7 +104,13 @@ public class ConfigLoader
             .Build();
 
         var yaml = serializer.Serialize(config);
-        File.WriteAllText(_configPath, yaml);
+        
+        lock (_lock)
+        {
+            File.WriteAllText(_configPath, yaml);
+            _cachedConfig = config;
+            _lastLoaded = DateTime.UtcNow;
+        }
     }
 
     private static AgentRunnerConfig CreateDefaultConfig()

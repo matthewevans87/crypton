@@ -1,4 +1,5 @@
 using AgentRunner.Configuration;
+using System.IO.Compression;
 
 namespace AgentRunner.Artifacts;
 
@@ -98,6 +99,53 @@ public class ArtifactManager
                 Directory.Move(cycleDir, destDir);
             }
         }
+        
+        CompressOldCycles();
+    }
+
+    public void CompressOldCycles()
+    {
+        var historyDir = GetHistoryDirectory();
+        if (!Directory.Exists(historyDir))
+            return;
+        
+        var cycleDirs = Directory.GetDirectories(historyDir);
+        
+        foreach (var cycleDir in cycleDirs)
+        {
+            var cycleId = Path.GetFileName(cycleDir);
+            var zipPath = Path.Combine(historyDir, $"{cycleId}.zip");
+            
+            if (File.Exists(zipPath) || Directory.GetFiles(cycleDir).Length == 0)
+                continue;
+            
+            try
+            {
+                if (File.Exists(zipPath.Replace(".zip", "")))
+                    continue;
+                    
+                ZipFile.CreateFromDirectory(cycleDir, zipPath, CompressionLevel.Optimal, false);
+                
+                // Remove original directory after successful compression
+                Directory.Delete(cycleDir, true);
+            }
+            catch
+            {
+                // Skip if compression fails
+            }
+        }
+    }
+
+    public void ExtractCycle(string cycleId)
+    {
+        var historyDir = GetHistoryDirectory();
+        var zipPath = Path.Combine(historyDir, $"{cycleId}.zip");
+        var extractDir = GetCycleDirectory(cycleId);
+        
+        if (File.Exists(zipPath) && !Directory.Exists(extractDir))
+        {
+            ZipFile.ExtractToDirectory(zipPath, extractDir);
+        }
     }
 
     public string GetMemoryPath(string agentName)
@@ -139,4 +187,80 @@ public class ArtifactManager
 
         return evaluations;
     }
+
+    public List<MemorySearchResult> SearchMemory(string agentName, string query, int maxResults = 10)
+    {
+        var results = new List<MemorySearchResult>();
+        var path = GetMemoryPath(agentName);
+        
+        if (!File.Exists(path))
+            return results;
+
+        var content = File.ReadAllText(path);
+        var lines = content.Split('\n');
+        
+        var currentEntry = new System.Text.StringBuilder();
+        var currentEntryStart = 0;
+        
+        for (int i = 0; i < lines.Length; i++)
+        {
+            currentEntry.AppendLine(lines[i]);
+            
+            if (lines[i].TrimStart().StartsWith("---") || i == lines.Length - 1)
+            {
+                var entryText = currentEntry.ToString();
+                if (entryText.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(new MemorySearchResult
+                    {
+                        AgentName = agentName,
+                        Content = entryText.Trim(),
+                        MatchedQuery = query,
+                        Timestamp = GetMemoryEntryTimestamp(entryText, currentEntryStart)
+                    });
+                }
+                currentEntry.Clear();
+                currentEntryStart = i + 1;
+            }
+        }
+        
+        return results.Take(maxResults).ToList();
+    }
+
+    public List<MemorySearchResult> SearchAllMemory(string query, int maxResults = 10)
+    {
+        var allResults = new List<MemorySearchResult>();
+        var agentNames = new[] { "plan", "research", "analysis", "evaluation" };
+        
+        foreach (var agent in agentNames)
+        {
+            var results = SearchMemory(agent, query, maxResults);
+            allResults.AddRange(results);
+        }
+        
+        return allResults.Take(maxResults).ToList();
+    }
+
+    private DateTime GetMemoryEntryTimestamp(string entry, int lineNumber)
+    {
+        var timestampPattern = new System.Text.RegularExpressions.Regex(
+            @"(\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2})",
+            System.Text.RegularExpressions.RegexOptions.RightToLeft);
+        
+        var match = timestampPattern.Match(entry);
+        if (match.Success && DateTime.TryParse(match.Value, out var timestamp))
+        {
+            return timestamp;
+        }
+        
+        return DateTime.UtcNow;
+    }
+}
+
+public class MemorySearchResult
+{
+    public string AgentName { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string MatchedQuery { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
 }
