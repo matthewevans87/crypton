@@ -166,7 +166,8 @@ public class AgentContextBuilder
 
     private string LoadAgentIdentity(string agentName)
     {
-        var path = Path.Combine("..", "..", "agent_prompts", $"{agentName}_agent.md");
+        var baseDir = AppContext.BaseDirectory;
+        var path = Path.Combine(baseDir, "agent_prompts", $"{agentName}_agent.md");
         if (File.Exists(path))
         {
             return File.ReadAllText(path);
@@ -176,7 +177,8 @@ public class AgentContextBuilder
 
     private string LoadOutputTemplate(string templateName)
     {
-        var path = Path.Combine("..", "..", "output_templates", templateName);
+        var baseDir = AppContext.BaseDirectory;
+        var path = Path.Combine(baseDir, "output_templates", templateName);
         if (File.Exists(path))
         {
             return File.ReadAllText(path);

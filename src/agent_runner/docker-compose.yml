@@ -22,13 +22,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - crypton-network
+    network_mode: host
 
 volumes:
   agent-runner-data:
   agent-runner-logs:
-
-networks:
-  crypton-network:
-    driver: bridge

@@ -13,31 +13,31 @@ resilience:
 
 agents:
   plan:
-    model: gpt-4
+    model: qwen2.5:32b-instruct-q4_K_M
     temperature: 0.7
     maxTokens: 4096
     timeoutMinutes: 30
     maxRetries: 3
   research:
-    model: gpt-4
+    model: qwen2.5:32b-instruct-q4_K_M
     temperature: 0.7
     maxTokens: 4096
     timeoutMinutes: 45
     maxRetries: 3
   analyze:
-    model: gpt-4
+    model: qwen2.5:32b-instruct-q4_K_M
     temperature: 0.7
     maxTokens: 4096
     timeoutMinutes: 30
     maxRetries: 3
   synthesis:
-    model: gpt-4
+    model: qwen2.5:32b-instruct-q4_K_M
     temperature: 0.7
     maxTokens: 4096
     timeoutMinutes: 15
     maxRetries: 3
   evaluation:
-    model: gpt-4
+    model: qwen2.5:32b-instruct-q4_K_M
     temperature: 0.7
     maxTokens: 4096
     timeoutMinutes: 30

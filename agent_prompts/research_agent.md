@@ -16,6 +16,13 @@ You produce a single file: `research.md`.
 
 This file is the primary input to the Analysis Agent. Every finding must be specific, sourced, and clearly assessed for confidence. A finding without a source is an opinion. An opinion is not useful here. Follow the `research.md` template exactly. All sections are required.
 
+**Required Section Headings (use exactly these):**
+- `## Executive Summary` - Write this LAST, after all investigation sections
+- `## Investigation Findings` - Your main research output
+- `## Additional Findings` - Any significant findings outside the research agenda
+- `## Source Quality Notes` - Observations about source reliability
+- `## Open Questions` - Unresolved questions for the next cycle
+
 Write the **Executive Summary last**, after all investigation sections are complete.
 
 ---
@@ -61,7 +68,9 @@ Before diving into specific investigations, establish the current market environ
 
 This section exists so the Analysis Agent does not need to reconstruct context from first principles.
 
-### Step 5 — Execute the Research Agenda (→ Investigation Findings section)
+### Step 5 — Execute the Research Agenda (→ ## Investigation Findings section)
+
+**CRITICAL: You must use exactly this heading:** `## Investigation Findings`
 
 Work through each Research Agenda item from `plan.md` in priority order. For each item:
 

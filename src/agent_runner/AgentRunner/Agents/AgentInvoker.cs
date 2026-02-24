@@ -153,7 +153,8 @@ public class AgentInvoker
             model = settings.Model,
             messages = messages,
             temperature = settings.Temperature,
-            max_tokens = settings.MaxTokens
+            max_tokens = settings.MaxTokens,
+            stream = false
         };
 
         var json = JsonSerializer.Serialize(requestBody);
@@ -161,14 +162,28 @@ public class AgentInvoker
 
         var client = new HttpClient();
         var response = await client.PostAsync(
-            "http://localhost:11434/api/generate",
+            "http://localhost:11434/api/chat",
             content,
             cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        
+        Console.WriteLine($"[DEBUG] Ollama response status: {response.StatusCode}");
+        Console.WriteLine($"[DEBUG] Ollama response content ({responseJson.Length} chars): {responseJson.Substring(0, Math.Min(500, responseJson.Length))}");
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"Ollama API error: {response.StatusCode} - {responseJson}");
+        }
+        
+        if (string.IsNullOrWhiteSpace(responseJson))
+        {
+            throw new Exception("Ollama returned empty response");
+        }
+        
         var responseObj = JsonSerializer.Deserialize<JsonElement>(responseJson);
         
-        return responseObj.GetProperty("response").GetString() ?? "";
+        return responseObj.GetProperty("message").GetProperty("content").GetString() ?? "";
     }
 
     private List<ToolCall> ParseToolCalls(string output)
