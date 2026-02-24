@@ -56,9 +56,9 @@ jobs:
             --name ${{ env.CONTAINER_NAME }} \
             --restart unless-stopped \
             -p 8080:8080 \
-            -v $(pwd)/artifacts:/app/artifacts \
-            -v $(pwd)/logs:/app/logs \
-            -v $(pwd)/config.yaml:/app/config.yaml \
+            -v /home/matthew-evans/.config/crypton/artifacts:/app/artifacts \
+            -v /home/matthew-evans/.config/crypton/logs:/app/logs \
+            -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
             -e ASPNETCORE_ENVIRONMENT=Production \
             ${{ env.IMAGE_NAME }}:latest
 

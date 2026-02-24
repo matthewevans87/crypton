@@ -1,2 +1,23 @@
-bin
-obj
+# .NET build output
+bin/
+obj/
+
+# Runtime data (mounted as Docker volumes)
+artifacts/
+logs/
+src/**/mailboxes/
+src/**/logs/
+src/**/State/
+
+# Local config (keep production config outside the repo)
+config.yaml
+
+# GitHub Actions runner internals
+bin.*
+externals.*
+_diag/
+_work/
+.credentials*
+.runner
+.service
+artifacts
