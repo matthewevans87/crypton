@@ -1,0 +1,48 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Agent Runner",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: AgentRunner",
+            "program": "${workspaceFolder}/src/agent_runner/AgentRunner/bin/Debug/net10.0/AgentRunner.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/agent_runner/AgentRunner",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s/scalar/v1"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "BRAVE_SEARCH_API_KEY": "",
+                "AGENT_RUNNER_API_KEY": ""
+            },
+            "sourceFileMap": {
+                "/Views": "${workspaceFolder}/Views"
+            }
+        },
+        {
+            "name": "Debug Agent Runner (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/agent_runner/AgentRunner/bin/Debug/net10.0/AgentRunner.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/agent_runner/AgentRunner",
+            "stopAtEntry": false,
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "BRAVE_SEARCH_API_KEY": "",
+                "AGENT_RUNNER_API_KEY": ""
+            }
+        },
+        {
+            "name": "Attach to AgentRunner Process",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "AgentRunner"
+        }
+    ]
+}
