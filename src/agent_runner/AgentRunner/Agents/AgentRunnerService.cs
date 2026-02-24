@@ -129,6 +129,8 @@ public class AgentRunnerService
 
     private async Task RunLoopAsync(CancellationToken cancellationToken)
     {
+        _logger.LogInfo($"RunLoopAsync started, current state: {_stateMachine.CurrentState}");
+        
         while (!cancellationToken.IsCancellationRequested)
         {
             // Check for stalled loop
@@ -497,6 +499,15 @@ public class AgentRunnerService
         };
 
         var result = await _agentInvoker.InvokeAsync(context, cancellationToken);
+
+        if (!result.Success)
+        {
+            _logger.LogError($"Agent {state} failed: {result.Error}");
+        }
+        else
+        {
+            _logger.LogInfo($"Agent {state} output (first 200 chars): {(result.Output?.Length > 200 ? result.Output[..200] + "..." : result.Output)}");
+        }
 
         await HandleMailboxMessagesAsync(state, result);
 

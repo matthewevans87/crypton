@@ -9,6 +9,7 @@ using AgentRunner.StateMachine;
 using AgentRunner.Tools;
 using Microsoft.Extensions.Hosting;
 using Prometheus;
+using Scalar.AspNetCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,13 +68,12 @@ builder.Services.AddSingleton(configLoader);
 builder.Services.AddSingleton(metricsCollector);
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 app.UseRouting();
 app.MapMetrics();
@@ -84,7 +84,9 @@ _ = Task.Run(async () =>
 {
     try
     {
+        Log.Information("Starting agent runner service...");
         await agentRunnerService.StartAsync();
+        Log.Information("Agent runner service started successfully");
     }
     catch (Exception ex)
     {

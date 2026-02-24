@@ -1,0 +1,51 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build: AgentRunner",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj",
+                "--configuration",
+                "Debug",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "watch: AgentRunner",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "watch",
+                "--project",
+                "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/src/agent_runner/AgentRunner"
+            },
+            "problemMatcher": "$msCompile",
+            "isBackground": true
+        },
+        {
+            "label": "test: AgentRunner.Tests",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "test",
+                "${workspaceFolder}/src/agent_runner/AgentRunner.Tests/AgentRunner.Tests.csproj",
+                "--verbosity",
+                "normal"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "test"
+        }
+    ]
+}
