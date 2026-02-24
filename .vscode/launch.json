@@ -15,10 +15,9 @@
                 "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
                 "uriFormat": "%s/scalar/v1"
             },
+            "envFile": "${workspaceFolder}/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development",
-                "BRAVE_SEARCH_API_KEY": "",
-                "AGENT_RUNNER_API_KEY": ""
+                "ASPNETCORE_ENVIRONMENT": "Development"
             },
             "sourceFileMap": {
                 "/Views": "${workspaceFolder}/Views"
@@ -32,10 +31,9 @@
             "args": [],
             "cwd": "${workspaceFolder}/src/agent_runner/AgentRunner",
             "stopAtEntry": false,
+            "envFile": "${workspaceFolder}/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development",
-                "BRAVE_SEARCH_API_KEY": "",
-                "AGENT_RUNNER_API_KEY": ""
+                "ASPNETCORE_ENVIRONMENT": "Development"
             }
         },
         {

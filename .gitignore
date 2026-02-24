@@ -9,8 +9,9 @@ src/**/mailboxes/
 src/**/logs/
 src/**/State/
 
-# Local config (keep production config outside the repo)
+# Local config and secrets (keep outside the repo)
 config.yaml
+.env
 
 # GitHub Actions runner internals
 bin.*
