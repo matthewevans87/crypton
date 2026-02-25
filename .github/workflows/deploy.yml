@@ -120,6 +120,7 @@ jobs:
             -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
             -e ASPNETCORE_ENVIRONMENT=Production \
             -e ASPNETCORE_URLS=http://0.0.0.0:5003 \
+            --env-file /home/matthew-evans/src/crypton/.env \
             crypton-agent-runner:latest
 
       - name: Deploy Market Data Service
@@ -130,6 +131,7 @@ jobs:
             -p 5002:5002 \
             -e ASPNETCORE_ENVIRONMENT=Production \
             -e ASPNETCORE_URLS=http://0.0.0.0:5002 \
+            --env-file /home/matthew-evans/src/crypton/.env \
             crypton-market-data-service:latest
 
       - name: Deploy Monitoring Dashboard API
@@ -141,6 +143,7 @@ jobs:
             -e ASPNETCORE_ENVIRONMENT=Production \
             -e ASPNETCORE_URLS=http://0.0.0.0:5001 \
             -e MarketDataService__Url=http://market-data-service:5002 \
+            --env-file /home/matthew-evans/src/crypton/.env \
             --link crypton-market-data-service:market-data-service \
             crypton-monitoring-dashboard-api:latest
 
