@@ -58,7 +58,7 @@ jobs:
           
           echo "Pruning old tagged images (keep last 2 per service)..."
           for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
-            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | tail -n +3 | xargs -r docker rmi || true
+            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | grep -v ":latest" | tail -n +3 | xargs -r docker rmi || true
           done
 
       # Stop and remove existing containers
