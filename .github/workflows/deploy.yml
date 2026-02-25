@@ -1,4 +1,4 @@
-name: Deploy Agent Runner
+name: Deploy Crypton Stack
 
 on:
   push:
@@ -6,8 +6,6 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: crypton-agent-runner
-  CONTAINER_NAME: crypton-agent-runner
   REGISTRY: localhost:5000
 
 jobs:
@@ -23,56 +21,127 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      # Build Agent Runner
+      - name: Build Agent Runner
         run: |
           docker build \
-            --tag ${{ env.IMAGE_NAME }}:latest \
-            --tag ${{ env.IMAGE_NAME }}:$(git rev-parse --short HEAD) \
+            --tag ${{ env.REGISTRY }}/crypton-agent-runner:latest \
+            --tag ${{ env.REGISTRY }}/crypton-agent-runner:$(git rev-parse --short HEAD) \
             -f src/agent_runner/Dockerfile .
 
+      # Build Monitoring Dashboard Backend
+      - name: Build Monitoring Dashboard Backend
+        run: |
+          docker build \
+            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:latest \
+            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
+            -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
+
+      # Build Monitoring Dashboard Frontend
+      - name: Build Monitoring Dashboard Frontend
+        run: |
+          docker build \
+            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:latest \
+            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
+            -f src/monitoring_dashboard/frontend/Dockerfile .
+
+      # Build Market Data Service
+      - name: Build Market Data Service
+        run: |
+          docker build \
+            --tag ${{ env.REGISTRY }}/crypton-market-data-service:latest \
+            --tag ${{ env.REGISTRY }}/crypton-market-data-service:$(git rev-parse --short HEAD) \
+            -f src/market_data_service/MarketDataService/Dockerfile .
+
+      # Prune old images
       - name: Prune old images
         run: |
           echo "Pruning dangling images..."
           docker image prune -f
           
-          echo "Pruning old tagged images (keep last 5)..."
-          docker images --format '{{.Repository}}:{{.Tag}}' | grep '${{ env.IMAGE_NAME }}' | tail -n +6 | xargs -r docker rmi || true
+          echo "Pruning old tagged images (keep last 5 per service)..."
+          for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
+            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | tail -n +6 | xargs -r docker rmi || true
+          done
 
-      - name: Stop and remove existing container
+      # Stop and remove existing containers
+      - name: Stop existing containers
         run: |
-          if [ "$(docker ps -aq -f name=${{ env.CONTAINER_NAME }})" ]; then
-            echo "Stopping existing container..."
-            docker stop ${{ env.CONTAINER_NAME }}
-          fi
-          
-          if [ "$(docker ps -aq -f name=${{ env.CONTAINER_NAME }})" ]; then
-            echo "Removing existing container..."
-            docker rm ${{ env.CONTAINER_NAME }}
-          fi
+          for container in crypton-agent-runner crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web crypton-market-data-service; do
+            if [ "$(docker ps -aq -f name=$container)" ]; then
+              echo "Stopping $container..."
+              docker stop $container || true
+            fi
+            if [ "$(docker ps -aq -f name=$container)" ]; then
+              echo "Removing $container..."
+              docker rm $container || true
+            fi
+          done
 
-      - name: Create and start new container
+      # Deploy Agent Runner
+      - name: Deploy Agent Runner
         run: |
           docker run -d \
-            --name ${{ env.CONTAINER_NAME }} \
+            --name crypton-agent-runner \
             --restart unless-stopped \
             -p 8080:8080 \
             -v /home/matthew-evans/.config/crypton/artifacts:/app/artifacts \
             -v /home/matthew-evans/.config/crypton/logs:/app/logs \
             -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
             -e ASPNETCORE_ENVIRONMENT=Production \
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/crypton-agent-runner:latest
 
-      - name: Verify container is running
+      # Deploy Market Data Service
+      - name: Deploy Market Data Service
         run: |
-          docker ps | grep ${{ env.CONTAINER_NAME }}
+          docker run -d \
+            --name crypton-market-data-service \
+            --restart unless-stopped \
+            -p 5001:5001 \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            ${{ env.REGISTRY }}/crypton-market-data-service:latest
+
+      # Deploy Monitoring Dashboard API
+      - name: Deploy Monitoring Dashboard API
+        run: |
+          docker run -d \
+            --name crypton-monitoring-dashboard-api \
+            --restart unless-stopped \
+            -p 5000:5000 \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e MarketDataService__Url=http://localhost:5001 \
+            --link crypton-market-data-service:market-data-service \
+            ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:latest
+
+      # Deploy Monitoring Dashboard Web
+      - name: Deploy Monitoring Dashboard Web
+        run: |
+          docker run -d \
+            --name crypton-monitoring-dashboard-web \
+            --restart unless-stopped \
+            -p 80:80 \
+            --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
+            ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:latest
+
+      # Verify containers
+      - name: Verify containers running
+        run: |
+          echo "Running containers:"
+          docker ps --filter "name=crypton-"
           
-          echo "Container logs (last 20 lines):"
-          docker logs --tail 20 ${{ env.CONTAINER_NAME }}
+          echo ""
+          echo "Container logs:"
+          for container in crypton-agent-runner crypton-market-data-service crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web; do
+            echo "=== $container (last 5 lines) ==="
+            docker logs --tail 5 $container 2>&1 || true
+          done
 
       - name: Report success
         run: |
           echo "✅ Deployment complete!"
-          echo "Container: ${{ env.CONTAINER_NAME }}"
-          echo "Image: ${{ env.IMAGE_NAME }}:latest"
-          echo "Ports: 8080:8080"
-# test
+          echo ""
+          echo "Services deployed:"
+          echo "  - Agent Runner:        http://localhost:8080"
+          echo "  - Market Data Service: http://localhost:5001"
+          echo "  - Dashboard API:       http://localhost:5000"
+          echo "  - Dashboard Web:       http://localhost:80"

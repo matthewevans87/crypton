@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  agent-runner:
+    build:
+      context: .
+      dockerfile: src/agent_runner/Dockerfile
+    container_name: crypton-agent-runner
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
+      - AGENT_RUNNER_API_KEY=${AGENT_RUNNER_API_KEY}
+      - MarketDataService__Url=http://host.docker.internal:5001
+    volumes:
+      - agent-runner-data:/app/artifacts
+      - agent-runner-logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  market-data-service:
+    build:
+      context: .
+      dockerfile: src/market_data_service/MarketDataService/Dockerfile
+    container_name: crypton-market-data-service
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  monitoring-dashboard-api:
+    build:
+      context: .
+      dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
+    container_name: crypton-monitoring-dashboard-api
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - MarketDataService__Url=http://market-data-service:5001
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  monitoring-dashboard-web:
+    build:
+      context: .
+      dockerfile: src/monitoring_dashboard/frontend/Dockerfile
+    container_name: crypton-monitoring-dashboard-web
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agent-runner-data:
+  agent-runner-logs:
