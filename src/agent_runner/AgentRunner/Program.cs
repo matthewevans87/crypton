@@ -111,6 +111,9 @@ lifetime.ApplicationStopping.Register(async () =>
     }
 });
 
-Log.Information("Agent Runner configured on {Host}:{Port}", config.Api.Host, config.Api.Port);
+var listenUrl = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+    ?? $"http://{config.Api.Host}:{config.Api.Port}";
 
-app.Run($"http://{config.Api.Host}:{config.Api.Port}");
+Log.Information("Agent Runner listening on {Url}", listenUrl);
+
+app.Run(listenUrl);
