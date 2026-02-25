@@ -36,31 +36,47 @@ jobs:
 
       - name: Build Agent Runner
         run: |
-          docker build --no-cache --load --provenance=false \
-            --tag crypton-agent-runner:latest \
-            --tag crypton-agent-runner:${{ needs.setup.outputs.git-sha }} \
-            -f src/agent_runner/Dockerfile .
+          for attempt in 1 2 3; do
+            docker build --no-cache --load --provenance=false \
+              --tag crypton-agent-runner:latest \
+              --tag crypton-agent-runner:${{ needs.setup.outputs.git-sha }} \
+              -f src/agent_runner/Dockerfile . && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Build Monitoring Dashboard Backend
         run: |
-          docker build --no-cache --load --provenance=false \
-            --tag crypton-monitoring-dashboard-api:latest \
-            --tag crypton-monitoring-dashboard-api:${{ needs.setup.outputs.git-sha }} \
-            -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
+          for attempt in 1 2 3; do
+            docker build --no-cache --load --provenance=false \
+              --tag crypton-monitoring-dashboard-api:latest \
+              --tag crypton-monitoring-dashboard-api:${{ needs.setup.outputs.git-sha }} \
+              -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile . && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Build Monitoring Dashboard Frontend
         run: |
-          docker build --no-cache --load --provenance=false \
-            --tag crypton-monitoring-dashboard-web:latest \
-            --tag crypton-monitoring-dashboard-web:${{ needs.setup.outputs.git-sha }} \
-            -f src/monitoring_dashboard/frontend/Dockerfile .
+          for attempt in 1 2 3; do
+            docker build --no-cache --load --provenance=false \
+              --tag crypton-monitoring-dashboard-web:latest \
+              --tag crypton-monitoring-dashboard-web:${{ needs.setup.outputs.git-sha }} \
+              -f src/monitoring_dashboard/frontend/Dockerfile . && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Build Market Data Service
         run: |
-          docker build --no-cache --load --provenance=false \
-            --tag crypton-market-data-service:latest \
-            --tag crypton-market-data-service:${{ needs.setup.outputs.git-sha }} \
-            -f src/market_data_service/MarketDataService/Dockerfile .
+          for attempt in 1 2 3; do
+            docker build --no-cache --load --provenance=false \
+              --tag crypton-market-data-service:latest \
+              --tag crypton-market-data-service:${{ needs.setup.outputs.git-sha }} \
+              -f src/market_data_service/MarketDataService/Dockerfile . && break
+            echo "Attempt $attempt failed, retrying in 15s..."
+            sleep 15
+          done
 
   prune:
     runs-on: self-hosted
