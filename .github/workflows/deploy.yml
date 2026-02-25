@@ -6,11 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  setup:
     runs-on: self-hosted
     permissions:
       contents: read
-
+    outputs:
+      git-sha: ${{ steps.get-sha.outputs.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,50 +19,60 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build Agent Runner
+      - name: Get git SHA
+        id: get-sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  build:
+    runs-on: self-hosted
+    needs: setup
+    steps:
       - name: Build Agent Runner
         run: |
           docker build --load --provenance=false \
             --tag crypton-agent-runner:latest \
-            --tag crypton-agent-runner:$(git rev-parse --short HEAD) \
+            --tag crypton-agent-runner:${{ needs.setup.outputs.git-sha }} \
             -f src/agent_runner/Dockerfile .
 
-      # Build Monitoring Dashboard Backend
       - name: Build Monitoring Dashboard Backend
         run: |
           docker build --load --provenance=false \
             --tag crypton-monitoring-dashboard-api:latest \
-            --tag crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
+            --tag crypton-monitoring-dashboard-api:${{ needs.setup.outputs.git-sha }} \
             -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
 
-      # Build Monitoring Dashboard Frontend
       - name: Build Monitoring Dashboard Frontend
         run: |
           docker build --load --provenance=false \
             --tag crypton-monitoring-dashboard-web:latest \
-            --tag crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
+            --tag crypton-monitoring-dashboard-web:${{ needs.setup.outputs.git-sha }} \
             -f src/monitoring_dashboard/frontend/Dockerfile .
 
-      # Build Market Data Service
       - name: Build Market Data Service
         run: |
           docker build --load --provenance=false \
             --tag crypton-market-data-service:latest \
-            --tag crypton-market-data-service:$(git rev-parse --short HEAD) \
+            --tag crypton-market-data-service:${{ needs.setup.outputs.git-sha }} \
             -f src/market_data_service/MarketDataService/Dockerfile .
 
-      # Prune old images
+  prune:
+    runs-on: self-hosted
+    needs: build
+    steps:
       - name: Prune old images
         run: |
           echo "Pruning dangling images..."
           docker image prune -f
-          
+
           echo "Pruning old tagged images (keep last 2 per service)..."
           for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
             docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | grep -v ":latest" | tail -n +3 | xargs -r docker rmi || true
           done
 
-      # Stop and remove existing containers
+  deploy:
+    runs-on: self-hosted
+    needs: prune
+    steps:
       - name: Stop existing containers
         run: |
           for container in crypton-agent-runner crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web crypton-market-data-service; do
@@ -75,7 +86,6 @@ jobs:
             fi
           done
 
-      # Deploy Agent Runner
       - name: Deploy Agent Runner
         run: |
           docker run -d \
@@ -88,7 +98,6 @@ jobs:
             -e ASPNETCORE_ENVIRONMENT=Production \
             crypton-agent-runner:latest
 
-      # Deploy Market Data Service
       - name: Deploy Market Data Service
         run: |
           docker run -d \
@@ -98,7 +107,6 @@ jobs:
             -e ASPNETCORE_ENVIRONMENT=Production \
             crypton-market-data-service:latest
 
-      # Deploy Monitoring Dashboard API
       - name: Deploy Monitoring Dashboard API
         run: |
           docker run -d \
@@ -110,7 +118,6 @@ jobs:
             --link crypton-market-data-service:market-data-service \
             crypton-monitoring-dashboard-api:latest
 
-      # Deploy Monitoring Dashboard Web
       - name: Deploy Monitoring Dashboard Web
         run: |
           docker run -d \
@@ -120,12 +127,15 @@ jobs:
             --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
             crypton-monitoring-dashboard-web:latest
 
-      # Verify containers
+  verify:
+    runs-on: self-hosted
+    needs: deploy
+    steps:
       - name: Verify containers running
         run: |
           echo "Running containers:"
           docker ps --filter "name=crypton-"
-          
+
           echo ""
           echo "Container logs:"
           for container in crypton-agent-runner crypton-market-data-service crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web; do
@@ -133,9 +143,13 @@ jobs:
             docker logs --tail 5 $container 2>&1 || true
           done
 
+  finish:
+    runs-on: self-hosted
+    needs: verify
+    steps:
       - name: Report success
         run: |
-          echo "✅ Deployment complete!"
+          echo "Deployment complete!"
           echo ""
           echo "Services deployed:"
           echo "  - Dashboard Web:       http://localhost:5000"
