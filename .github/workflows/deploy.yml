@@ -21,7 +21,7 @@ jobs:
       # Build Agent Runner
       - name: Build Agent Runner
         run: |
-          docker build \
+          docker build --load \
             --tag crypton-agent-runner:latest \
             --tag crypton-agent-runner:$(git rev-parse --short HEAD) \
             -f src/agent_runner/Dockerfile .
@@ -29,7 +29,7 @@ jobs:
       # Build Monitoring Dashboard Backend
       - name: Build Monitoring Dashboard Backend
         run: |
-          docker build \
+          docker build --load \
             --tag crypton-monitoring-dashboard-api:latest \
             --tag crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
@@ -37,7 +37,7 @@ jobs:
       # Build Monitoring Dashboard Frontend
       - name: Build Monitoring Dashboard Frontend
         run: |
-          docker build \
+          docker build --load \
             --tag crypton-monitoring-dashboard-web:latest \
             --tag crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/frontend/Dockerfile .
@@ -45,7 +45,7 @@ jobs:
       # Build Market Data Service
       - name: Build Market Data Service
         run: |
-          docker build \
+          docker build --load \
             --tag crypton-market-data-service:latest \
             --tag crypton-market-data-service:$(git rev-parse --short HEAD) \
             -f src/market_data_service/MarketDataService/Dockerfile .
