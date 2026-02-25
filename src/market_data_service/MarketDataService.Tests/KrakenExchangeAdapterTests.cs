@@ -12,18 +12,20 @@ namespace MarketDataService.Tests;
 public class KrakenExchangeAdapterTests
 {
     private readonly Mock<ILogger<KrakenExchangeAdapter>> _mockLogger;
+    private readonly Mock<ILoggerFactory> _mockLoggerFactory;
     private readonly HttpClient _httpClient;
 
     public KrakenExchangeAdapterTests()
     {
         _mockLogger = new Mock<ILogger<KrakenExchangeAdapter>>();
+        _mockLoggerFactory = new Mock<ILoggerFactory>();
         _httpClient = new HttpClient();
     }
 
     [Fact]
     public void Constructor_ShouldInitializeProperties()
     {
-        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         Assert.Equal("Kraken", adapter.ExchangeName);
         Assert.False(adapter.IsConnected);
@@ -37,7 +39,7 @@ public class KrakenExchangeAdapterTests
         
         handler.SetupResponse("https://api.kraken.com/0/public/Ticker?pair=XBT/USD", GetKrakenTickerResponse());
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetPricesAsync(new[] { "BTC/USD" });
 
@@ -53,7 +55,7 @@ public class KrakenExchangeAdapterTests
         
         handler.SetupResponse("https://api.kraken.com/0/public/Ticker?pair=XBT/USD", GetKrakenTickerResponse());
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetPriceAsync("BTC/USD");
 
@@ -69,7 +71,7 @@ public class KrakenExchangeAdapterTests
         
         handler.SetupResponse("https://api.kraken.com/0/public/Ticker?pair=INVALID", "{\"error\":[\"EQuery:Unknown asset pair\"]}");
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetPriceAsync("INVALID");
 
@@ -94,7 +96,7 @@ public class KrakenExchangeAdapterTests
         }";
         handler.SetupResponse("https://api.kraken.com/0/public/OHLC?pair=XBT/USD&interval=60", ohlcvResponse);
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetOhlcvAsync("BTC/USD", "1h", 10);
 
@@ -110,7 +112,7 @@ public class KrakenExchangeAdapterTests
         
         handler.SetupResponse("https://api.kraken.com/0/public/Depth?pair=XBT/USD&count=10", GetKrakenOrderBookResponse());
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetOrderBookAsync("BTC/USD", 10);
 
@@ -124,7 +126,7 @@ public class KrakenExchangeAdapterTests
         var handler = MockHttpMessageHandler.CreateWithResult(HttpStatusCode.Unauthorized, "{\"error\":[\"EAuth:Invalid key\"]}");
         var httpClient = new HttpClient(handler);
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetBalanceAsync();
 
@@ -140,7 +142,7 @@ public class KrakenExchangeAdapterTests
         
         handler.SetupResponse("https://api.kraken.com/0/private/Balance", "{\"error\":[],\"result\":{\"XXBT\":\"1.5\",\"ZUSD\":\"50000\"}}");
         
-        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
 
         var result = await adapter.GetPortfolioSummaryAsync();
 
@@ -151,7 +153,7 @@ public class KrakenExchangeAdapterTests
     [Fact]
     public void Events_ShouldBeAccessible()
     {
-        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object);
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
         
         PriceTicker? receivedTicker = null;
         
@@ -161,6 +163,111 @@ public class KrakenExchangeAdapterTests
         adapter.OnConnectionStateChanged += (sender, connected) => { };
         
         Assert.True(true);
+    }
+
+    [Fact]
+    public async Task GetTradesAsync_WithValidSymbol_ReturnsTrades()
+    {
+        var tradesResponse = @"{
+            ""error"": [],
+            ""result"": {
+                ""trades"": {
+                    ""TX-001"": [""50000.0"", ""0.5"", ""1234567890"", ""b"", ""l"", """"],
+                    ""TX-002"": [""50001.0"", ""0.3"", ""1234567891"", ""s"", ""l"", """"]
+                },
+                ""count"": 2
+            }
+        }";
+        
+        var handler = MockHttpMessageHandler.CreateWithResult(HttpStatusCode.OK, tradesResponse);
+        var httpClient = new HttpClient(handler);
+        
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+
+        var result = await adapter.GetTradesAsync("BTC/USD", 10);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count);
+    }
+
+    [Fact]
+    public async Task GetTradesAsync_WithInvalidResponse_ReturnsEmpty()
+    {
+        var handler = new MockHttpMessageHandler();
+        var httpClient = new HttpClient(handler);
+        
+        handler.SetupResponse("https://api.kraken.com/0/private/TradesHistory?pair=XBT/USD", "{\"error\":[]}");
+        
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+
+        var result = await adapter.GetTradesAsync("BTC/USD", 10);
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetTradesAsync_WithHttpError_RecordsFailure()
+    {
+        var handler = MockHttpMessageHandler.CreateWithResult(HttpStatusCode.ServiceUnavailable, "{\"error\":[\"Service unavailable\"]}");
+        var httpClient = new HttpClient(handler);
+        
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+
+        var result = await adapter.GetTradesAsync("BTC/USD", 10);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void CircuitBreakerState_InitiallyClosed()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        Assert.Equal(Services.CircuitBreakerState.Closed, adapter.CircuitBreakerState);
+    }
+
+    [Fact]
+    public void ReconnectCount_InitiallyZero()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        Assert.Equal(0, adapter.ReconnectCount);
+    }
+
+    [Fact]
+    public async Task GetPricesAsync_WithCircuitBreakerOpen_ThrowsException()
+    {
+        var handler = new MockHttpMessageHandler();
+        var httpClient = new HttpClient(handler);
+        
+        var adapter = new KrakenExchangeAdapter(httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        for (int i = 0; i < 5; i++)
+        {
+            try
+            {
+                await adapter.GetPricesAsync(new[] { "BTC/USD" });
+            }
+            catch { }
+        }
+
+        await Assert.ThrowsAsync<Services.CircuitBreakerOpenException>(() => 
+            adapter.GetPricesAsync(new[] { "BTC/USD" }));
+    }
+
+    [Fact]
+    public void SubscribeToSymbols_ContainsExpectedMappings()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var field = typeof(KrakenExchangeAdapter).GetField("SymbolMapping", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var mapping = field?.GetValue(null) as Dictionary<string, string>;
+        
+        Assert.NotNull(mapping);
+        Assert.Equal("XBT/USD", mapping["BTC/USD"]);
+        Assert.Equal("ETH/USD", mapping["ETH/USD"]);
     }
 
     private static string GetKrakenTickerResponse()

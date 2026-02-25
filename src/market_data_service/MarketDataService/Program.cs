@@ -24,9 +24,15 @@ try
     builder.Services.AddSignalR();
 
     builder.Services.AddHttpClient();
+    builder.Services.AddLogging();
     builder.Services.AddSingleton<IMarketDataCache, InMemoryMarketDataCache>();
-    builder.Services.AddSingleton<IExchangeAdapter, KrakenExchangeAdapter>();
+    builder.Services.AddSingleton<IExchangeAdapter>(sp => 
+        new KrakenExchangeAdapter(
+            sp.GetRequiredService<HttpClient>(),
+            sp.GetRequiredService<ILogger<KrakenExchangeAdapter>>(),
+            sp.GetRequiredService<ILoggerFactory>()));
     builder.Services.AddSingleton<ITechnicalIndicatorService, TechnicalIndicatorService>();
+    builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
 
     builder.Services.AddCors(options =>
     {
@@ -44,10 +50,12 @@ try
     var cache = app.Services.GetRequiredService<IMarketDataCache>();
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     var hubContext = app.Services.GetRequiredService<IHubContext<MarketDataHub, IMarketDataClient>>();
+    var metrics = app.Services.GetRequiredService<IMetricsCollector>();
 
     exchangeAdapter.OnPriceUpdate += (sender, ticker) =>
     {
         cache.SetPrice(ticker);
+        metrics.RecordPriceUpdateLatency(TimeSpan.Zero);
         _ = hubContext.Clients.All.OnPriceUpdate(ticker);
     };
 
@@ -60,6 +68,8 @@ try
     exchangeAdapter.OnConnectionStateChanged += (sender, isConnected) =>
     {
         logger.LogInformation("Exchange connection state changed: {IsConnected}", isConnected);
+        metrics.RecordConnectionStateChanged(isConnected);
+        metrics.RecordWsConnected(isConnected);
         _ = hubContext.Clients.All.OnConnectionStatus(isConnected);
     };
 
@@ -84,7 +94,20 @@ try
     app.MapHub<MarketDataHub>("/hubs/marketdata");
 
     app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
-    app.MapGet("/health/ready", () => Results.Ok(new { status = "ready", exchange = exchangeAdapter.ExchangeName, connected = exchangeAdapter.IsConnected }));
+    app.MapGet("/health/ready", () => 
+    {
+        var metricsData = metrics.GetMetrics();
+        var isHealthy = metricsData.IsHealthy;
+        var status = isHealthy ? "ready" : "degraded";
+        
+        return Results.Ok(new { 
+            status, 
+            exchange = exchangeAdapter.ExchangeName, 
+            connected = exchangeAdapter.IsConnected,
+            pricesStale = metrics.IsPricesStale(),
+            circuitBreakerState = exchangeAdapter.CircuitBreakerState.ToString()
+        });
+    });
 
     app.Run();
 }

@@ -3,7 +3,7 @@ using MonitoringDashboard.Models;
 
 namespace MonitoringDashboard.Hubs;
 
-public class DashboardHub : Hub
+public class DashboardHub : Hub<IDashboardClient>
 {
     public async Task JoinGroup(string groupName)
     {

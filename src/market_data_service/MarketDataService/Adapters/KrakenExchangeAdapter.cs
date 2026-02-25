@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using MarketDataService.Models;
+using MarketDataService.Services;
 
 namespace MarketDataService.Adapters;
 
@@ -16,6 +17,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     private bool _isConnected;
     private int _reconnectCount;
     private DateTime? _lastConnectedAt;
+    private bool _shouldReconnect = true;
 
     private readonly SemaphoreSlim _rateLimiter = new(1, 1);
     private DateTime _nextRequestTime = DateTime.MinValue;
@@ -25,8 +27,20 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     private int _requestsThisMinute = 0;
     private DateTime _minuteWindowStart = DateTime.UtcNow;
 
+    private readonly TimeSpan _initialReconnectDelay = TimeSpan.FromSeconds(1);
+    private readonly TimeSpan _maxReconnectDelay = TimeSpan.FromSeconds(60);
+    private readonly double _backoffMultiplier = 2.0;
+    private readonly double _jitterFactor = 0.2;
+    private TimeSpan _currentReconnectDelay;
+    private int _consecutiveFailures;
+    private readonly object _reconnectLock = new();
+    private readonly CircuitBreaker _circuitBreaker;
+
     public string ExchangeName => "Kraken";
     public bool IsConnected => _isConnected;
+    public int ReconnectCount => _reconnectCount;
+    public TimeSpan CurrentReconnectDelay => _currentReconnectDelay;
+    public CircuitBreakerState CircuitBreakerState => _circuitBreaker.State;
     
     public event EventHandler<PriceTicker>? OnPriceUpdate;
     public event EventHandler<OrderBook>? OnOrderBookUpdate;
@@ -40,11 +54,112 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         { "SOL/USD", "SOL/USD" }
     };
 
-    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger)
+    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _loggerFactory = loggerFactory;
         _httpClient.BaseAddress = new Uri("https://api.kraken.com");
+        _currentReconnectDelay = _initialReconnectDelay;
+        
+        var circuitBreakerLogger = _loggerFactory.CreateLogger<CircuitBreaker>();
+        _circuitBreaker = new CircuitBreaker(new CircuitBreakerOptions(), circuitBreakerLogger);
+    }
+
+    private readonly ILoggerFactory _loggerFactory;
+
+    private TimeSpan CalculateReconnectDelay()
+    {
+        var delayWithJitter = _currentReconnectDelay.TotalSeconds * _jitterFactor * (Random.Shared.NextDouble() * 2 - 1);
+        var finalDelay = _currentReconnectDelay.TotalSeconds + delayWithJitter;
+        return TimeSpan.FromSeconds(Math.Max(0, Math.Min(finalDelay, _maxReconnectDelay.TotalSeconds)));
+    }
+
+    private void ResetReconnectDelay()
+    {
+        lock (_reconnectLock)
+        {
+            _currentReconnectDelay = _initialReconnectDelay;
+            _consecutiveFailures = 0;
+        }
+    }
+
+    private void IncreaseReconnectDelay()
+    {
+        lock (_reconnectLock)
+        {
+            _consecutiveFailures++;
+            _currentReconnectDelay = TimeSpan.FromSeconds(
+                Math.Min(
+                    _currentReconnectDelay.TotalSeconds * _backoffMultiplier,
+                    _maxReconnectDelay.TotalSeconds
+                )
+            );
+            _logger.LogInformation("Reconnect delay increased to {Delay}s after {FailureCount} consecutive failures",
+                _currentReconnectDelay.TotalSeconds, _consecutiveFailures);
+        }
+    }
+
+    private async Task StartReconnectLoopAsync(CancellationToken cancellationToken)
+    {
+        while (_shouldReconnect && !cancellationToken.IsCancellationRequested)
+        {
+            var delay = CalculateReconnectDelay();
+            _logger.LogInformation("Attempting to reconnect in {Delay:F1} seconds (attempt #{Attempt})",
+                delay.TotalSeconds, _reconnectCount + 1);
+
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            _reconnectCount++;
+            var connected = await ConnectInternalAsync(cancellationToken);
+
+            if (connected)
+            {
+                ResetReconnectDelay();
+                _logger.LogInformation("Successfully reconnected after {Attempt} attempts", _reconnectCount);
+                break;
+            }
+            else
+            {
+                IncreaseReconnectDelay();
+            }
+        }
+    }
+
+    private async Task<bool> ConnectInternalAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _webSocket = new ClientWebSocket();
+            _webSocketCts = new CancellationTokenSource();
+            
+            await _webSocket.ConnectAsync(new Uri("wss://ws.kraken.com"), cancellationToken);
+            
+            _isConnected = true;
+            _lastConnectedAt = DateTime.UtcNow;
+            OnConnectionStateChanged?.Invoke(this, true);
+            
+            await SubscribeToChannelsAsync(cancellationToken);
+            
+            _ = Task.Run(() => ReceiveMessagesAsync(_webSocketCts.Token), _webSocketCts.Token);
+            
+            _logger.LogInformation("Connected to Kraken WebSocket");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to connect to Kraken WebSocket");
+            _isConnected = false;
+            OnConnectionStateChanged?.Invoke(this, false);
+            return false;
+        }
     }
 
     private async Task WaitForRateLimitAsync(CancellationToken cancellationToken)
@@ -84,35 +199,71 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
     }
 
+    private async Task SubscribeToChannelsAsync(CancellationToken cancellationToken)
+    {
+        if (_webSocket?.State != WebSocketState.Open)
+            return;
+
+        var krakenSymbols = SymbolMapping.Values.ToList();
+        
+        var subscribeMessage = new
+        {
+            @event = "subscribe",
+            pair = krakenSymbols,
+            subscription = new { name = "ticker" }
+        };
+
+        var json = JsonSerializer.Serialize(subscribeMessage);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+
+        _logger.LogInformation("Subscribed to ticker channel for {Symbols}", string.Join(", ", krakenSymbols));
+
+        var bookSubscribeMessage = new
+        {
+            @event = "subscribe",
+            pair = krakenSymbols,
+            subscription = new { name = "book", depth = 25 }
+        };
+
+        json = JsonSerializer.Serialize(bookSubscribeMessage);
+        bytes = Encoding.UTF8.GetBytes(json);
+        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+
+        _logger.LogInformation("Subscribed to book channel for {Symbols}", string.Join(", ", krakenSymbols));
+
+        var tradeSubscribeMessage = new
+        {
+            @event = "subscribe",
+            pair = krakenSymbols,
+            subscription = new { name = "trade" }
+        };
+
+        json = JsonSerializer.Serialize(tradeSubscribeMessage);
+        bytes = Encoding.UTF8.GetBytes(json);
+        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+
+        _logger.LogInformation("Subscribed to trade channel for {Symbols}", string.Join(", ", krakenSymbols));
+    }
+
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
     {
-        try
+        _shouldReconnect = true;
+        
+        var connected = await ConnectInternalAsync(cancellationToken);
+        
+        if (!connected)
         {
-            _webSocket = new ClientWebSocket();
-            _webSocketCts = new CancellationTokenSource();
-            
-            await _webSocket.ConnectAsync(new Uri("wss://ws.kraken.com"), cancellationToken);
-            
-            _isConnected = true;
-            _lastConnectedAt = DateTime.UtcNow;
-            OnConnectionStateChanged?.Invoke(this, true);
-            
-            _ = Task.Run(() => ReceiveMessagesAsync(_webSocketCts.Token), _webSocketCts.Token);
-            
-            _logger.LogInformation("Connected to Kraken WebSocket");
-            return true;
+            _logger.LogWarning("Initial connection failed, starting reconnect loop");
+            _ = Task.Run(() => StartReconnectLoopAsync(cancellationToken), cancellationToken);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to connect to Kraken WebSocket");
-            _isConnected = false;
-            OnConnectionStateChanged?.Invoke(this, false);
-            return false;
-        }
+        
+        return connected;
     }
 
     public async Task DisconnectAsync()
     {
+        _shouldReconnect = false;
         _webSocketCts?.Cancel();
         
         if (_webSocket?.State == WebSocketState.Open)
@@ -133,6 +284,12 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<PriceTicker>> GetPricesAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
     {
+        if (!_circuitBreaker.CanExecute())
+        {
+            _logger.LogWarning("Circuit breaker is open, rejecting request");
+            throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         var result = new List<PriceTicker>();
@@ -146,6 +303,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 
                 if (response.IsSuccessStatusCode)
                 {
+                    _circuitBreaker.RecordSuccess();
                     var json = await response.Content.ReadAsStringAsync(cancellationToken);
                     var data = JsonSerializer.Deserialize<JsonElement>(json);
                     
@@ -161,9 +319,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                         }
                     }
                 }
+                else
+                {
+                    _circuitBreaker.RecordFailure();
+                }
             }
             catch (Exception ex)
             {
+                _circuitBreaker.RecordFailure();
                 _logger.LogError(ex, "Failed to get price for {Symbol}", symbol);
             }
         }
@@ -232,6 +395,11 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<OrderBook?> GetOrderBookAsync(string symbol, int depth = 10, CancellationToken cancellationToken = default)
     {
+        if (!_circuitBreaker.CanExecute())
+        {
+            throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         try
@@ -241,6 +409,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             
             if (response.IsSuccessStatusCode)
             {
+                _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
@@ -252,9 +421,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     }
                 }
             }
+            else
+            {
+                _circuitBreaker.RecordFailure();
+            }
         }
         catch (Exception ex)
         {
+            _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get order book for {Symbol}", symbol);
         }
         
@@ -302,6 +476,11 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<Ohlcv>> GetOhlcvAsync(string symbol, string timeframe, int limit = 100, CancellationToken cancellationToken = default)
     {
+        if (!_circuitBreaker.CanExecute())
+        {
+            throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         var result = new List<Ohlcv>();
@@ -324,6 +503,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             
             if (response.IsSuccessStatusCode)
             {
+                _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
@@ -351,9 +531,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     }
                 }
             }
+            else
+            {
+                _circuitBreaker.RecordFailure();
+            }
         }
         catch (Exception ex)
         {
+            _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get OHLCV for {Symbol}", symbol);
         }
         
@@ -362,6 +547,11 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<Balance>> GetBalanceAsync(CancellationToken cancellationToken = default)
     {
+        if (!_circuitBreaker.CanExecute())
+        {
+            throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         var balances = new List<Balance>();
@@ -372,6 +562,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             
             if (response.IsSuccessStatusCode)
             {
+                _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
                 
@@ -391,9 +582,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     }
                 }
             }
+            else
+            {
+                _circuitBreaker.RecordFailure();
+            }
         }
         catch (Exception ex)
         {
+            _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get balance");
         }
         
@@ -402,7 +598,68 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<Trade>> GetTradesAsync(string symbol, int limit = 50, CancellationToken cancellationToken = default)
     {
-        return new List<Trade>();
+        if (!_circuitBreaker.CanExecute())
+        {
+            throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
+        }
+
+        await WaitForRateLimitAsync(cancellationToken);
+        
+        var trades = new List<Trade>();
+        
+        try
+        {
+            var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
+            var url = $"/0/private/TradesHistory?pair={krakenSymbol}";
+            
+            var response = await _httpClient.PostAsync(url, null, cancellationToken);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                _circuitBreaker.RecordSuccess();
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                var data = JsonSerializer.Deserialize<JsonElement>(json);
+                
+                if (data.TryGetProperty("result", out var result))
+                {
+                    if (result.TryGetProperty("trades", out var tradesObj))
+                    {
+                        foreach (var prop in tradesObj.EnumerateObject())
+                        {
+                            var tradeId = prop.Name;
+                            var tradeData = prop.Value;
+                            
+                            if (tradeData.GetArrayLength() >= 4)
+                            {
+                                trades.Add(new Trade
+                                {
+                                    Id = tradeId,
+                                    Symbol = symbol,
+                                    Price = decimal.Parse(tradeData[0].GetString() ?? "0"),
+                                    Quantity = decimal.Parse(tradeData[1].GetString() ?? "0"),
+                                    Timestamp = DateTimeOffset.FromUnixTimeSeconds(
+                                        long.Parse(tradeData[2].GetString() ?? "0")
+                                    ).UtcDateTime,
+                                    Side = tradeData[3].GetString() ?? ""
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                _circuitBreaker.RecordFailure();
+                _logger.LogWarning("Failed to get trades: {StatusCode}", response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _circuitBreaker.RecordFailure();
+            _logger.LogError(ex, "Failed to get trades for {Symbol}", symbol);
+        }
+        
+        return trades.OrderByDescending(t => t.Timestamp).Take(limit).ToList();
     }
 
     public async Task<PortfolioSummary> GetPortfolioSummaryAsync(CancellationToken cancellationToken = default)
@@ -450,6 +707,13 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _isConnected = false;
             OnConnectionStateChanged?.Invoke(this, false);
         }
+
+        if (_shouldReconnect && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("WebSocket disconnected, starting reconnection...");
+            IncreaseReconnectDelay();
+            _ = Task.Run(() => StartReconnectLoopAsync(cancellationToken), cancellationToken);
+        }
     }
 
     private void ProcessMessage(string message)
@@ -492,6 +756,34 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     if (ticker != null)
                     {
                         OnPriceUpdate?.Invoke(this, ticker);
+                    }
+                }
+
+                if (channelName?.StartsWith("book") == true)
+                {
+                    var bookData = data[1];
+                    var orderBook = ParseOrderBookUpdate(bookData, channelName);
+                    if (orderBook != null)
+                    {
+                        OnOrderBookUpdate?.Invoke(this, orderBook);
+                    }
+                }
+
+                if (channelName?.StartsWith("trade") == true)
+                {
+                    var tradesData = data[1];
+                    var symbol = channelName.Replace("trade", "").Replace("XBT", "BTC");
+                    
+                    if (tradesData.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var tradeArray in tradesData.EnumerateArray())
+                        {
+                            var trade = ParseTradeUpdate(tradeArray, symbol);
+                            if (trade != null)
+                            {
+                                OnTrade?.Invoke(this, trade);
+                            }
+                        }
                     }
                 }
             }
@@ -555,6 +847,140 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             }
             
             return ticker;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private OrderBook? ParseOrderBookUpdate(JsonElement data, string channelName)
+    {
+        try
+        {
+            var symbol = channelName.Replace("book", "").Replace("XBT", "BTC");
+            
+            var orderBook = new OrderBook
+            {
+                Symbol = symbol,
+                LastUpdated = DateTime.UtcNow
+            };
+
+            if (data.TryGetProperty("as", out var asks))
+            {
+                foreach (var ask in asks.EnumerateArray())
+                {
+                    if (ask.GetArrayLength() >= 3)
+                    {
+                        orderBook.Asks.Add(new OrderBookEntry
+                        {
+                            Price = decimal.Parse(ask[0].GetString() ?? "0"),
+                            Quantity = decimal.Parse(ask[1].GetString() ?? "0"),
+                            Count = int.Parse(ask[2].GetString() ?? "0")
+                        });
+                    }
+                }
+            }
+
+            if (data.TryGetProperty("bs", out var bids))
+            {
+                foreach (var bid in bids.EnumerateArray())
+                {
+                    if (bid.GetArrayLength() >= 3)
+                    {
+                        orderBook.Bids.Add(new OrderBookEntry
+                        {
+                            Price = decimal.Parse(bid[0].GetString() ?? "0"),
+                            Quantity = decimal.Parse(bid[1].GetString() ?? "0"),
+                            Count = int.Parse(bid[2].GetString() ?? "0")
+                        });
+                    }
+                }
+            }
+
+            if (data.TryGetProperty("a", out var asksUpdate))
+            {
+                foreach (var ask in asksUpdate.EnumerateArray())
+                {
+                    if (ask.GetArrayLength() >= 3)
+                    {
+                        var price = decimal.Parse(ask[0].GetString() ?? "0");
+                        var quantity = decimal.Parse(ask[1].GetString() ?? "0");
+                        
+                        var existing = orderBook.Asks.FirstOrDefault(a => a.Price == price);
+                        if (quantity == 0)
+                        {
+                            if (existing != null)
+                                orderBook.Asks.Remove(existing);
+                        }
+                        else
+                        {
+                            if (existing != null)
+                                existing.Quantity = quantity;
+                            else
+                                orderBook.Asks.Add(new OrderBookEntry { Price = price, Quantity = quantity, Count = 1 });
+                        }
+                    }
+                }
+            }
+
+            if (data.TryGetProperty("b", out var bidsUpdate))
+            {
+                foreach (var bid in bidsUpdate.EnumerateArray())
+                {
+                    if (bid.GetArrayLength() >= 3)
+                    {
+                        var price = decimal.Parse(bid[0].GetString() ?? "0");
+                        var quantity = decimal.Parse(bid[1].GetString() ?? "0");
+                        
+                        var existing = orderBook.Bids.FirstOrDefault(b => b.Price == price);
+                        if (quantity == 0)
+                        {
+                            if (existing != null)
+                                orderBook.Bids.Remove(existing);
+                        }
+                        else
+                        {
+                            if (existing != null)
+                                existing.Quantity = quantity;
+                            else
+                                orderBook.Bids.Add(new OrderBookEntry { Price = price, Quantity = quantity, Count = 1 });
+                        }
+                    }
+                }
+            }
+
+            orderBook.Asks = orderBook.Asks.OrderBy(a => a.Price).Take(25).ToList();
+            orderBook.Bids = orderBook.Bids.OrderByDescending(b => b.Price).Take(25).ToList();
+
+            return orderBook;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error parsing orderbook update");
+            return null;
+        }
+    }
+
+    private Trade? ParseTradeUpdate(JsonElement data, string symbol)
+    {
+        try
+        {
+            if (data.GetArrayLength() >= 4)
+            {
+                var timestamp = long.Parse(data[2].GetString() ?? "0");
+                
+                return new Trade
+                {
+                    Id = $"{symbol}_{timestamp}",
+                    Symbol = symbol,
+                    Price = decimal.Parse(data[0].GetString() ?? "0"),
+                    Quantity = decimal.Parse(data[1].GetString() ?? "0"),
+                    Timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime,
+                    Side = data[3].GetString() ?? ""
+                };
+            }
+            return null;
         }
         catch
         {

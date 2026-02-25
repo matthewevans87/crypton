@@ -1,4 +1,5 @@
 using MarketDataService.Models;
+using MarketDataService.Services;
 
 namespace MarketDataService.Adapters;
 
@@ -19,4 +20,7 @@ public interface IExchangeAdapter
     event EventHandler<Trade>? OnTrade;
     event EventHandler<bool>? OnConnectionStateChanged;
     bool IsConnected { get; }
+    int ReconnectCount { get; }
+    TimeSpan CurrentReconnectDelay { get; }
+    CircuitBreakerState CircuitBreakerState { get; }
 }
