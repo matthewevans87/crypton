@@ -27,30 +27,37 @@ jobs:
     runs-on: self-hosted
     needs: setup
     steps:
+      - name: Clean up old images
+        run: |
+          for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
+            docker rmi crypton-$service:latest || true
+            docker rmi crypton-$service:${{ needs.setup.outputs.git-sha }} || true
+          done
+
       - name: Build Agent Runner
         run: |
-          docker build --load --provenance=false \
+          docker build --no-cache --load --provenance=false \
             --tag crypton-agent-runner:latest \
             --tag crypton-agent-runner:${{ needs.setup.outputs.git-sha }} \
             -f src/agent_runner/Dockerfile .
 
       - name: Build Monitoring Dashboard Backend
         run: |
-          docker build --load --provenance=false \
+          docker build --no-cache --load --provenance=false \
             --tag crypton-monitoring-dashboard-api:latest \
             --tag crypton-monitoring-dashboard-api:${{ needs.setup.outputs.git-sha }} \
             -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
 
       - name: Build Monitoring Dashboard Frontend
         run: |
-          docker build --load --provenance=false \
+          docker build --no-cache --load --provenance=false \
             --tag crypton-monitoring-dashboard-web:latest \
             --tag crypton-monitoring-dashboard-web:${{ needs.setup.outputs.git-sha }} \
             -f src/monitoring_dashboard/frontend/Dockerfile .
 
       - name: Build Market Data Service
         run: |
-          docker build --load --provenance=false \
+          docker build --no-cache --load --provenance=false \
             --tag crypton-market-data-service:latest \
             --tag crypton-market-data-service:${{ needs.setup.outputs.git-sha }} \
             -f src/market_data_service/MarketDataService/Dockerfile .
