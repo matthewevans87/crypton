@@ -1,4 +1,5 @@
 using System.Net.WebSockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MarketDataService.Models;
@@ -18,6 +19,9 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     private int _reconnectCount;
     private DateTime? _lastConnectedAt;
     private bool _shouldReconnect = true;
+
+    private readonly string? _apiKey;
+    private readonly string? _apiSecret;
 
     private readonly SemaphoreSlim _rateLimiter = new(1, 1);
     private DateTime _nextRequestTime = DateTime.MinValue;
@@ -49,9 +53,9 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     private static readonly Dictionary<string, string> SymbolMapping = new()
     {
-        { "BTC/USD", "XBT/USD" },
-        { "ETH/USD", "ETH/USD" },
-        { "SOL/USD", "SOL/USD" }
+        { "BTC/USD", "XXBTZUSD" },
+        { "ETH/USD", "XETHZUSD" },
+        { "SOL/USD", "SOLUSD" }
     };
 
     public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory)
@@ -62,11 +66,48 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         _httpClient.BaseAddress = new Uri("https://api.kraken.com");
         _currentReconnectDelay = _initialReconnectDelay;
         
+        _apiKey = Environment.GetEnvironmentVariable("KRAKEN_API_KEY");
+        _apiSecret = Environment.GetEnvironmentVariable("KRAKEN_SECRET_KEY");
+
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
+        {
+            _logger.LogWarning("Kraken API keys not configured - private API calls will not work");
+        }
+        else
+        {
+            _logger.LogInformation("Kraken API key configured");
+        }
+        
         var circuitBreakerLogger = _loggerFactory.CreateLogger<CircuitBreaker>();
         _circuitBreaker = new CircuitBreaker(new CircuitBreakerOptions(), circuitBreakerLogger);
     }
 
     private readonly ILoggerFactory _loggerFactory;
+
+    private Dictionary<string, string> GetKrakenAuthHeaders(string endpoint, string postData = "")
+    {
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
+        {
+            return new Dictionary<string, string>();
+        }
+
+        var nonce = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var message = nonce + postData;
+        var messageBytes = Encoding.UTF8.GetBytes(message);
+        var secretBytes = Convert.FromBase64String(_apiSecret);
+        
+        using var hmacSha512 = new HMACSHA256(secretBytes);
+        var hash = hmacSha512.ComputeHash(messageBytes);
+        var sha256Bytes = Encoding.UTF8.GetBytes(nonce + postData);
+        var sha256Hash = SHA256.HashData(sha256Bytes);
+        var signature = Convert.ToBase64String(hmacSha512.ComputeHash(sha256Hash));
+
+        return new Dictionary<string, string>
+        {
+            { "API-Key", _apiKey },
+            { "API-Sign", signature }
+        };
+    }
 
     private TimeSpan CalculateReconnectDelay()
     {
@@ -552,13 +593,31 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
         }
 
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
+        {
+            _logger.LogWarning("Cannot get balance - Kraken API keys not configured");
+            return new List<Balance>();
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         var balances = new List<Balance>();
+        var postData = "nonce=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         
         try
         {
-            var response = await _httpClient.PostAsync("/0/private/Balance", null, cancellationToken);
+            var headers = GetKrakenAuthHeaders("/0/private/Balance", postData);
+            var request = new HttpRequestMessage(HttpMethod.Post, "/0/private/Balance")
+            {
+                Content = new StringContent(postData, Encoding.UTF8, "application/x-www-form-urlencoded")
+            };
+            
+            foreach (var header in headers)
+            {
+                request.Headers.Add(header.Key, header.Value);
+            }
+            
+            var response = await _httpClient.SendAsync(request, cancellationToken);
             
             if (response.IsSuccessStatusCode)
             {
@@ -585,6 +644,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             else
             {
                 _circuitBreaker.RecordFailure();
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Failed to get balance: {Error}", error);
             }
         }
         catch (Exception ex)
@@ -603,6 +664,12 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             throw new CircuitBreakerOpenException("Circuit breaker is open - exchange API unavailable");
         }
 
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
+        {
+            _logger.LogWarning("Cannot get trades - Kraken API keys not configured");
+            return new List<Trade>();
+        }
+
         await WaitForRateLimitAsync(cancellationToken);
         
         var trades = new List<Trade>();
@@ -610,9 +677,20 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         try
         {
             var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
-            var url = $"/0/private/TradesHistory?pair={krakenSymbol}";
+            var postData = "nonce=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + "&pair=" + krakenSymbol;
             
-            var response = await _httpClient.PostAsync(url, null, cancellationToken);
+            var headers = GetKrakenAuthHeaders("/0/private/TradesHistory", postData);
+            var request = new HttpRequestMessage(HttpMethod.Post, "/0/private/TradesHistory")
+            {
+                Content = new StringContent(postData, Encoding.UTF8, "application/x-www-form-urlencoded")
+            };
+            
+            foreach (var header in headers)
+            {
+                request.Headers.Add(header.Key, header.Value);
+            }
+            
+            var response = await _httpClient.SendAsync(request, cancellationToken);
             
             if (response.IsSuccessStatusCode)
             {
@@ -721,6 +799,12 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         try
         {
             var data = JsonSerializer.Deserialize<JsonElement>(message);
+            
+            // Skip if not an object (e.g., trade updates are arrays)
+            if (data.ValueKind != JsonValueKind.Object)
+            {
+                return;
+            }
             
             if (data.TryGetProperty("event", out var eventType))
             {

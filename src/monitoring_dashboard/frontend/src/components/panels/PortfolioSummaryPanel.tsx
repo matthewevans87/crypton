@@ -17,10 +17,17 @@ export function PortfolioSummaryPanel() {
     }).format(value);
   };
 
-  const formatPercent = (value: number) => {
+  const formatPercent = (value?: number) => {
+    if (value === undefined || value === null) return '—';
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toFixed(2)}%`;
   };
+
+  const changePercent = summary.changePercent24h ?? 0;
+  const change24h = summary.change24h ?? 0;
+  const unrealizedPnL = summary.unrealizedPnL ?? 0;
+  const availableCapital = summary.availableCapital ?? 0;
+  const totalValue = summary.totalValue ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -32,27 +39,27 @@ export function PortfolioSummaryPanel() {
           color: 'var(--text-primary)',
         }}
       >
-        {formatCurrency(summary.totalValue)}
+        {formatCurrency(totalValue)}
       </div>
       
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         <span
           style={{
-            color: summary.changePercent24h >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
+            color: changePercent >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-sm)',
           }}
         >
-          {summary.changePercent24h >= 0 ? '▲' : '▼'} {formatCurrency(summary.change24h)}
+          {changePercent >= 0 ? '▲' : '▼'} {formatCurrency(change24h)}
         </span>
         <span
           style={{
-            color: summary.changePercent24h >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
+            color: changePercent >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-sm)',
           }}
         >
-          ({formatPercent(summary.changePercent24h)})
+          ({formatPercent(changePercent)})
         </span>
       </div>
       
@@ -60,17 +67,17 @@ export function PortfolioSummaryPanel() {
         <span>Unrealized P&L</span>
         <span
           style={{
-            color: summary.unrealizedPnL >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
+            color: unrealizedPnL >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
             fontFamily: 'var(--font-mono)',
           }}
         >
-          {formatCurrency(summary.unrealizedPnL)}
+          {formatCurrency(unrealizedPnL)}
         </span>
       </div>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
         <span>Available</span>
-        <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(summary.availableCapital)}</span>
+        <span style={{ fontFamily: 'var(--font-mono)' }}>{formatCurrency(availableCapital)}</span>
       </div>
     </div>
   );
