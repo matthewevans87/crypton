@@ -3,6 +3,7 @@ using MarketDataService.Hubs;
 using MarketDataService.Models;
 using MarketDataService.Services;
 using Microsoft.AspNetCore.SignalR;
+using Scalar.AspNetCore;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -76,7 +77,10 @@ try
 
     app.UseCors();
 
-    app.MapOpenApi();
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapOpenApi();
+    }
 
     app.MapControllers();
     app.MapHub<MarketDataHub>("/hubs/marketdata");
