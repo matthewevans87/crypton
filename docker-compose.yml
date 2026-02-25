@@ -60,7 +60,7 @@ services:
       - "5001:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - MarketDataService__Url=http://market-data-service:5002
+      - MarketDataService__Url=http://market-data-service:5001
     restart: unless-stopped
     logging:
       driver: "json-file"
