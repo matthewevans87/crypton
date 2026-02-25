@@ -84,7 +84,7 @@ jobs:
           docker run -d \
             --name crypton-agent-runner \
             --restart unless-stopped \
-            -p 8080:8080 \
+            -p 5002:8080 \
             -v /home/matthew-evans/.config/crypton/artifacts:/app/artifacts \
             -v /home/matthew-evans/.config/crypton/logs:/app/logs \
             -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
@@ -119,7 +119,7 @@ jobs:
           docker run -d \
             --name crypton-monitoring-dashboard-web \
             --restart unless-stopped \
-            -p 80:80 \
+            -p 5003:80 \
             --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
             ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:latest
 
@@ -141,7 +141,7 @@ jobs:
           echo "✅ Deployment complete!"
           echo ""
           echo "Services deployed:"
-          echo "  - Agent Runner:        http://localhost:8080"
-          echo "  - Market Data Service: http://localhost:5001"
+          echo "  - Dashboard Web:       http://localhost:5003"
           echo "  - Dashboard API:       http://localhost:5000"
-          echo "  - Dashboard Web:       http://localhost:80"
+          echo "  - Market Data Service: http://localhost:5001"
+          echo "  - Agent Runner:        http://localhost:5002"
