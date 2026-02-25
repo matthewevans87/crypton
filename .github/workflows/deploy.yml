@@ -91,11 +91,12 @@ jobs:
           docker run -d \
             --name crypton-agent-runner \
             --restart unless-stopped \
-            -p 5003:8080 \
+            -p 5003:5003 \
             -v /home/matthew-evans/.config/crypton/artifacts:/app/artifacts \
             -v /home/matthew-evans/.config/crypton/logs:/app/logs \
             -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
             -e ASPNETCORE_ENVIRONMENT=Production \
+            -e ASPNETCORE_URLS=http://0.0.0.0:5003 \
             crypton-agent-runner:latest
 
       - name: Deploy Market Data Service
@@ -103,8 +104,9 @@ jobs:
           docker run -d \
             --name crypton-market-data-service \
             --restart unless-stopped \
-            -p 5002:5001 \
+            -p 5002:5002 \
             -e ASPNETCORE_ENVIRONMENT=Production \
+            -e ASPNETCORE_URLS=http://0.0.0.0:5002 \
             crypton-market-data-service:latest
 
       - name: Deploy Monitoring Dashboard API
@@ -112,9 +114,10 @@ jobs:
           docker run -d \
             --name crypton-monitoring-dashboard-api \
             --restart unless-stopped \
-            -p 5001:5000 \
+            -p 5001:5001 \
             -e ASPNETCORE_ENVIRONMENT=Production \
-            -e MarketDataService__Url=http://localhost:5002 \
+            -e ASPNETCORE_URLS=http://0.0.0.0:5001 \
+            -e MarketDataService__Url=http://market-data-service:5002 \
             --link crypton-market-data-service:market-data-service \
             crypton-monitoring-dashboard-api:latest
 
@@ -123,7 +126,7 @@ jobs:
           docker run -d \
             --name crypton-monitoring-dashboard-web \
             --restart unless-stopped \
-            -p 5000:80 \
+            -p 5000:5000 \
             --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
             crypton-monitoring-dashboard-web:latest
 
