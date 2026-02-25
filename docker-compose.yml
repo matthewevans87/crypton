@@ -7,12 +7,12 @@ services:
       dockerfile: src/agent_runner/Dockerfile
     container_name: crypton-agent-runner
     ports:
-      - "5002:8080"
+      - "5003:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
       - AGENT_RUNNER_API_KEY=${AGENT_RUNNER_API_KEY}
-      - MarketDataService__Url=http://host.docker.internal:5001
+      - MarketDataService__Url=http://host.docker.internal:5002
     volumes:
       - agent-runner-data:/app/artifacts
       - agent-runner-logs:/app/logs
@@ -36,7 +36,7 @@ services:
       dockerfile: src/market_data_service/MarketDataService/Dockerfile
     container_name: crypton-market-data-service
     ports:
-      - "5001:5001"
+      - "5002:5001"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
     restart: unless-stopped
@@ -57,10 +57,10 @@ services:
       dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
     container_name: crypton-monitoring-dashboard-api
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - MarketDataService__Url=http://market-data-service:5001
+      - MarketDataService__Url=http://market-data-service:5002
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -79,7 +79,7 @@ services:
       dockerfile: src/monitoring_dashboard/frontend/Dockerfile
     container_name: crypton-monitoring-dashboard-web
     ports:
-      - "5003:80"
+      - "5000:80"
     restart: unless-stopped
     logging:
       driver: "json-file"
