@@ -21,17 +21,42 @@ public class EventLogger : IEventLogger
     private readonly string _logPath;
     private readonly string _structuredLogPath;
     private readonly object _lock = new();
+    private readonly long _maxFileSizeBytes;
+    private readonly int _maxFileCount;
 
-    public EventLogger(string logPath)
+    public EventLogger(string logPath, int maxFileSizeMb = 100, int maxFileCount = 5)
     {
         _logPath = logPath;
+        _maxFileSizeBytes = (long)maxFileSizeMb * 1024 * 1024;
+        _maxFileCount = maxFileCount;
         var dir = Path.GetDirectoryName(logPath);
         if (!string.IsNullOrEmpty(dir))
         {
             Directory.CreateDirectory(dir);
         }
-        
-        _structuredLogPath = Path.Combine(dir, "events.jsonl");
+
+        _structuredLogPath = Path.Combine(dir!, "events.jsonl");
+    }
+
+    private void RotateIfNeeded(string path)
+    {
+        if (!File.Exists(path)) return;
+        if (new FileInfo(path).Length < _maxFileSizeBytes) return;
+
+        // Delete the oldest file if it exists
+        var oldest = $"{path}.{_maxFileCount}";
+        if (File.Exists(oldest)) File.Delete(oldest);
+
+        // Shift existing rotated files up by one
+        for (var i = _maxFileCount - 1; i >= 1; i--)
+        {
+            var src = $"{path}.{i}";
+            var dst = $"{path}.{i + 1}";
+            if (File.Exists(src)) File.Move(src, dst);
+        }
+
+        // Rotate the current log to .1
+        File.Move(path, $"{path}.1");
     }
 
     public void LogInfo(string message) => Log("INFO", message);
@@ -89,11 +114,12 @@ public class EventLogger : IEventLogger
         };
 
         var json = JsonSerializer.Serialize(entry);
-        
+
         lock (_lock)
         {
             try
             {
+                RotateIfNeeded(_structuredLogPath);
                 File.AppendAllText(_structuredLogPath, json + Environment.NewLine);
             }
             catch
@@ -106,11 +132,12 @@ public class EventLogger : IEventLogger
     {
         var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff");
         var logLine = $"[{timestamp}] [{level}] {message}";
-        
+
         lock (_lock)
         {
             try
             {
+                RotateIfNeeded(_logPath);
                 File.AppendAllText(_logPath, logLine + Environment.NewLine);
             }
             catch

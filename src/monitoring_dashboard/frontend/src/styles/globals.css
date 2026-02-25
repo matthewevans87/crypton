@@ -1,0 +1,134 @@
+:root {
+  /* Background colors - VD-001, VD-002 */
+  --bg-viewport: #0a0a0f;
+  --bg-panel: #0f0f1a;
+  --bg-panel-header: #12121a;
+  
+  /* Border colors - VD-025 */
+  --border-default: #1a1a2e;
+  --border-active: #2a2a4e;
+  
+  /* Text colors - VD-003, VD-004 */
+  --text-primary: #e0e0e0;
+  --text-secondary: #808090;
+  --text-tertiary: #606070;
+  
+  /* Semantic colors - VD-005 to VD-011 */
+  --color-profit: #00ffc8;
+  --color-loss: #ff4466;
+  --color-warning: #ffaa00;
+  --color-info: #4488ff;
+  --color-active: #00ff88;
+  --color-idle: #666680;
+  --color-glow: rgba(0, 255, 200, 0.2);
+  
+  /* Typography - VD-013 to VD-019 */
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 14px;
+  --font-size-xl: 16px;
+  
+  /* Spacing - VD-020 to VD-023 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* Layout - VD-022 */
+  --panel-header-height: 28px;
+  --panel-gap: 4px;
+  --panel-padding: 8px;
+  
+  /* Animation - VD-026 to VD-033 */
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  background-color: var(--bg-viewport);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling - minimal */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-active);
+}
+
+/* Utility classes */
+.mono {
+  font-family: var(--font-mono);
+}
+
+.text-profit {
+  color: var(--color-profit);
+}
+
+.text-loss {
+  color: var(--color-loss);
+}
+
+.text-warning {
+  color: var(--color-warning);
+}
+
+.text-info {
+  color: var(--color-info);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+/* Tabular numbers for data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-info);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-info);
+  color: var(--text-primary);
+}

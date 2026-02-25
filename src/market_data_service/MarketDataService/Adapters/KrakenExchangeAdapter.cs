@@ -17,6 +17,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     private int _reconnectCount;
     private DateTime? _lastConnectedAt;
 
+    private readonly SemaphoreSlim _rateLimiter = new(1, 1);
+    private DateTime _nextRequestTime = DateTime.MinValue;
+    private const int MaxRequestsPerSecond = 5;
+    private const int MaxRequestsPerMinute = 15;
+
+    private int _requestsThisMinute = 0;
+    private DateTime _minuteWindowStart = DateTime.UtcNow;
+
     public string ExchangeName => "Kraken";
     public bool IsConnected => _isConnected;
     
@@ -37,6 +45,43 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         _httpClient = httpClient;
         _logger = logger;
         _httpClient.BaseAddress = new Uri("https://api.kraken.com");
+    }
+
+    private async Task WaitForRateLimitAsync(CancellationToken cancellationToken)
+    {
+        await _rateLimiter.WaitAsync(cancellationToken);
+        try
+        {
+            if (_requestsThisMinute >= MaxRequestsPerMinute)
+            {
+                var timeSinceWindowStart = DateTime.UtcNow - _minuteWindowStart;
+                if (timeSinceWindowStart < TimeSpan.FromMinutes(1))
+                {
+                    var waitTime = TimeSpan.FromMinutes(1) - timeSinceWindowStart;
+                    _logger.LogWarning("Rate limit reached, waiting {WaitTime}s", waitTime.TotalSeconds);
+                    await Task.Delay(waitTime, cancellationToken);
+                    _requestsThisMinute = 0;
+                    _minuteWindowStart = DateTime.UtcNow;
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            if (now - _nextRequestTime < TimeSpan.FromMilliseconds(1000 / MaxRequestsPerSecond))
+            {
+                var delay = TimeSpan.FromMilliseconds(1000 / MaxRequestsPerSecond) - (now - _nextRequestTime);
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+
+            _nextRequestTime = DateTime.UtcNow;
+            _requestsThisMinute++;
+        }
+        finally
+        {
+            _rateLimiter.Release();
+        }
     }
 
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
@@ -88,6 +133,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<PriceTicker>> GetPricesAsync(IEnumerable<string> symbols, CancellationToken cancellationToken = default)
     {
+        await WaitForRateLimitAsync(cancellationToken);
+        
         var result = new List<PriceTicker>();
         
         foreach (var symbol in symbols)
@@ -185,6 +232,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<OrderBook?> GetOrderBookAsync(string symbol, int depth = 10, CancellationToken cancellationToken = default)
     {
+        await WaitForRateLimitAsync(cancellationToken);
+        
         try
         {
             var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
@@ -253,6 +302,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<Ohlcv>> GetOhlcvAsync(string symbol, string timeframe, int limit = 100, CancellationToken cancellationToken = default)
     {
+        await WaitForRateLimitAsync(cancellationToken);
+        
         var result = new List<Ohlcv>();
         
         try
@@ -311,6 +362,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     public async Task<List<Balance>> GetBalanceAsync(CancellationToken cancellationToken = default)
     {
+        await WaitForRateLimitAsync(cancellationToken);
+        
         var balances = new List<Balance>();
         
         try

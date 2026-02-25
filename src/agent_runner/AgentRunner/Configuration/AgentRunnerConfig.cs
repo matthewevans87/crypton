@@ -88,4 +88,6 @@ public class LoggingConfig
 {
     public string Level { get; set; } = "Information";
     public string OutputPath { get; set; } = "./logs";
+    public int MaxFileSizeMb { get; set; } = 20;
+    public int MaxFileCount { get; set; } = 5;
 }

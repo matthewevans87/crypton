@@ -17,7 +17,10 @@ var builder = WebApplication.CreateBuilder(args);
 var configLoader = new ConfigLoader("config.yaml");
 var config = configLoader.Load();
 
-var logger = new EventLogger(Path.Combine(config.Logging.OutputPath, "agent_runner.log"));
+var logger = new EventLogger(
+    Path.Combine(config.Logging.OutputPath, "agent_runner.log"),
+    config.Logging.MaxFileSizeMb,
+    config.Logging.MaxFileCount);
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()

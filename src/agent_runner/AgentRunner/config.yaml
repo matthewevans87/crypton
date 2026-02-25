@@ -59,9 +59,15 @@ storage:
   maxMailboxMessages: 5
   archiveRetentionCount: 30
 
+logging:
+  level: Information
+  outputPath: ./logs
+  maxFileSizeMb: 20
+  maxFileCount: 5
+
 api:
   host: 0.0.0.0
-  port: 8080
+  port: 8081
   apiKey: ${AGENT_RUNNER_API_KEY}
 
 logging:
