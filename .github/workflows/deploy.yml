@@ -5,9 +5,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  REGISTRY: localhost:5000
-
 jobs:
   build-and-deploy:
     runs-on: self-hosted
@@ -25,32 +22,32 @@ jobs:
       - name: Build Agent Runner
         run: |
           docker build \
-            --tag ${{ env.REGISTRY }}/crypton-agent-runner:latest \
-            --tag ${{ env.REGISTRY }}/crypton-agent-runner:$(git rev-parse --short HEAD) \
+            --tag crypton-agent-runner:latest \
+            --tag crypton-agent-runner:$(git rev-parse --short HEAD) \
             -f src/agent_runner/Dockerfile .
 
       # Build Monitoring Dashboard Backend
       - name: Build Monitoring Dashboard Backend
         run: |
           docker build \
-            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:latest \
-            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
+            --tag crypton-monitoring-dashboard-api:latest \
+            --tag crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
 
       # Build Monitoring Dashboard Frontend
       - name: Build Monitoring Dashboard Frontend
         run: |
           docker build \
-            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:latest \
-            --tag ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
+            --tag crypton-monitoring-dashboard-web:latest \
+            --tag crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/frontend/Dockerfile .
 
       # Build Market Data Service
       - name: Build Market Data Service
         run: |
           docker build \
-            --tag ${{ env.REGISTRY }}/crypton-market-data-service:latest \
-            --tag ${{ env.REGISTRY }}/crypton-market-data-service:$(git rev-parse --short HEAD) \
+            --tag crypton-market-data-service:latest \
+            --tag crypton-market-data-service:$(git rev-parse --short HEAD) \
             -f src/market_data_service/MarketDataService/Dockerfile .
 
       # Prune old images
@@ -89,7 +86,7 @@ jobs:
             -v /home/matthew-evans/.config/crypton/logs:/app/logs \
             -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
             -e ASPNETCORE_ENVIRONMENT=Production \
-            ${{ env.REGISTRY }}/crypton-agent-runner:latest
+            crypton-agent-runner:latest
 
       # Deploy Market Data Service
       - name: Deploy Market Data Service
@@ -99,7 +96,7 @@ jobs:
             --restart unless-stopped \
             -p 5001:5001 \
             -e ASPNETCORE_ENVIRONMENT=Production \
-            ${{ env.REGISTRY }}/crypton-market-data-service:latest
+            crypton-market-data-service:latest
 
       # Deploy Monitoring Dashboard API
       - name: Deploy Monitoring Dashboard API
@@ -111,7 +108,7 @@ jobs:
             -e ASPNETCORE_ENVIRONMENT=Production \
             -e MarketDataService__Url=http://localhost:5001 \
             --link crypton-market-data-service:market-data-service \
-            ${{ env.REGISTRY }}/crypton-monitoring-dashboard-api:latest
+            crypton-monitoring-dashboard-api:latest
 
       # Deploy Monitoring Dashboard Web
       - name: Deploy Monitoring Dashboard Web
@@ -121,7 +118,7 @@ jobs:
             --restart unless-stopped \
             -p 5003:80 \
             --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
-            ${{ env.REGISTRY }}/crypton-monitoring-dashboard-web:latest
+            crypton-monitoring-dashboard-web:latest
 
       # Verify containers
       - name: Verify containers running
