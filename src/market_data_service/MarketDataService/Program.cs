@@ -19,6 +19,7 @@ try
 
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddOpenApi();
     builder.Services.AddSignalR();
 
     builder.Services.AddHttpClient();
@@ -74,6 +75,8 @@ try
     });
 
     app.UseCors();
+
+    app.MapOpenApi();
 
     app.MapControllers();
     app.MapHub<MarketDataHub>("/hubs/marketdata");
