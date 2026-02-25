@@ -67,7 +67,7 @@ logging:
 
 api:
   host: 0.0.0.0
-  port: 8081
+  port: 5003
   apiKey: ${AGENT_RUNNER_API_KEY}
 
 logging:
