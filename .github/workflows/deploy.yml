@@ -21,7 +21,7 @@ jobs:
       # Build Agent Runner
       - name: Build Agent Runner
         run: |
-          docker build --load \
+          docker build --load --provenance=false \
             --tag crypton-agent-runner:latest \
             --tag crypton-agent-runner:$(git rev-parse --short HEAD) \
             -f src/agent_runner/Dockerfile .
@@ -29,7 +29,7 @@ jobs:
       # Build Monitoring Dashboard Backend
       - name: Build Monitoring Dashboard Backend
         run: |
-          docker build --load \
+          docker build --load --provenance=false \
             --tag crypton-monitoring-dashboard-api:latest \
             --tag crypton-monitoring-dashboard-api:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile .
@@ -37,7 +37,7 @@ jobs:
       # Build Monitoring Dashboard Frontend
       - name: Build Monitoring Dashboard Frontend
         run: |
-          docker build --load \
+          docker build --load --provenance=false \
             --tag crypton-monitoring-dashboard-web:latest \
             --tag crypton-monitoring-dashboard-web:$(git rev-parse --short HEAD) \
             -f src/monitoring_dashboard/frontend/Dockerfile .
@@ -45,7 +45,7 @@ jobs:
       # Build Market Data Service
       - name: Build Market Data Service
         run: |
-          docker build --load \
+          docker build --load --provenance=false \
             --tag crypton-market-data-service:latest \
             --tag crypton-market-data-service:$(git rev-parse --short HEAD) \
             -f src/market_data_service/MarketDataService/Dockerfile .
@@ -56,9 +56,9 @@ jobs:
           echo "Pruning dangling images..."
           docker image prune -f
           
-          echo "Pruning old tagged images (keep last 5 per service)..."
+          echo "Pruning old tagged images (keep last 2 per service)..."
           for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
-            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | tail -n +6 | xargs -r docker rmi || true
+            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | tail -n +3 | xargs -r docker rmi || true
           done
 
       # Stop and remove existing containers
