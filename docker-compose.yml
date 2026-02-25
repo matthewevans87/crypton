@@ -7,9 +7,10 @@ services:
       dockerfile: src/agent_runner/Dockerfile
     container_name: crypton-agent-runner
     ports:
-      - "5003:8080"
+      - "5003:5003"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5003
       - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
       - AGENT_RUNNER_API_KEY=${AGENT_RUNNER_API_KEY}
       - MarketDataService__Url=http://host.docker.internal:5002
@@ -24,7 +25,7 @@ services:
         max-size: "20m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -36,9 +37,33 @@ services:
       dockerfile: src/market_data_service/MarketDataService/Dockerfile
     container_name: crypton-market-data-service
     ports:
-      - "5002:5001"
+      - "5002:5002"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5002
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  monitoring-dashboard-api:
+    build:
+      context: .
+      dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
+    container_name: crypton-monitoring-dashboard-api
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5001
+      - MarketDataService__Url=http://market-data-service:5002
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -51,35 +76,13 @@ services:
       timeout: 10s
       retries: 3
 
-  monitoring-dashboard-api:
-    build:
-      context: .
-      dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
-    container_name: crypton-monitoring-dashboard-api
-    ports:
-      - "5001:5000"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - MarketDataService__Url=http://market-data-service:5001
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   monitoring-dashboard-web:
     build:
       context: .
       dockerfile: src/monitoring_dashboard/frontend/Dockerfile
     container_name: crypton-monitoring-dashboard-web
     ports:
-      - "5000:80"
+      - "5000:5000"
     restart: unless-stopped
     logging:
       driver: "json-file"

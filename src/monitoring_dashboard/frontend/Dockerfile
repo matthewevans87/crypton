@@ -1,6 +1,6 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-EXPOSE 3000
+EXPOSE 5000
 
 FROM base AS deps
 COPY src/monitoring_dashboard/frontend/package.json src/monitoring_dashboard/frontend/package-lock.json* ./
@@ -14,5 +14,5 @@ RUN npm run build
 FROM nginx:alpine AS final
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY src/monitoring_dashboard/frontend/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 5000
 CMD ["nginx", "-g", "daemon off;"]

@@ -13,6 +13,8 @@ src/**/State/
 config.yaml
 .env
 
+docs/notes
+
 # GitHub Actions runner internals
 bin.*
 externals.*
