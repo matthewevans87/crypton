@@ -80,7 +80,7 @@ public class StorageConfig
 public class ApiConfig
 {
     public string Host { get; set; } = "0.0.0.0";
-    public int Port { get; set; } = 8080;
+    public int Port { get; set; } = 5003;
     public string ApiKey { get; set; } = string.Empty;
 }
 

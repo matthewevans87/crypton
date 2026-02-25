@@ -82,4 +82,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
+app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
+
 app.Run();
