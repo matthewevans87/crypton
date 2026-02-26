@@ -1,4 +1,85 @@
 {
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build: AgentRunner",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "build: MarketDataService",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/market_data_service/MarketDataService/MarketDataService.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "build: MonitoringDashboard.Api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api/MonitoringDashboard.Api.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "start: Frontend",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/src/monitoring_dashboard/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "." },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "Local:"
+        }
+      }
+    },
+    {
+      "label": "build: All Services",
+      "dependsOn": [
+        "build: AgentRunner",
+        "build: MarketDataService",
+        "build: MonitoringDashboard.Api"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build"
+    }
+  ]
+}
+{
     "version": "2.0.0",
     "tasks": [
         {

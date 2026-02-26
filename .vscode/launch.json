@@ -1,8 +1,9 @@
 {
     "version": "0.2.0",
     "configurations": [
+        // ── AgentRunner ────────────────────────────────────────────────
         {
-            "name": "Debug Agent Runner",
+            "name": "Debug AgentRunner",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build: AgentRunner",
@@ -18,13 +19,10 @@
             "envFile": "${workspaceFolder}/.env",
             "env": {
                 "ASPNETCORE_ENVIRONMENT": "Development"
-            },
-            "sourceFileMap": {
-                "/Views": "${workspaceFolder}/Views"
             }
         },
         {
-            "name": "Debug Agent Runner (No Build)",
+            "name": "Debug AgentRunner (No Build)",
             "type": "coreclr",
             "request": "launch",
             "program": "${workspaceFolder}/src/agent_runner/AgentRunner/bin/Debug/net10.0/AgentRunner.dll",
@@ -41,6 +39,109 @@
             "type": "coreclr",
             "request": "attach",
             "processName": "AgentRunner"
+        },
+
+        // ── MarketDataService ──────────────────────────────────────────
+        {
+            "name": "Debug MarketDataService",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: MarketDataService",
+            "program": "${workspaceFolder}/src/market_data_service/MarketDataService/bin/Debug/net10.0/MarketDataService.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/market_data_service/MarketDataService",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s/scalar/v1"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Debug MarketDataService (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/market_data_service/MarketDataService/bin/Debug/net10.0/MarketDataService.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/market_data_service/MarketDataService",
+            "stopAtEntry": false,
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Attach to MarketDataService Process",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "MarketDataService"
+        },
+
+        // ── MonitoringDashboard.Api ────────────────────────────────────
+        {
+            "name": "Debug MonitoringDashboard.Api",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: MonitoringDashboard.Api",
+            "program": "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api/bin/Debug/net10.0/MonitoringDashboard.Api.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s/scalar/v1"
+            },
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Debug MonitoringDashboard.Api (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api/bin/Debug/net10.0/MonitoringDashboard.Api.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api",
+            "stopAtEntry": false,
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Attach to MonitoringDashboard.Api Process",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "MonitoringDashboard.Api"
+        },
+
+        // ── Frontend ───────────────────────────────────────────────────
+        {
+            "name": "Debug Frontend",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:3000",
+            "webRoot": "${workspaceFolder}/src/monitoring_dashboard/frontend/src",
+            "preLaunchTask": "start: Frontend"
+        }
+    ],
+    "compounds": [
+        {
+            // Builds all services sequentially first — if any build fails, nothing launches.
+            "name": "Debug All Services",
+            "configurations": [
+                "Debug AgentRunner (No Build)",
+                "Debug MarketDataService (No Build)",
+                "Debug MonitoringDashboard.Api (No Build)"
+            ],
+            "preLaunchTask": "build: All Services",
+            "stopAll": true
         }
     ]
 }
