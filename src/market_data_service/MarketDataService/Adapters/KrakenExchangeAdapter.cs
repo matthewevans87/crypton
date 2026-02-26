@@ -45,7 +45,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     public int ReconnectCount => _reconnectCount;
     public TimeSpan CurrentReconnectDelay => _currentReconnectDelay;
     public CircuitBreakerState CircuitBreakerState => _circuitBreaker.State;
-    
+
     public event EventHandler<PriceTicker>? OnPriceUpdate;
     public event EventHandler<OrderBook>? OnOrderBookUpdate;
     public event EventHandler<Trade>? OnTrade;
@@ -65,7 +65,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         _loggerFactory = loggerFactory;
         _httpClient.BaseAddress = new Uri("https://api.kraken.com");
         _currentReconnectDelay = _initialReconnectDelay;
-        
+
         _apiKey = Environment.GetEnvironmentVariable("KRAKEN_API_KEY");
         _apiSecret = Environment.GetEnvironmentVariable("KRAKEN_SECRET_KEY");
 
@@ -77,35 +77,36 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         {
             _logger.LogInformation("Kraken API key configured");
         }
-        
+
         var circuitBreakerLogger = _loggerFactory.CreateLogger<CircuitBreaker>();
         _circuitBreaker = new CircuitBreaker(new CircuitBreakerOptions(), circuitBreakerLogger);
     }
 
     private readonly ILoggerFactory _loggerFactory;
 
-    private Dictionary<string, string> GetKrakenAuthHeaders(string endpoint, string postData = "")
+    private Dictionary<string, string> GetKrakenAuthHeaders(string endpoint, string nonce, string postData = "")
     {
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
         {
             return new Dictionary<string, string>();
         }
 
-        var nonce = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var message = nonce + postData;
-        var messageBytes = Encoding.UTF8.GetBytes(message);
+        // SHA256(nonce + urlencoded_postdata)
+        var encodedPayload = nonce + postData;
+        var sha256Hash = SHA256.HashData(Encoding.UTF8.GetBytes(encodedPayload));
+
+        // HMAC-SHA512(secret, path_bytes + sha256_raw_bytes)
+        var path = endpoint;
         var secretBytes = Convert.FromBase64String(_apiSecret);
-        
-        using var hmacSha512 = new HMACSHA256(secretBytes);
-        var hash = hmacSha512.ComputeHash(messageBytes);
-        var sha256Bytes = Encoding.UTF8.GetBytes(nonce + postData);
-        var sha256Hash = SHA256.HashData(sha256Bytes);
-        var signature = Convert.ToBase64String(hmacSha512.ComputeHash(sha256Hash));
+        using var hmac = new HMACSHA512(secretBytes);
+
+        var signatureInput = Encoding.UTF8.GetBytes(path).Concat(sha256Hash).ToArray();
+        var signature = hmac.ComputeHash(signatureInput);
 
         return new Dictionary<string, string>
         {
             { "API-Key", _apiKey },
-            { "API-Sign", signature }
+            { "API-Sign", Convert.ToBase64String(signature) }
         };
     }
 
@@ -180,17 +181,17 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         {
             _webSocket = new ClientWebSocket();
             _webSocketCts = new CancellationTokenSource();
-            
+
             await _webSocket.ConnectAsync(new Uri("wss://ws.kraken.com"), cancellationToken);
-            
+
             _isConnected = true;
             _lastConnectedAt = DateTime.UtcNow;
             OnConnectionStateChanged?.Invoke(this, true);
-            
+
             await SubscribeToChannelsAsync(cancellationToken);
-            
+
             _ = Task.Run(() => ReceiveMessagesAsync(_webSocketCts.Token), _webSocketCts.Token);
-            
+
             _logger.LogInformation("Connected to Kraken WebSocket");
             return true;
         }
@@ -246,7 +247,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             return;
 
         var krakenSymbols = SymbolMapping.Values.ToList();
-        
+
         var subscribeMessage = new
         {
             @event = "subscribe",
@@ -290,15 +291,15 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
     {
         _shouldReconnect = true;
-        
+
         var connected = await ConnectInternalAsync(cancellationToken);
-        
+
         if (!connected)
         {
             _logger.LogWarning("Initial connection failed, starting reconnect loop");
             _ = Task.Run(() => StartReconnectLoopAsync(cancellationToken), cancellationToken);
         }
-        
+
         return connected;
     }
 
@@ -306,12 +307,12 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     {
         _shouldReconnect = false;
         _webSocketCts?.Cancel();
-        
+
         if (_webSocket?.State == WebSocketState.Open)
         {
             await _webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Disconnecting", CancellationToken.None);
         }
-        
+
         _isConnected = false;
         OnConnectionStateChanged?.Invoke(this, false);
         _logger.LogInformation("Disconnected from Kraken WebSocket");
@@ -332,22 +333,22 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
 
         await WaitForRateLimitAsync(cancellationToken);
-        
+
         var result = new List<PriceTicker>();
-        
+
         foreach (var symbol in symbols)
         {
             try
             {
                 var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
                 var response = await _httpClient.GetAsync($"/0/public/Ticker?pair={krakenSymbol}", cancellationToken);
-                
+
                 if (response.IsSuccessStatusCode)
                 {
                     _circuitBreaker.RecordSuccess();
                     var json = await response.Content.ReadAsStringAsync(cancellationToken);
                     var data = JsonSerializer.Deserialize<JsonElement>(json);
-                    
+
                     if (data.TryGetProperty("result", out var resultObj))
                     {
                         foreach (var prop in resultObj.EnumerateObject())
@@ -371,7 +372,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 _logger.LogError(ex, "Failed to get price for {Symbol}", symbol);
             }
         }
-        
+
         return result;
     }
 
@@ -389,32 +390,32 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             {
                 ticker.Price = decimal.Parse(close[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("b", out var bid) && bid.GetArrayLength() >= 2)
             {
                 ticker.Bid = decimal.Parse(bid[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("a", out var ask) && ask.GetArrayLength() >= 2)
             {
                 ticker.Ask = decimal.Parse(ask[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("v", out var volume) && volume.GetArrayLength() >= 2)
             {
                 ticker.Volume24h = decimal.Parse(volume[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("h", out var high) && high.GetArrayLength() >= 2)
             {
                 ticker.High24h = decimal.Parse(high[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("l", out var low) && low.GetArrayLength() >= 2)
             {
                 ticker.Low24h = decimal.Parse(low[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("p", out var vwap) && vwap.GetArrayLength() >= 2)
             {
                 var vwapValue = decimal.Parse(vwap[1].GetString() ?? "0");
@@ -442,18 +443,18 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
 
         await WaitForRateLimitAsync(cancellationToken);
-        
+
         try
         {
             var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
             var response = await _httpClient.GetAsync($"/0/public/Depth?pair={krakenSymbol}&count={depth}", cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
-                
+
                 if (data.TryGetProperty("result", out var result))
                 {
                     foreach (var prop in result.EnumerateObject())
@@ -472,14 +473,14 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get order book for {Symbol}", symbol);
         }
-        
+
         return null;
     }
 
     private OrderBook ParseOrderBook(string krakenPair, JsonElement data, string symbol)
     {
         var orderBook = new OrderBook { Symbol = symbol };
-        
+
         if (data.TryGetProperty("bids", out var bids))
         {
             foreach (var bid in bids.EnumerateArray())
@@ -495,7 +496,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 }
             }
         }
-        
+
         if (data.TryGetProperty("asks", out var asks))
         {
             foreach (var ask in asks.EnumerateArray())
@@ -511,7 +512,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 }
             }
         }
-        
+
         return orderBook;
     }
 
@@ -523,9 +524,9 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
 
         await WaitForRateLimitAsync(cancellationToken);
-        
+
         var result = new List<Ohlcv>();
-        
+
         try
         {
             var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
@@ -539,21 +540,21 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 "1d" => 1440,
                 _ => 60
             };
-            
+
             var response = await _httpClient.GetAsync($"/0/public/OHLC?pair={krakenSymbol}&interval={interval}", cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
-                
+
                 if (data.TryGetProperty("result", out var resultObj))
                 {
                     foreach (var prop in resultObj.EnumerateObject())
                     {
                         if (prop.Name == "last") continue;
-                        
+
                         foreach (var candle in prop.Value.EnumerateArray())
                         {
                             if (candle.GetArrayLength() >= 6)
@@ -582,7 +583,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get OHLCV for {Symbol}", symbol);
         }
-        
+
         return result.TakeLast(limit).ToList();
     }
 
@@ -600,33 +601,40 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
 
         await WaitForRateLimitAsync(cancellationToken);
-        
+
         var balances = new List<Balance>();
-        var postData = "nonce=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        
+        var nonce = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var postData = "nonce=" + nonce;
+
         try
         {
-            var headers = GetKrakenAuthHeaders("/0/private/Balance", postData);
+            var headers = GetKrakenAuthHeaders("/0/private/Balance", nonce, postData);
             var request = new HttpRequestMessage(HttpMethod.Post, "/0/private/Balance")
             {
                 Content = new StringContent(postData, Encoding.UTF8, "application/x-www-form-urlencoded")
             };
-            
+
             foreach (var header in headers)
             {
                 request.Headers.Add(header.Key, header.Value);
             }
-            
+
             var response = await _httpClient.SendAsync(request, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
-                
+
+                if (data.TryGetProperty("error", out var errorArray) && errorArray.GetArrayLength() > 0)
+                {
+                    _logger.LogWarning("Kraken API error: {Error}", errorArray);
+                }
+
                 if (data.TryGetProperty("result", out var result))
                 {
+                    _logger.LogInformation("Balance result: {Result}", result);
                     foreach (var prop in result.EnumerateObject())
                     {
                         var value = decimal.Parse(prop.Value.GetString() ?? "0");
@@ -653,7 +661,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get balance");
         }
-        
+
         return balances;
     }
 
@@ -671,33 +679,34 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
 
         await WaitForRateLimitAsync(cancellationToken);
-        
+
         var trades = new List<Trade>();
-        
+        var nonce = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+
         try
         {
             var krakenSymbol = SymbolMapping.GetValueOrDefault(symbol, symbol);
-            var postData = "nonce=" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + "&pair=" + krakenSymbol;
-            
-            var headers = GetKrakenAuthHeaders("/0/private/TradesHistory", postData);
+            var postData = "nonce=" + nonce + "&pair=" + krakenSymbol;
+
+            var headers = GetKrakenAuthHeaders("/0/private/TradesHistory", nonce, postData);
             var request = new HttpRequestMessage(HttpMethod.Post, "/0/private/TradesHistory")
             {
                 Content = new StringContent(postData, Encoding.UTF8, "application/x-www-form-urlencoded")
             };
-            
+
             foreach (var header in headers)
             {
                 request.Headers.Add(header.Key, header.Value);
             }
-            
+
             var response = await _httpClient.SendAsync(request, cancellationToken);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 _circuitBreaker.RecordSuccess();
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 var data = JsonSerializer.Deserialize<JsonElement>(json);
-                
+
                 if (data.TryGetProperty("result", out var result))
                 {
                     if (result.TryGetProperty("trades", out var tradesObj))
@@ -706,7 +715,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                         {
                             var tradeId = prop.Name;
                             var tradeData = prop.Value;
-                            
+
                             if (tradeData.GetArrayLength() >= 4)
                             {
                                 trades.Add(new Trade
@@ -736,34 +745,34 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _circuitBreaker.RecordFailure();
             _logger.LogError(ex, "Failed to get trades for {Symbol}", symbol);
         }
-        
+
         return trades.OrderByDescending(t => t.Timestamp).Take(limit).ToList();
     }
 
     public async Task<PortfolioSummary> GetPortfolioSummaryAsync(CancellationToken cancellationToken = default)
     {
         var balances = await GetBalanceAsync(cancellationToken);
-        
+
         var summary = new PortfolioSummary
         {
             Balances = balances,
             TotalValue = balances.Sum(b => b.Total),
             LastUpdated = DateTime.UtcNow
         };
-        
+
         return summary;
     }
 
     private async Task ReceiveMessagesAsync(CancellationToken cancellationToken)
     {
         var buffer = new byte[8192];
-        
+
         try
         {
             while (_webSocket?.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
                 var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                
+
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     _isConnected = false;
@@ -771,7 +780,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     _logger.LogWarning("Kraken WebSocket closed");
                     break;
                 }
-                
+
                 var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
                 ProcessMessage(message);
             }
@@ -799,28 +808,28 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         try
         {
             var data = JsonSerializer.Deserialize<JsonElement>(message);
-            
+
             // Skip if not an object (e.g., trade updates are arrays)
             if (data.ValueKind != JsonValueKind.Object)
             {
                 return;
             }
-            
+
             if (data.TryGetProperty("event", out var eventType))
             {
                 var eventName = eventType.GetString();
-                
+
                 if (eventName == "heartbeat")
                 {
                     return;
                 }
-                
+
                 if (eventName == "systemStatus")
                 {
                     _logger.LogInformation("Kraken system status: {Status}", data.TryGetProperty("status", out var status) ? status.GetString() : "unknown");
                     return;
                 }
-                
+
                 if (eventName == "subscriptionStatus")
                 {
                     var channelName = data.TryGetProperty("channelName", out var cn) ? cn.GetString() : "";
@@ -828,11 +837,11 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     return;
                 }
             }
-            
+
             if (data.ValueKind == JsonValueKind.Array && data.GetArrayLength() >= 4)
             {
                 var channelName = data[2].GetString();
-                
+
                 if (channelName?.StartsWith("ticker") == true)
                 {
                     var tickerData = data[1];
@@ -857,7 +866,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                 {
                     var tradesData = data[1];
                     var symbol = channelName.Replace("trade", "").Replace("XBT", "BTC");
-                    
+
                     if (tradesData.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var tradeArray in tradesData.EnumerateArray())
@@ -883,43 +892,43 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         try
         {
             var symbol = channelName.Replace("ticker", "").Replace("XBT", "BTC");
-            
+
             var ticker = new PriceTicker
             {
                 Asset = symbol,
                 LastUpdated = DateTime.UtcNow
             };
-            
+
             if (data.TryGetProperty("c", out var close) && close.GetArrayLength() >= 1)
             {
                 ticker.Price = decimal.Parse(close[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("b", out var bid) && bid.GetArrayLength() >= 1)
             {
                 ticker.Bid = decimal.Parse(bid[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("a", out var ask) && ask.GetArrayLength() >= 1)
             {
                 ticker.Ask = decimal.Parse(ask[0].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("v", out var volume) && volume.GetArrayLength() >= 2)
             {
                 ticker.Volume24h = decimal.Parse(volume[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("h", out var high) && high.GetArrayLength() >= 2)
             {
                 ticker.High24h = decimal.Parse(high[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("l", out var low) && low.GetArrayLength() >= 2)
             {
                 ticker.Low24h = decimal.Parse(low[1].GetString() ?? "0");
             }
-            
+
             if (data.TryGetProperty("p", out var vwap) && vwap.GetArrayLength() >= 2)
             {
                 var vwapValue = decimal.Parse(vwap[1].GetString() ?? "0");
@@ -929,7 +938,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     ticker.ChangePercent24h = (ticker.Change24h / vwapValue) * 100;
                 }
             }
-            
+
             return ticker;
         }
         catch
@@ -943,7 +952,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         try
         {
             var symbol = channelName.Replace("book", "").Replace("XBT", "BTC");
-            
+
             var orderBook = new OrderBook
             {
                 Symbol = symbol,
@@ -990,7 +999,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     {
                         var price = decimal.Parse(ask[0].GetString() ?? "0");
                         var quantity = decimal.Parse(ask[1].GetString() ?? "0");
-                        
+
                         var existing = orderBook.Asks.FirstOrDefault(a => a.Price == price);
                         if (quantity == 0)
                         {
@@ -1016,7 +1025,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                     {
                         var price = decimal.Parse(bid[0].GetString() ?? "0");
                         var quantity = decimal.Parse(bid[1].GetString() ?? "0");
-                        
+
                         var existing = orderBook.Bids.FirstOrDefault(b => b.Price == price);
                         if (quantity == 0)
                         {
@@ -1053,7 +1062,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             if (data.GetArrayLength() >= 4)
             {
                 var timestamp = long.Parse(data[2].GetString() ?? "0");
-                
+
                 return new Trade
                 {
                     Id = $"{symbol}_{timestamp}",
