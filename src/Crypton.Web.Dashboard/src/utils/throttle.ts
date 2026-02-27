@@ -52,7 +52,7 @@ export function debounce<T extends (...args: unknown[]) => void>(
 
 export function batchUpdates<T>(
   callback: (items: T[]) => void,
-  windowMs: number = 16
+  _windowMs: number = 16
 ) {
   let batch: T[] = [];
   let scheduled = false;

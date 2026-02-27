@@ -7,8 +7,8 @@ export function ToolCallDetailPanel() {
 
   if (!toolCall) {
     return (
-      <div style={{ 
-        color: 'var(--text-tertiary)', 
+      <div style={{
+        color: 'var(--text-tertiary)',
         padding: 'var(--space-4)',
         textAlign: 'center'
       }}>
@@ -20,9 +20,9 @@ export function ToolCallDetailPanel() {
   const handleClose = () => setSelectedToolCall(null);
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
       height: '100%',
       overflow: 'hidden'
     }}>
@@ -34,14 +34,14 @@ export function ToolCallDetailPanel() {
         borderBottom: '1px solid var(--border-default)',
         backgroundColor: 'var(--bg-panel-header)',
       }}>
-        <span style={{ 
-          fontFamily: 'var(--font-mono)', 
+        <span style={{
+          fontFamily: 'var(--font-mono)',
           color: 'var(--color-info)',
           fontWeight: 600
         }}>
           {toolCall.toolName}
         </span>
-        <button 
+        <button
           onClick={handleClose}
           style={{
             background: 'none',
@@ -55,9 +55,9 @@ export function ToolCallDetailPanel() {
         </button>
       </div>
 
-      <div style={{ 
-        flex: 1, 
-        overflow: 'auto', 
+      <div style={{
+        flex: 1,
+        overflow: 'auto',
         padding: 'var(--space-2)',
         fontSize: 'var(--font-size-xs)'
       }}>
@@ -81,7 +81,7 @@ export function ToolCallDetailPanel() {
 
         <div style={{ marginBottom: 'var(--space-3)' }}>
           <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>Timestamp</div>
-          <span>{formatTimestamp(toolCall.startedAt, 'realtime')}</span>
+          <span>{formatTimestamp(toolCall.calledAt, 'realtime')}</span>
         </div>
 
         <div style={{ marginBottom: 'var(--space-3)' }}>
@@ -115,8 +115,8 @@ export function ToolCallDetailPanel() {
               maxHeight: '300px',
               overflow: 'auto',
             }}>
-              {typeof toolCall.output === 'string' 
-                ? toolCall.output 
+              {typeof toolCall.output === 'string'
+                ? toolCall.output
                 : JSON.stringify(toolCall.output, null, 2)}
             </div>
           </div>

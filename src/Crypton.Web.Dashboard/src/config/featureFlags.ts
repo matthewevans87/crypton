@@ -29,27 +29,27 @@ const urlParams = getUrlParams();
 
 export const featureFlags: FeatureFlags = {
   showAgentPanel: parseEnvBoolean(
-    urlParams.showAgentPanel ?? process.env.REACT_APP_SHOW_AGENT_PANEL,
+    urlParams.showAgentPanel ?? (import.meta.env.VITE_SHOW_AGENT_PANEL as string | undefined),
     true
   ),
   showToolCalls: parseEnvBoolean(
-    urlParams.showToolCalls ?? process.env.REACT_APP_SHOW_TOOL_CALLS,
+    urlParams.showToolCalls ?? (import.meta.env.VITE_SHOW_TOOL_CALLS as string | undefined),
     true
   ),
   showReasoning: parseEnvBoolean(
-    urlParams.showReasoning ?? process.env.REACT_APP_SHOW_REASONING,
+    urlParams.showReasoning ?? (import.meta.env.VITE_SHOW_REASONING as string | undefined),
     true
   ),
   showMailbox: parseEnvBoolean(
-    urlParams.showMailbox ?? process.env.REACT_APP_SHOW_MAILBOX,
+    urlParams.showMailbox ?? (import.meta.env.VITE_SHOW_MAILBOX as string | undefined),
     false
   ),
   enableWebSocket: parseEnvBoolean(
-    urlParams.enableWebSocket ?? process.env.REACT_APP_ENABLE_WEBSOCKET,
+    urlParams.enableWebSocket ?? (import.meta.env.VITE_ENABLE_WEBSOCKET as string | undefined),
     true
   ),
   enableCache: parseEnvBoolean(
-    urlParams.enableCache ?? process.env.REACT_APP_ENABLE_CACHE,
+    urlParams.enableCache ?? (import.meta.env.VITE_ENABLE_CACHE as string | undefined),
     true
   ),
 };

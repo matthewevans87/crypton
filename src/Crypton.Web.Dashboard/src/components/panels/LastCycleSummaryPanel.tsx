@@ -31,18 +31,18 @@ export function LastCycleSummaryPanel() {
           Last Cycle
         </span>
         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
-          {formatTimestamp(cycle.startedAt, 'relative')}
+          {formatTimestamp(cycle.startDate, 'relative')}
         </span>
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>P&L</div>
-          <div style={{ 
-            fontFamily: 'var(--font-mono)', 
-            fontSize: '16px', 
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '16px',
             fontWeight: 600,
-            color: pnlColor 
+            color: pnlColor
           }}>
             {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)}
           </div>
@@ -65,14 +65,14 @@ export function LastCycleSummaryPanel() {
         <div>
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>Duration</div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-sm)' }}>
-            {cycle.durationSeconds ? `${Math.floor(cycle.durationSeconds / 60)}m` : '—'}
+            {'—'}
           </div>
         </div>
       </div>
 
       {evaluation && (
-        <div style={{ 
-          marginTop: 'var(--space-1)', 
+        <div style={{
+          marginTop: 'var(--space-1)',
           padding: 'var(--space-2)',
           backgroundColor: 'var(--bg-viewport)',
           borderRadius: '2px',
@@ -80,14 +80,14 @@ export function LastCycleSummaryPanel() {
           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
             Rating
           </div>
-          <div style={{ 
-            fontFamily: 'var(--font-mono)', 
-            fontSize: '18px', 
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '18px',
             fontWeight: 600,
-            color: evaluation.rating === 'A' ? 'var(--color-profit)' 
+            color: evaluation.rating === 'A' ? 'var(--color-profit)'
               : evaluation.rating === 'B' ? 'var(--color-info)'
-              : evaluation.rating === 'C' ? 'var(--color-warning)'
-              : 'var(--color-loss)'
+                : evaluation.rating === 'C' ? 'var(--color-warning)'
+                  : 'var(--color-loss)'
           }}>
             {evaluation.rating}
             {evaluation.ratingTrend === 'up' && ' ↑'}
@@ -96,24 +96,7 @@ export function LastCycleSummaryPanel() {
         </div>
       )}
 
-      {evaluation?.keyPoints && evaluation.keyPoints.length > 0 && (
-        <div style={{ marginTop: 'var(--space-1)' }}>
-          <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
-            Key Points
-          </div>
-          <ul style={{ 
-            margin: 0, 
-            paddingLeft: '12px', 
-            fontSize: '10px', 
-            color: 'var(--text-secondary)',
-            lineHeight: 1.4
-          }}>
-            {evaluation.keyPoints.slice(0, 3).map((point, i) => (
-              <li key={i} style={{ marginBottom: '2px' }}>{point}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+
     </div>
   );
 }

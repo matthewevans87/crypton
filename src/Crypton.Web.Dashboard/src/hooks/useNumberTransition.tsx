@@ -10,7 +10,7 @@ export function useNumberTransition(
   options: UseNumberTransitionOptions = {}
 ): number {
   const { duration = 150 } = options;
-  
+
   const [displayValue, setDisplayValue] = useState(targetValue);
   const animationRef = useRef<number | null>(null);
   const startValueRef = useRef(targetValue);
@@ -53,16 +53,16 @@ export function useNumberTransition(
   return displayValue;
 }
 
-export function AnimatedNumber({ 
-  value, 
+export function AnimatedNumber({
+  value,
   format = (v: number) => v.toString(),
   duration = 150,
-}: { 
-  value: number; 
+}: {
+  value: number;
   format?: (v: number) => string;
   duration?: number;
 }) {
   const displayValue = useNumberTransition(value, { duration });
-  
+
   return <span>{format(Math.round(displayValue * 100) / 100)}</span>;
 }

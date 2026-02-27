@@ -10,11 +10,9 @@ import type {
   EvaluationSummary 
 } from '../types';
 import { messageQueue } from './messageQueue';
-import { createThrottle, batchUpdates } from '../utils/throttle';
+import { batchUpdates } from '../utils/throttle';
 
-const WS_BASE_URL = process.env.REACT_APP_WS_BASE_URL || '';
-
-const MAX_UPDATES_PER_SECOND = 10;
+const WS_BASE_URL = (import.meta.env.VITE_WS_BASE_URL as string | undefined) || '';
 const DEFAULT_HUB_PATH = '/hubs/dashboard';
 
 type EventHandlers = {
@@ -38,10 +36,6 @@ const throttledPriceUpdates = batchUpdates<PriceTicker>((updates) => {
   updates.forEach((data) => handlers.onPriceUpdated?.(data));
 }, 100);
 
-const throttledPortfolioUpdates = batchUpdates<PortfolioSummary>((updates) => {
-  const latest = updates[updates.length - 1];
-  handlers.onPortfolioUpdated?.(latest);
-}, 100);
 
 export const signalRService = {
   connect: (url = `${WS_BASE_URL}${DEFAULT_HUB_PATH}`) => {
@@ -66,9 +60,8 @@ export const signalRService = {
     hubConnection.on('PositionUpdated', (data: { asset: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number }) => {
       handlers.onPortfolioUpdated?.({
         totalValue: data.currentPrice * data.quantity,
-        realizedPnL: data.pnl,
         unrealizedPnL: 0,
-      } as PortfolioSummary);
+      } as unknown as PortfolioSummary);
     });
 
     hubConnection.on('PositionClosed', (data: { asset: string }) => {

@@ -31,7 +31,7 @@ const formats: Record<TimestampFormat, Intl.DateTimeFormatOptions> = {
 };
 
 export function formatTimestamp(
-  isoString: string | null | undefined,
+  isoString: string | Date | null | undefined,
   format: TimestampFormat = 'history',
   fallback: string = '—'
 ): string {
@@ -40,7 +40,7 @@ export function formatTimestamp(
   }
 
   try {
-    const date = new Date(isoString);
+    const date = isoString instanceof Date ? isoString : new Date(isoString);
 
     if (isNaN(date.getTime())) {
       console.warn('Invalid timestamp:', isoString);

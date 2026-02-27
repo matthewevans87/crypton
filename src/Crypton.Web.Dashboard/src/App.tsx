@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
 import { useDashboardStore } from './store/dashboard';
-import { useErrorStore } from './store/errors';
 import { api } from './services/api';
 import { signalRService } from './services/signalr';
-import { poller, getSmartInterval, pollIntervals } from './services/polling';
+import { poller, getSmartInterval } from './services/polling';
 import { TabBar } from './components/layout/TabBar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { StatusBar } from './components/layout/StatusBar';
@@ -12,12 +11,12 @@ import { ErrorToast } from './components/ErrorToast';
 import type { PortfolioSummary, Strategy, PriceTicker, LoopStatus, CyclePerformance, Holding, Position, Trade, ToolCall, ReasoningStep, EvaluationSummary } from './types';
 
 function App() {
-  const { 
-    tabs, 
-    activeTabId, 
-    setPortfolioData, 
-    setStrategyData, 
-    setMarketData, 
+  const {
+    tabs,
+    activeTabId,
+    setPortfolioData,
+    setStrategyData,
+    setMarketData,
     setAgentData,
     setPerformanceData,
     commandPaletteOpen,
@@ -78,7 +77,7 @@ function App() {
         const reasoning = await api.agent.reasoning() as ReasoningStep[];
         const cyclePerformance = await api.performance.currentCycle() as CyclePerformance;
         const evaluation = await api.performance.latestEvaluation() as EvaluationSummary;
-        
+
         setPortfolioData({ summary, holdings, positions, trades });
         setStrategyData({ current: strategy });
         setMarketData({ prices });
@@ -194,10 +193,10 @@ function App() {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   return (
-    <div style={{ 
-      height: '100vh', 
-      width: '100vw', 
-      display: 'flex', 
+    <div style={{
+      height: '100vh',
+      width: '100vw',
+      display: 'flex',
       flexDirection: 'column',
       backgroundColor: 'var(--bg-viewport)',
       overflow: 'hidden',

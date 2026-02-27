@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useDashboardStore } from '../../store/dashboard';
 import { api } from '../../services/api';
 import { formatTimestamp } from '../../utils/dateUtils';
-import { formatCompact } from '../../utils/priceNormalization';
+
 
 interface CycleDetail {
   id: string;
@@ -24,7 +24,7 @@ interface CycleDetail {
 }
 
 export function CycleDetailPanel() {
-  const { performance, selectedToolCallId, setSelectedToolCall } = useDashboardStore();
+  const { performance } = useDashboardStore();
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [cycleDetail, setCycleDetail] = useState<CycleDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,23 +59,23 @@ export function CycleDetailPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ 
-        flex: 1, 
+      <div style={{
+        flex: 1,
         overflow: 'auto',
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: 'var(--space-1)' 
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-1)'
       }}>
         {cycles.slice(0, 10).map((cycle) => (
           <div
-            key={cycle.id}
-            onClick={() => handleSelectCycle(cycle.id)}
+            key={cycle.cycleId}
+            onClick={() => handleSelectCycle(cycle.cycleId)}
             style={{
               padding: 'var(--space-2)',
-              backgroundColor: selectedCycleId === cycle.id 
-                ? 'var(--bg-viewport)' 
+              backgroundColor: selectedCycleId === cycle.cycleId
+                ? 'var(--bg-viewport)'
                 : 'transparent',
-              border: selectedCycleId === cycle.id
+              border: selectedCycleId === cycle.cycleId
                 ? '1px solid var(--color-info)'
                 : '1px solid var(--border-default)',
               borderRadius: '2px',
@@ -85,12 +85,12 @@ export function CycleDetailPanel() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
               <span style={{ color: 'var(--text-secondary)' }}>
-                {formatTimestamp(cycle.startedAt, 'history')}
+                {formatTimestamp(cycle.startDate, 'history')}
               </span>
-              <span style={{ 
+              <span style={{
                 fontFamily: 'var(--font-mono)',
-                color: (cycle.realizedPnL + cycle.unrealizedPnL) >= 0 
-                  ? 'var(--color-profit)' 
+                color: (cycle.realizedPnL + cycle.unrealizedPnL) >= 0
+                  ? 'var(--color-profit)'
                   : 'var(--color-loss)'
               }}>
                 {formatCurrency(cycle.realizedPnL + cycle.unrealizedPnL)}
@@ -106,10 +106,10 @@ export function CycleDetailPanel() {
       </div>
 
       {loading && (
-        <div style={{ 
-          padding: 'var(--space-4)', 
-          textAlign: 'center', 
-          color: 'var(--text-tertiary)' 
+        <div style={{
+          padding: 'var(--space-4)',
+          textAlign: 'center',
+          color: 'var(--text-tertiary)'
         }}>
           Loading...
         </div>
@@ -123,14 +123,14 @@ export function CycleDetailPanel() {
           overflow: 'auto',
           fontSize: 'var(--font-size-xs)',
         }}>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 'var(--space-2)' 
+            marginBottom: 'var(--space-2)'
           }}>
             <span style={{ fontWeight: 600 }}>Cycle Details</span>
-            <button 
+            <button
               onClick={() => { setCycleDetail(null); setSelectedCycleId(null); }}
               style={{
                 background: 'none',
@@ -146,7 +146,7 @@ export function CycleDetailPanel() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-1)' }}>
             <div>
               <div style={{ color: 'var(--text-tertiary)' }}>P&L</div>
-              <div style={{ 
+              <div style={{
                 fontFamily: 'var(--font-mono)',
                 color: cycleDetail.realizedPnL >= 0 ? 'var(--color-profit)' : 'var(--color-loss)'
               }}>

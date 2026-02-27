@@ -1,5 +1,5 @@
-import React, { useDashboardStore } from '../../store/dashboard';
-import { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { useDashboardStore } from '../../store/dashboard';
 
 interface PriceTickerPanelProps {
   config?: Record<string, unknown>;
@@ -24,8 +24,8 @@ export const PriceTickerPanel = React.memo(function PriceTickerPanel({ config }:
   const asset = (config?.asset as string) || 'BTC/USD';
   const prevPriceRef = useRef<number | null>(null);
   const [flashClass, setFlashClass] = useState('');
-  
-  const ticker = useMemo(() => 
+
+  const ticker = useMemo(() =>
     market.prices.find((p) => p.asset === asset),
     [market.prices, asset]
   );
@@ -42,17 +42,17 @@ export const PriceTickerPanel = React.memo(function PriceTickerPanel({ config }:
     }
   }, [ticker?.price]);
 
-  const formattedPrice = useMemo(() => 
+  const formattedPrice = useMemo(() =>
     ticker ? formatPrice(ticker.price) : null,
     [ticker?.price]
   );
 
-  const formattedChange = useMemo(() => 
+  const formattedChange = useMemo(() =>
     ticker ? formatPercent(ticker.changePercent24h) : null,
     [ticker?.changePercent24h]
   );
 
-  const formattedChange24h = useMemo(() => 
+  const formattedChange24h = useMemo(() =>
     ticker ? formatPrice(ticker.change24h) : null,
     [ticker?.change24h]
   );
@@ -64,11 +64,11 @@ export const PriceTickerPanel = React.memo(function PriceTickerPanel({ config }:
   }
 
   return (
-    <div 
+    <div
       className={flashClass}
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
         gap: 'var(--space-1)',
         transition: 'background-color 50ms ease-in',
       }}>

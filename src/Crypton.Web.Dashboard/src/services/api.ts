@@ -1,4 +1,4 @@
-const API_BASE = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
 
 const DEFAULT_TIMEOUT = 10000;
 const MAX_RETRIES = 3;

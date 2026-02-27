@@ -1,4 +1,3 @@
-import { api } from './api';
 
 export interface PollIntervals {
   positions: number;
@@ -19,12 +18,12 @@ const DEFAULT_POLL_INTERVALS: PollIntervals = {
 };
 
 export const pollIntervals: PollIntervals = {
-  positions: parseInt(process.env.REACT_APP_POLL_POSITIONS ?? '') || DEFAULT_POLL_INTERVALS.positions,
-  strategy: parseInt(process.env.REACT_APP_POLL_STRATEGY ?? '') || DEFAULT_POLL_INTERVALS.strategy,
-  trades: parseInt(process.env.REACT_APP_POLL_TRADES ?? '') || DEFAULT_POLL_INTERVALS.trades,
-  marketData: parseInt(process.env.REACT_APP_POLL_MARKET ?? '') || DEFAULT_POLL_INTERVALS.marketData,
-  agentState: parseInt(process.env.REACT_APP_POLL_AGENT ?? '') || DEFAULT_POLL_INTERVALS.agentState,
-  loop: parseInt(process.env.REACT_APP_POLL_LOOP ?? '') || DEFAULT_POLL_INTERVALS.loop,
+  positions: parseInt((import.meta.env.VITE_POLL_POSITIONS as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.positions,
+  strategy: parseInt((import.meta.env.VITE_POLL_STRATEGY as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.strategy,
+  trades: parseInt((import.meta.env.VITE_POLL_TRADES as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.trades,
+  marketData: parseInt((import.meta.env.VITE_POLL_MARKET as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.marketData,
+  agentState: parseInt((import.meta.env.VITE_POLL_AGENT as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.agentState,
+  loop: parseInt((import.meta.env.VITE_POLL_LOOP as string | undefined) ?? '') || DEFAULT_POLL_INTERVALS.loop,
 };
 
 export const SMART_POLL_INTERVALS = {
