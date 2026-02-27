@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Crypton.Api.AgentRunner.Tests/Crypton.Api.AgentRunner.Tests.csproj" />
+    <Project Path="src/Crypton.Api.AgentRunner/Crypton.Api.AgentRunner.csproj" />
+    <Project Path="src/Crypton.Api.MarketData.Tests/Crypton.Api.MarketData.Tests.csproj" />
+    <Project Path="src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj" />
+    <Project Path="src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj" />
+  </Folder>
+</Solution>

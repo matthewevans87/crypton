@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\AgentRunner\AgentRunner.csproj" />
+    <ProjectReference Include="..\Crypton.Api.AgentRunner\Crypton.Api.AgentRunner.csproj" />
   </ItemGroup>
 
 </Project>

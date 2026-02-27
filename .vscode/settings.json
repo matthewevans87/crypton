@@ -1,0 +1,21 @@
+{
+  "remote.autoForwardPorts": false,
+  "remote.portsAttributes": {
+    "5000": {
+      "label": "monitoring-dashboard-web",
+      "onAutoForward": "silent"
+    },
+    "5001": {
+      "label": "monitoring-dashboard-api",
+      "onAutoForward": "silent"
+    },
+    "5002": {
+      "label": "market-data-service",
+      "onAutoForward": "silent"
+    },
+    "5003": {
+      "label": "agent-runner",
+      "onAutoForward": "silent"
+    }
+  }
+}

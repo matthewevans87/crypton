@@ -2,12 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build: AgentRunner",
+      "label": "build: Crypton.Api.AgentRunner",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj",
+        "${workspaceFolder}/src/Crypton.Api.AgentRunner/Crypton.Api.AgentRunner.csproj",
         "--configuration",
         "Debug",
         "/property:GenerateFullPaths=true",
@@ -18,12 +18,40 @@
       "presentation": { "reveal": "always" }
     },
     {
-      "label": "build: MarketDataService",
+      "label": "watch: Crypton.Api.AgentRunner",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "--project",
+        "${workspaceFolder}/src/Crypton.Api.AgentRunner/Crypton.Api.AgentRunner.csproj"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/Crypton.Api.AgentRunner"
+      },
+      "problemMatcher": "$msCompile",
+      "isBackground": true
+    },
+    {
+      "label": "test: Crypton.Api.AgentRunner.Tests",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/src/Crypton.Api.AgentRunner.Tests/Crypton.Api.AgentRunner.Tests.csproj",
+        "--verbosity",
+        "normal"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    },
+    {
+      "label": "build: Crypton.Api.MarketData",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/market_data_service/MarketDataService/MarketDataService.csproj",
+        "${workspaceFolder}/src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj",
         "--configuration",
         "Debug",
         "/property:GenerateFullPaths=true",
@@ -34,12 +62,12 @@
       "presentation": { "reveal": "always" }
     },
     {
-      "label": "build: MonitoringDashboard.Api",
+      "label": "build: Crypton.Api.MonitoringDashboard",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/src/monitoring_dashboard/backend/MonitoringDashboard.Api/MonitoringDashboard.Api.csproj",
+        "${workspaceFolder}/src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj",
         "--configuration",
         "Debug",
         "/property:GenerateFullPaths=true",
@@ -50,11 +78,11 @@
       "presentation": { "reveal": "always" }
     },
     {
-      "label": "start: Frontend",
+      "label": "start: Crypton.Web.Dashboard",
       "type": "shell",
       "command": "npm run dev",
       "options": {
-        "cwd": "${workspaceFolder}/src/monitoring_dashboard/frontend"
+        "cwd": "${workspaceFolder}/src/Crypton.Web.Dashboard"
       },
       "isBackground": true,
       "problemMatcher": {
@@ -70,63 +98,12 @@
     {
       "label": "build: All Services",
       "dependsOn": [
-        "build: AgentRunner",
-        "build: MarketDataService",
-        "build: MonitoringDashboard.Api"
+        "build: Crypton.Api.AgentRunner",
+        "build: Crypton.Api.MarketData",
+        "build: Crypton.Api.MonitoringDashboard"
       ],
       "dependsOrder": "sequence",
       "group": "build"
     }
   ]
-}
-{
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "build: AgentRunner",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj",
-                "--configuration",
-                "Debug",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary"
-            ],
-            "problemMatcher": "$msCompile",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
-        },
-        {
-            "label": "watch: AgentRunner",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "watch",
-                "--project",
-                "${workspaceFolder}/src/agent_runner/AgentRunner/AgentRunner.csproj"
-            ],
-            "options": {
-                "cwd": "${workspaceFolder}/src/agent_runner/AgentRunner"
-            },
-            "problemMatcher": "$msCompile",
-            "isBackground": true
-        },
-        {
-            "label": "test: AgentRunner.Tests",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "test",
-                "${workspaceFolder}/src/agent_runner/AgentRunner.Tests/AgentRunner.Tests.csproj",
-                "--verbosity",
-                "normal"
-            ],
-            "problemMatcher": "$msCompile",
-            "group": "test"
-        }
-    ]
 }

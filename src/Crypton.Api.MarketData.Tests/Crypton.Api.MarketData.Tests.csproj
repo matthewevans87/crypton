@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\MarketDataService\MarketDataService.csproj" />
+    <ProjectReference Include="..\Crypton.Api.MarketData\Crypton.Api.MarketData.csproj" />
   </ItemGroup>
 
 </Project>

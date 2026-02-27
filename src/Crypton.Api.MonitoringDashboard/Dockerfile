@@ -6,16 +6,16 @@ EXPOSE 5001
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY ["src/monitoring_dashboard/backend/MonitoringDashboard.Api/MonitoringDashboard.Api.csproj", "src/monitoring_dashboard/backend/MonitoringDashboard.Api/"]
-RUN dotnet restore "src/monitoring_dashboard/backend/MonitoringDashboard.Api/MonitoringDashboard.Api.csproj"
+COPY ["src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj", "src/Crypton.Api.MonitoringDashboard/"]
+RUN dotnet restore "src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj"
 COPY . .
-WORKDIR "/src/src/monitoring_dashboard/backend/MonitoringDashboard.Api"
-RUN dotnet build "MonitoringDashboard.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/src/Crypton.Api.MonitoringDashboard"
+RUN dotnet build "Crypton.Api.MonitoringDashboard.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "MonitoringDashboard.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Crypton.Api.MonitoringDashboard.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "MonitoringDashboard.Api.dll"]
+ENTRYPOINT ["dotnet", "Crypton.Api.MonitoringDashboard.dll"]

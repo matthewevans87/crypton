@@ -6,16 +6,16 @@ EXPOSE 5002
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY ["src/market_data_service/MarketDataService/MarketDataService.csproj", "src/market_data_service/MarketDataService/"]
-RUN dotnet restore "src/market_data_service/MarketDataService/MarketDataService.csproj"
+COPY ["src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj", "src/Crypton.Api.MarketData/"]
+RUN dotnet restore "src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj"
 COPY . .
-WORKDIR "/src/src/market_data_service/MarketDataService"
-RUN dotnet build "MarketDataService.csproj" -c Release -o /app/build
+WORKDIR "/src/src/Crypton.Api.MarketData"
+RUN dotnet build "Crypton.Api.MarketData.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "MarketDataService.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Crypton.Api.MarketData.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "MarketDataService.dll"]
+ENTRYPOINT ["dotnet", "Crypton.Api.MarketData.dll"]

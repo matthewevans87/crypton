@@ -5,81 +5,81 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>AgentRunner</RootNamespace>
+    <RootNamespace>Crypton.Api.AgentRunner</RootNamespace>
   </PropertyGroup>
 
   <Target Name="CopyPromptsAndTemplates" AfterTargets="Build">
     <MakeDir Directories="$(OutDir)agent_prompts" />
     <MakeDir Directories="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\agent_prompts\plan_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\research_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\analysis_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\synthesis_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\evaluation_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
-    <Copy SourceFiles="..\output_templates\plan.md" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\research.md" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\analysis.md" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\strategy.json" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\strategy.schema.json" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\evaluation.md" DestinationFolder="$(OutDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\memory.md" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="agent_prompts\plan_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\research_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\analysis_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\synthesis_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\evaluation_agent.md" DestinationFolder="$(OutDir)agent_prompts" />
+    <Copy SourceFiles="output_templates\plan.md" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\research.md" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\analysis.md" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\strategy.json" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\strategy.schema.json" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\evaluation.md" DestinationFolder="$(OutDir)output_templates" />
+    <Copy SourceFiles="output_templates\memory.md" DestinationFolder="$(OutDir)output_templates" />
   </Target>
 
   <Target Name="CopyPromptsAndTemplatesPublish" AfterTargets="Publish">
     <MakeDir Directories="$(PublishDir)agent_prompts" />
     <MakeDir Directories="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\agent_prompts\plan_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\research_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\analysis_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\synthesis_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
-    <Copy SourceFiles="..\agent_prompts\evaluation_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
-    <Copy SourceFiles="..\output_templates\plan.md" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\research.md" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\analysis.md" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\strategy.json" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\strategy.schema.json" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\evaluation.md" DestinationFolder="$(PublishDir)output_templates" />
-    <Copy SourceFiles="..\output_templates\memory.md" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="agent_prompts\plan_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\research_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\analysis_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\synthesis_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
+    <Copy SourceFiles="agent_prompts\evaluation_agent.md" DestinationFolder="$(PublishDir)agent_prompts" />
+    <Copy SourceFiles="output_templates\plan.md" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\research.md" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\analysis.md" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\strategy.json" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\strategy.schema.json" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\evaluation.md" DestinationFolder="$(PublishDir)output_templates" />
+    <Copy SourceFiles="output_templates\memory.md" DestinationFolder="$(PublishDir)output_templates" />
   </Target>
 
   <ItemGroup>
     <Content Include="config.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <None Include="..\agent_prompts\plan_agent.md">
+    <None Include="agent_prompts\plan_agent.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\agent_prompts\research_agent.md">
+    <None Include="agent_prompts\research_agent.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\agent_prompts\analysis_agent.md">
+    <None Include="agent_prompts\analysis_agent.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\agent_prompts\synthesis_agent.md">
+    <None Include="agent_prompts\synthesis_agent.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\agent_prompts\evaluation_agent.md">
+    <None Include="agent_prompts\evaluation_agent.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\plan.md">
+    <None Include="output_templates\plan.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\research.md">
+    <None Include="output_templates\research.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\analysis.md">
+    <None Include="output_templates\analysis.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\strategy.json">
+    <None Include="output_templates\strategy.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\strategy.schema.json">
+    <None Include="output_templates\strategy.schema.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\evaluation.md">
+    <None Include="output_templates\evaluation.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\output_templates\memory.md">
+    <None Include="output_templates\memory.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

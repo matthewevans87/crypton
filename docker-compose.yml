@@ -3,7 +3,7 @@ services:
     image: crypton-agent-runner:latest
     build:
       context: .
-      dockerfile: src/agent_runner/Dockerfile
+      dockerfile: src/Crypton.Api.AgentRunner/Dockerfile
     container_name: crypton-agent-runner
     ports:
       - "127.0.0.1:5003:5003"
@@ -34,7 +34,7 @@ services:
     image: crypton-market-data-service:latest
     build:
       context: .
-      dockerfile: src/market_data_service/MarketDataService/Dockerfile
+      dockerfile: src/Crypton.Api.MarketData/Dockerfile
     container_name: crypton-market-data-service
     ports:
       - "127.0.0.1:5002:5002"
@@ -59,7 +59,7 @@ services:
     image: crypton-monitoring-dashboard-api:latest
     build:
       context: .
-      dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
+      dockerfile: src/Crypton.Api.MonitoringDashboard/Dockerfile
     container_name: crypton-monitoring-dashboard-api
     ports:
       - "127.0.0.1:5001:5001"
@@ -83,7 +83,7 @@ services:
     image: crypton-monitoring-dashboard-web:latest
     build:
       context: .
-      dockerfile: src/monitoring_dashboard/frontend/Dockerfile
+      dockerfile: src/Crypton.Web.Dashboard/Dockerfile
     container_name: crypton-monitoring-dashboard-web
     ports:
       - "127.0.0.1:5000:5000"

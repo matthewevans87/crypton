@@ -28,7 +28,7 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-agent-runner:latest \
-              -f src/agent_runner/Dockerfile . && break
+              -f src/Crypton.Api.AgentRunner/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
           done
@@ -38,7 +38,7 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-monitoring-dashboard-api:latest \
-              -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile . && break
+              -f src/Crypton.Api.MonitoringDashboard/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
           done
@@ -48,7 +48,7 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-monitoring-dashboard-web:latest \
-              -f src/monitoring_dashboard/frontend/Dockerfile . && break
+              -f src/Crypton.Web.Dashboard/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
           done
@@ -58,7 +58,7 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-market-data-service:latest \
-              -f src/market_data_service/MarketDataService/Dockerfile . && break
+              -f src/Crypton.Api.MarketData/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
           done
