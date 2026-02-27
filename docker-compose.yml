@@ -1,21 +1,22 @@
 services:
   agent-runner:
+    image: crypton-agent-runner:latest
     build:
       context: .
       dockerfile: src/agent_runner/Dockerfile
     container_name: crypton-agent-runner
     ports:
-      - "5003:5003"
+      - "127.0.0.1:5003:5003"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5003
       - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
       - AGENT_RUNNER_API_KEY=${AGENT_RUNNER_API_KEY}
-      - MarketDataService__Url=http://host.docker.internal:5002
+      - MarketDataService__Url=http://market-data-service:5002
     volumes:
-      - agent-runner-data:/app/artifacts
-      - agent-runner-logs:/app/logs
-      - ./config.yaml:/app/config.yaml
+      - /home/matthew-evans/.config/crypton/artifacts:/app/artifacts
+      - /home/matthew-evans/.config/crypton/logs:/app/logs
+      - /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -30,12 +31,13 @@ services:
       start_period: 40s
 
   market-data-service:
+    image: crypton-market-data-service:latest
     build:
       context: .
       dockerfile: src/market_data_service/MarketDataService/Dockerfile
     container_name: crypton-market-data-service
     ports:
-      - "5002:5002"
+      - "127.0.0.1:5002:5002"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5002
@@ -54,12 +56,13 @@ services:
       retries: 3
 
   monitoring-dashboard-api:
+    image: crypton-monitoring-dashboard-api:latest
     build:
       context: .
       dockerfile: src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile
     container_name: crypton-monitoring-dashboard-api
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5001
@@ -77,12 +80,13 @@ services:
       retries: 3
 
   monitoring-dashboard-web:
+    image: crypton-monitoring-dashboard-web:latest
     build:
       context: .
       dockerfile: src/monitoring_dashboard/frontend/Dockerfile
     container_name: crypton-monitoring-dashboard-web
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -90,6 +94,3 @@ services:
         max-size: "10m"
         max-file: "3"
 
-volumes:
-  agent-runner-data:
-  agent-runner-logs:

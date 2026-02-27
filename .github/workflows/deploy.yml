@@ -6,12 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup:
+  build:
     runs-on: self-hosted
     permissions:
       contents: read
-    outputs:
-      git-sha: ${{ steps.get-sha.outputs.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,19 +17,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Get git SHA
-        id: get-sha
-        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-  build:
-    runs-on: self-hosted
-    needs: setup
-    steps:
       - name: Clean up old images
         run: |
           for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
             docker rmi crypton-$service:latest || true
-            docker rmi crypton-$service:${{ needs.setup.outputs.git-sha }} || true
           done
 
       - name: Build Agent Runner
@@ -39,7 +28,6 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-agent-runner:latest \
-              --tag crypton-agent-runner:${{ needs.setup.outputs.git-sha }} \
               -f src/agent_runner/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
@@ -50,7 +38,6 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-monitoring-dashboard-api:latest \
-              --tag crypton-monitoring-dashboard-api:${{ needs.setup.outputs.git-sha }} \
               -f src/monitoring_dashboard/backend/MonitoringDashboard.Api/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
@@ -61,7 +48,6 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-monitoring-dashboard-web:latest \
-              --tag crypton-monitoring-dashboard-web:${{ needs.setup.outputs.git-sha }} \
               -f src/monitoring_dashboard/frontend/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
@@ -72,89 +58,20 @@ jobs:
           for attempt in 1 2 3; do
             docker build --no-cache --load --provenance=false \
               --tag crypton-market-data-service:latest \
-              --tag crypton-market-data-service:${{ needs.setup.outputs.git-sha }} \
               -f src/market_data_service/MarketDataService/Dockerfile . && break
             echo "Attempt $attempt failed, retrying in 15s..."
             sleep 15
           done
 
-  prune:
-    runs-on: self-hosted
-    needs: build
-    steps:
-      - name: Prune old images
-        run: |
-          echo "Pruning dangling images..."
-          docker image prune -f
-
-          echo "Pruning old tagged images (keep last 2 per service)..."
-          for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
-            docker images --format '{{.Repository}}:{{.Tag}}' | grep "crypton-$service" | grep -v ":latest" | tail -n +3 | xargs -r docker rmi || true
-          done
+      - name: Prune dangling images
+        run: docker image prune -f
 
   deploy:
     runs-on: self-hosted
-    needs: prune
+    needs: build
     steps:
-      - name: Stop existing containers
-        run: |
-          for container in crypton-agent-runner crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web crypton-market-data-service; do
-            if [ "$(docker ps -aq -f name=$container)" ]; then
-              echo "Stopping $container..."
-              docker stop $container || true
-            fi
-            if [ "$(docker ps -aq -f name=$container)" ]; then
-              echo "Removing $container..."
-              docker rm $container || true
-            fi
-          done
-
-      - name: Deploy Agent Runner
-        run: |
-          docker run -d \
-            --name crypton-agent-runner \
-            --restart unless-stopped \
-            -p 5003:5003 \
-            -v /home/matthew-evans/.config/crypton/artifacts:/app/artifacts \
-            -v /home/matthew-evans/.config/crypton/logs:/app/logs \
-            -v /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e ASPNETCORE_URLS=http://0.0.0.0:5003 \
-            --env-file /home/matthew-evans/src/crypton/.env \
-            crypton-agent-runner:latest
-
-      - name: Deploy Market Data Service
-        run: |
-          docker run -d \
-            --name crypton-market-data-service \
-            --restart unless-stopped \
-            -p 5002:5002 \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e ASPNETCORE_URLS=http://0.0.0.0:5002 \
-            --env-file /home/matthew-evans/src/crypton/.env \
-            crypton-market-data-service:latest
-
-      - name: Deploy Monitoring Dashboard API
-        run: |
-          docker run -d \
-            --name crypton-monitoring-dashboard-api \
-            --restart unless-stopped \
-            -p 5001:5001 \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e ASPNETCORE_URLS=http://0.0.0.0:5001 \
-            -e MarketDataService__Url=http://market-data-service:5002 \
-            --env-file /home/matthew-evans/src/crypton/.env \
-            --link crypton-market-data-service:market-data-service \
-            crypton-monitoring-dashboard-api:latest
-
-      - name: Deploy Monitoring Dashboard Web
-        run: |
-          docker run -d \
-            --name crypton-monitoring-dashboard-web \
-            --restart unless-stopped \
-            -p 5000:5000 \
-            --link crypton-monitoring-dashboard-api:monitoring-dashboard-api \
-            crypton-monitoring-dashboard-web:latest
+      - name: Deploy all services
+        run: docker compose -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build
 
   verify:
     runs-on: self-hosted
