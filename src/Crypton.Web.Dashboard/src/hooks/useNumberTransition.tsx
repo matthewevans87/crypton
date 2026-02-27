@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useReducedMotion } from './useReducedMotion';
 
 interface UseNumberTransitionOptions {
   duration?: number;
@@ -10,6 +11,7 @@ export function useNumberTransition(
   options: UseNumberTransitionOptions = {}
 ): number {
   const { duration = 150 } = options;
+  const reducedMotion = useReducedMotion();
 
   const [displayValue, setDisplayValue] = useState(targetValue);
   const animationRef = useRef<number | null>(null);
@@ -36,6 +38,11 @@ export function useNumberTransition(
   }, [targetValue, duration]);
 
   useEffect(() => {
+    if (reducedMotion) {
+      setDisplayValue(targetValue);
+      return;
+    }
+
     if (targetValue === displayValue) return;
 
     startValueRef.current = displayValue;
@@ -48,7 +55,7 @@ export function useNumberTransition(
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [targetValue, animate, displayValue]);
+  }, [targetValue, animate, displayValue, reducedMotion]);
 
   return displayValue;
 }

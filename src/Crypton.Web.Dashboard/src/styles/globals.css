@@ -152,6 +152,20 @@ body {
   animation: flash-red 200ms ease-out;
 }
 
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .price-flash-up,
+  .price-flash-down {
+    animation: none;
+  }
+  
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Slide in animation for error toasts */
 @keyframes slide-in {
   from {

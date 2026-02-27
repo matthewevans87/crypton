@@ -1,8 +1,10 @@
 import { useDashboardStore } from '../../store/dashboard';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export function AgentStatePanel() {
   const { agent } = useDashboardStore();
   const state = agent.loop?.agentState;
+  const reducedMotion = useReducedMotion();
 
   if (!state) {
     return <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>;
@@ -20,7 +22,7 @@ export function AgentStatePanel() {
             height: '8px',
             borderRadius: '50%',
             backgroundColor: stateColor,
-            animation: state.isRunning ? 'pulse 1.5s infinite' : 'none',
+            animation: reducedMotion || !state.isRunning ? 'none' : 'pulse 1.5s infinite',
           }}
         />
         <span

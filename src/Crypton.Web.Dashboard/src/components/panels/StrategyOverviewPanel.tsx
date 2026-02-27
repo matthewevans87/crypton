@@ -1,8 +1,10 @@
 import { useDashboardStore } from '../../store/dashboard';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export function StrategyOverviewPanel() {
   const { strategy } = useDashboardStore();
   const current = strategy.current?.overview;
+  const reducedMotion = useReducedMotion();
 
   if (!current) {
     return <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>;
@@ -34,7 +36,7 @@ export function StrategyOverviewPanel() {
               height: '8px',
               borderRadius: '50%',
               backgroundColor: 'var(--color-active)',
-              animation: 'pulse 2s infinite',
+              animation: reducedMotion ? 'none' : 'pulse 2s infinite',
             }}
           />
           <span style={{ color: modeColor, fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-sm)', textTransform: 'uppercase' }}>
