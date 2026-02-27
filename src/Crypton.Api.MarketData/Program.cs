@@ -56,13 +56,34 @@ try
     {
         cache.SetPrice(ticker);
         metrics.RecordPriceUpdateLatency(TimeSpan.Zero);
+        
+        var symbol = ticker.Asset;
+        
         _ = hubContext.Clients.All.OnPriceUpdate(ticker);
+        _ = hubContext.Clients.Group($"symbol_{symbol}").OnPriceUpdate(ticker);
+        _ = hubContext.Clients.Group("prices").OnPriceUpdate(ticker);
     };
 
     exchangeAdapter.OnOrderBookUpdate += (sender, orderBook) =>
     {
         cache.SetOrderBook(orderBook);
+        
         _ = hubContext.Clients.All.OnOrderBookUpdate(orderBook);
+        _ = hubContext.Clients.Group($"symbol_{orderBook.Symbol}").OnOrderBookUpdate(orderBook);
+    };
+
+    exchangeAdapter.OnTrade += (sender, trade) =>
+    {
+        var symbol = trade.Symbol;
+        
+        _ = hubContext.Clients.All.OnTrade(trade);
+        _ = hubContext.Clients.Group($"trades_{symbol}").OnTrade(trade);
+    };
+
+    exchangeAdapter.OnBalanceUpdate += (sender, balances) =>
+    {
+        _ = hubContext.Clients.All.OnBalanceUpdate(balances);
+        _ = hubContext.Clients.Group("balance").OnBalanceUpdate(balances);
     };
 
     exchangeAdapter.OnConnectionStateChanged += (sender, isConnected) =>
@@ -71,11 +92,6 @@ try
         metrics.RecordConnectionStateChanged(isConnected);
         metrics.RecordWsConnected(isConnected);
         _ = hubContext.Clients.All.OnConnectionStatus(isConnected);
-    };
-
-    exchangeAdapter.OnTrade += (sender, trade) =>
-    {
-        _ = hubContext.Clients.All.OnTrade(trade);
     };
 
     _ = Task.Run(async () =>

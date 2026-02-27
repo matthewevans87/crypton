@@ -49,6 +49,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     public event EventHandler<PriceTicker>? OnPriceUpdate;
     public event EventHandler<OrderBook>? OnOrderBookUpdate;
     public event EventHandler<Trade>? OnTrade;
+    public event EventHandler<List<Balance>>? OnBalanceUpdate;
     public event EventHandler<bool>? OnConnectionStateChanged;
 
     private static readonly Dictionary<string, string> SymbolMapping = new()
@@ -288,6 +289,8 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         _logger.LogInformation("Subscribed to trade channel for {Symbols}", string.Join(", ", krakenSymbols));
     }
 
+    private CancellationTokenSource? _balanceUpdateCts;
+    
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
     {
         _shouldReconnect = true;
@@ -299,14 +302,53 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _logger.LogWarning("Initial connection failed, starting reconnect loop");
             _ = Task.Run(() => StartReconnectLoopAsync(cancellationToken), cancellationToken);
         }
+        else
+        {
+            StartBalanceUpdateTimer();
+        }
 
         return connected;
+    }
+
+    private void StartBalanceUpdateTimer()
+    {
+        if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
+        {
+            _logger.LogDebug("Skipping balance updates - API keys not configured");
+            return;
+        }
+
+        _balanceUpdateCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            while (!_balanceUpdateCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), _balanceUpdateCts.Token);
+                    var balances = await GetBalanceAsync(_balanceUpdateCts.Token);
+                    if (balances.Count > 0)
+                    {
+                        OnBalanceUpdate?.Invoke(this, balances);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error fetching balance for updates");
+                }
+            }
+        }, _balanceUpdateCts.Token);
     }
 
     public async Task DisconnectAsync()
     {
         _shouldReconnect = false;
         _webSocketCts?.Cancel();
+        _balanceUpdateCts?.Cancel();
 
         if (_webSocket?.State == WebSocketState.Open)
         {

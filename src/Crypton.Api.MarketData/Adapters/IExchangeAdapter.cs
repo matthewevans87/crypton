@@ -18,6 +18,7 @@ public interface IExchangeAdapter
     event EventHandler<PriceTicker>? OnPriceUpdate;
     event EventHandler<OrderBook>? OnOrderBookUpdate;
     event EventHandler<Trade>? OnTrade;
+    event EventHandler<List<Balance>>? OnBalanceUpdate;
     event EventHandler<bool>? OnConnectionStateChanged;
     bool IsConnected { get; }
     int ReconnectCount { get; }
