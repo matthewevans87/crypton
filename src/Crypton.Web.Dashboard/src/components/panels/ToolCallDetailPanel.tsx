@@ -1,5 +1,6 @@
 import { useDashboardStore } from '../../store/dashboard';
 import { formatTimestamp } from '../../utils/dateUtils';
+import { CodeBlock } from '../CodeBlock';
 
 export function ToolCallDetailPanel() {
   const { agent, selectedToolCallId, setSelectedToolCall } = useDashboardStore();
@@ -86,39 +87,16 @@ export function ToolCallDetailPanel() {
 
         <div style={{ marginBottom: 'var(--space-3)' }}>
           <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>Input</div>
-          <div style={{
-            backgroundColor: 'var(--bg-viewport)',
-            padding: 'var(--space-2)',
-            borderRadius: '2px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            maxHeight: '200px',
-            overflow: 'auto',
-          }}>
-            {toolCall.input || '(No input)'}
-          </div>
+          <CodeBlock code={toolCall.input || '(No input)'} maxHeight="200px" />
         </div>
 
         {toolCall.output && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <div style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>Output</div>
-            <div style={{
-              backgroundColor: 'var(--bg-viewport)',
-              padding: 'var(--space-2)',
-              borderRadius: '2px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '11px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              maxHeight: '300px',
-              overflow: 'auto',
-            }}>
-              {typeof toolCall.output === 'string'
-                ? toolCall.output
-                : JSON.stringify(toolCall.output, null, 2)}
-            </div>
+            <CodeBlock 
+              code={typeof toolCall.output === 'string' ? toolCall.output : JSON.stringify(toolCall.output, null, 2)} 
+              maxHeight="300px" 
+            />
           </div>
         )}
       </div>
