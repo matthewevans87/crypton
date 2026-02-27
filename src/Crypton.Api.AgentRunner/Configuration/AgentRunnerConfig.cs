@@ -53,6 +53,7 @@ public class ToolConfig
 {
     public BraveSearchConfig BraveSearch { get; set; } = new();
     public ExecutionServiceConfig ExecutionService { get; set; } = new();
+    public MarketDataServiceConfig MarketDataService { get; set; } = new();
     public int DefaultTimeoutSeconds { get; set; } = 30;
     public int CacheTtlSeconds { get; set; } = 60;
 }
@@ -65,6 +66,11 @@ public class BraveSearchConfig
 public class ExecutionServiceConfig
 {
     public string BaseUrl { get; set; } = "http://localhost:5000";
+}
+
+public class MarketDataServiceConfig
+{
+    public string BaseUrl { get; set; } = "http://localhost:5002";
 }
 
 public class StorageConfig

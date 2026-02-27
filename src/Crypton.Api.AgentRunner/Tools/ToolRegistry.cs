@@ -26,10 +26,11 @@ public class ToolRegistry
         var webFetchTool = new WebFetchTool(httpClient);
         var currentPositionTool = new CurrentPositionTool(
             httpClient, 
-            config.Tools.ExecutionService.BaseUrl,
+            config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
         var technicalIndicatorsTool = new TechnicalIndicatorsTool(
             httpClient, 
+            config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
         var birdTool = new BirdTool(config.Tools.DefaultTimeoutSeconds);
 

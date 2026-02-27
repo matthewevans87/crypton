@@ -6,23 +6,23 @@ namespace AgentRunner.Tools;
 public class CurrentPositionTool : Tool
 {
     private readonly HttpClient _httpClient;
-    private readonly string _baseUrl;
+    private readonly string _marketDataServiceUrl;
     private readonly TimeSpan _cacheTtl;
     private DateTime _lastFetch;
     private object? _cachedResult;
 
     public override string Name => "current_position";
-    public override string Description => "Retrieves the current portfolio state from the Execution Service";
+    public override string Description => "Retrieves the current portfolio/balance from the Market Data Service";
     public override ToolParameterSchema? Parameters => new()
     {
         Type = "object",
         Properties = new Dictionary<string, ToolParameterProperty>()
     };
 
-    public CurrentPositionTool(HttpClient httpClient, string baseUrl, int cacheTtlSeconds = 60)
+    public CurrentPositionTool(HttpClient httpClient, string marketDataServiceUrl, int cacheTtlSeconds = 60)
     {
         _httpClient = httpClient;
-        _baseUrl = baseUrl.TrimEnd('/');
+        _marketDataServiceUrl = marketDataServiceUrl.TrimEnd('/');
         _cacheTtl = TimeSpan.FromSeconds(cacheTtlSeconds);
     }
 
@@ -35,7 +35,7 @@ public class CurrentPositionTool : Tool
 
         try
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/portfolio", cancellationToken);
+            var response = await _httpClient.GetAsync($"{_marketDataServiceUrl}/api/portfolio/summary", cancellationToken);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -43,7 +43,7 @@ public class CurrentPositionTool : Tool
                 return new ToolResult 
                 { 
                     Success = false, 
-                    Error = $"Execution Service error: {response.StatusCode} - {errorContent}" 
+                    Error = $"Market Data Service error: {response.StatusCode} - {errorContent}" 
                 };
             }
 
@@ -56,7 +56,7 @@ public class CurrentPositionTool : Tool
         }
         catch (HttpRequestException ex)
         {
-            return new ToolResult { Success = false, Error = $"Connection failed: {ex.Message}" };
+            return new ToolResult { Success = false, Error = $"Market data service unavailable: {ex.Message}" };
         }
         catch (TaskCanceledException)
         {

@@ -5,6 +5,7 @@ namespace AgentRunner.Tools;
 public class TechnicalIndicatorsTool : Tool
 {
     private readonly HttpClient _httpClient;
+    private readonly string _marketDataServiceUrl;
     private readonly Dictionary<string, (DateTime Timestamp, object Data)> _cache = new();
     private readonly int _cacheTtlSeconds;
 
@@ -26,9 +27,10 @@ public class TechnicalIndicatorsTool : Tool
         Required = new List<string> { "asset", "timeframe" }
     };
 
-    public TechnicalIndicatorsTool(HttpClient httpClient, int cacheTtlSeconds = 60)
+    public TechnicalIndicatorsTool(HttpClient httpClient, string marketDataServiceUrl, int cacheTtlSeconds = 60)
     {
         _httpClient = httpClient;
+        _marketDataServiceUrl = marketDataServiceUrl.TrimEnd('/');
         _cacheTtlSeconds = cacheTtlSeconds;
     }
 
@@ -60,7 +62,8 @@ public class TechnicalIndicatorsTool : Tool
 
         try
         {
-            var url = $"/api/indicators/{asset}?timeframe={timeframe}";
+            var symbol = asset.ToUpper() + "/USD";
+            var url = $"{_marketDataServiceUrl}/api/indicators?symbol={symbol}&timeframe={timeframe}";
             if (indicators.Any())
             {
                 url += $"&indicators={string.Join(",", indicators)}";
@@ -70,7 +73,7 @@ public class TechnicalIndicatorsTool : Tool
             
             if (!response.IsSuccessStatusCode)
             {
-                return new ToolResult { Success = false, Error = $"HTTP error: {response.StatusCode}" };
+                return new ToolResult { Success = false, Error = $"Market Data Service error: {response.StatusCode}" };
             }
 
             var data = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
@@ -78,6 +81,14 @@ public class TechnicalIndicatorsTool : Tool
             _cache[cacheKey] = (DateTime.UtcNow, data);
 
             return new ToolResult { Success = true, Data = data };
+        }
+        catch (HttpRequestException ex)
+        {
+            return new ToolResult { Success = false, Error = $"Market data service unavailable: {ex.Message}" };
+        }
+        catch (TaskCanceledException)
+        {
+            return new ToolResult { Success = false, Error = "Request timed out" };
         }
         catch (Exception ex)
         {
