@@ -55,7 +55,7 @@ jobs:
     needs: build
     steps:
       - name: Deploy all services
-        run: docker compose -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build --pull never --env-file /home/matthew-evans/.config/crypton/.env
+        run: docker compose --env-file /home/matthew-evans/.config/crypton/.env -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build --pull never
 
   verify:
     runs-on: self-hosted
