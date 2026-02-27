@@ -1,9 +1,8 @@
 import { useDashboardStore } from '../../store/dashboard';
 
 export function StatusBar() {
-  const { portfolio, agent, toggleCommandPalette } = useDashboardStore();
+  const { portfolio, agent, toggleCommandPalette, connectionStatus } = useDashboardStore();
   
-  const connectionStatus = 'connected'; // This would come from SignalR
   const statusColor = connectionStatus === 'connected' 
     ? 'var(--color-active)' 
     : connectionStatus === 'connecting' 

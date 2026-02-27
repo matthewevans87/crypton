@@ -132,3 +132,38 @@ body {
   background: var(--color-info);
   color: var(--text-primary);
 }
+
+/* Price flash animations - RT-009, RT-010 */
+@keyframes flash-green {
+  0% { background-color: rgba(0, 255, 200, 0.3); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: rgba(255, 68, 102, 0.3); }
+  100% { background-color: transparent; }
+}
+
+.price-flash-up {
+  animation: flash-green 200ms ease-out;
+}
+
+.price-flash-down {
+  animation: flash-red 200ms ease-out;
+}
+
+/* Slide in animation for error toasts */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 200ms ease-out;
+}

@@ -1,7 +1,7 @@
 import { useDashboardStore } from '../../store/dashboard';
 
 export function ToolCallsPanel() {
-  const { agent } = useDashboardStore();
+  const { agent, selectedToolCallId, setSelectedToolCall } = useDashboardStore();
   const toolCalls = agent.toolCalls;
 
   if (toolCalls.length === 0) {
@@ -13,12 +13,16 @@ export function ToolCallsPanel() {
       {toolCalls.slice(0, 10).map((call) => (
         <div
           key={call.id}
+          onClick={() => setSelectedToolCall(call.id)}
           style={{
             padding: '4px 6px',
             backgroundColor: call.isError ? 'rgba(255, 68, 102, 0.1)' : 'transparent',
-            border: '1px solid var(--border-default)',
+            border: selectedToolCallId === call.id 
+              ? '1px solid var(--color-info)' 
+              : '1px solid var(--border-default)',
             borderRadius: '2px',
             fontSize: 'var(--font-size-xs)',
+            cursor: 'pointer',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

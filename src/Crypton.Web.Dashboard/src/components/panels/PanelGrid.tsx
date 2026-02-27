@@ -15,6 +15,9 @@ import { DailyLossLimitPanel } from '../panels/DailyLossLimitPanel';
 import { LoopTimelinePanel } from '../panels/LoopTimelinePanel';
 import { EvaluationRatingPanel } from '../panels/EvaluationRatingPanel';
 import { CycleHistoryPanel } from '../panels/CycleHistoryPanel';
+import { ToolCallDetailPanel } from '../panels/ToolCallDetailPanel';
+import { LastCycleSummaryPanel } from '../panels/LastCycleSummaryPanel';
+import { CycleDetailPanel } from '../panels/CycleDetailPanel';
 
 const GRID_SIZE = 8;
 const MIN_PANEL_WIDTH = 200;
@@ -45,6 +48,9 @@ const PANEL_COMPONENTS: Record<string, React.FC<{ config?: Record<string, unknow
   'evaluation-rating': EvaluationRatingPanel,
   'reasoning-trace': ReasoningTracePanel,
   'tool-calls': ToolCallsPanel,
+  'tool-call-detail': ToolCallDetailPanel,
+  'last-cycle-summary': LastCycleSummaryPanel,
+  'cycle-detail': CycleDetailPanel,
 };
 
 function snapToGrid(value: number): number {

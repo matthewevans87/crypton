@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { useDashboardStore } from './store/dashboard';
+import { useErrorStore } from './store/errors';
 import { api } from './services/api';
 import { signalRService } from './services/signalr';
+import { poller, getSmartInterval, pollIntervals } from './services/polling';
 import { TabBar } from './components/layout/TabBar';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { StatusBar } from './components/layout/StatusBar';
 import { PanelGrid } from './components/panels/PanelGrid';
+import { ErrorToast } from './components/ErrorToast';
 import type { PortfolioSummary, Strategy, PriceTicker, LoopStatus, CyclePerformance, Holding, Position, Trade, ToolCall, ReasoningStep, EvaluationSummary } from './types';
 
 function App() {
@@ -24,9 +27,42 @@ function App() {
     addTab,
     maximizedPanelId,
     setMaximizedPanel,
+    setConnectionStatus,
   } = useDashboardStore();
 
   const market = useDashboardStore((state) => state.market);
+  const agent = useDashboardStore((state) => state.agent);
+
+  const startPolling = () => {
+    const agentIsRunning = agent.loop?.agentState?.isRunning ?? false;
+
+    poller.start('marketData', async () => {
+      try {
+        const prices = await api.market.prices() as PriceTicker[];
+        setMarketData({ prices });
+      } catch (error) {
+        console.error('Polling error (market):', error);
+      }
+    }, { interval: getSmartInterval('marketData', agentIsRunning) });
+
+    poller.start('positions', async () => {
+      try {
+        const positions = await api.portfolio.positions() as Position[];
+        setPortfolioData({ positions });
+      } catch (error) {
+        console.error('Polling error (positions):', error);
+      }
+    }, { interval: getSmartInterval('positions', agentIsRunning) });
+
+    poller.start('strategy', async () => {
+      try {
+        const strategy = await api.strategy.current() as Strategy;
+        setStrategyData({ current: strategy });
+      } catch (error) {
+        console.error('Polling error (strategy):', error);
+      }
+    }, { interval: getSmartInterval('strategy', agentIsRunning) });
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,6 +86,8 @@ function App() {
         setPerformanceData({ currentCycle: cyclePerformance, evaluation });
       } catch (error) {
         console.error('Failed to load data:', error);
+        poller.enable();
+        startPolling();
       }
     };
 
@@ -79,6 +117,15 @@ function App() {
       onCycleCompleted: (cycle) => {
         setPerformanceData({ currentCycle: cycle });
       },
+      onConnected: () => {
+        setConnectionStatus('connected');
+        poller.disable();
+      },
+      onDisconnected: () => {
+        setConnectionStatus('disconnected');
+        poller.enable();
+        startPolling();
+      },
     });
 
     signalRService.connect();
@@ -86,6 +133,7 @@ function App() {
     return () => {
       signalRService.unsubscribe();
       signalRService.disconnect();
+      poller.stopAll();
     };
   }, []);
 
@@ -158,6 +206,7 @@ function App() {
       <StatusBar />
       {activeTab && <PanelGrid panels={activeTab.panels} />}
       {commandPaletteOpen && <CommandPalette />}
+      <ErrorToast />
     </div>
   );
 }

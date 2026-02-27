@@ -76,6 +76,8 @@ interface DashboardState {
   commandPaletteOpen: boolean;
   recentCommands: string[];
   panelGlows: Record<string, { type: 'info' | 'warning' | 'error' | 'success'; message: string }>;
+  selectedToolCallId: string | null;
+  connectionStatus: 'connected' | 'connecting' | 'disconnected';
   
   // Data State
   portfolio: {
@@ -122,6 +124,8 @@ interface DashboardState {
   addRecentCommand: (commandId: string) => void;
   setPanelGlow: (panelId: string, type: 'info' | 'warning' | 'error' | 'success', message: string, duration?: number) => void;
   clearPanelGlow: (panelId: string) => void;
+  setSelectedToolCall: (id: string | null) => void;
+  setConnectionStatus: (status: 'connected' | 'connecting' | 'disconnected') => void;
   
   setPortfolioData: (data: Partial<DashboardState['portfolio']>) => void;
   setStrategyData: (data: Partial<DashboardState['strategy']>) => void;
@@ -167,6 +171,8 @@ export const useDashboardStore = create<DashboardState>()(
       commandPaletteOpen: false,
       recentCommands: [],
       panelGlows: {},
+      selectedToolCallId: null,
+      connectionStatus: 'disconnected',
       
       // Initial Data State
       portfolio: {
@@ -343,6 +349,10 @@ export const useDashboardStore = create<DashboardState>()(
         const { [panelId]: _, ...rest } = state.panelGlows;
         return { panelGlows: rest };
       }),
+      
+      setSelectedToolCall: (id) => set({ selectedToolCallId: id }),
+      
+      setConnectionStatus: (status) => set({ connectionStatus: status }),
       
       // Data Actions
       setPortfolioData: (data) => set((state) => ({

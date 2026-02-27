@@ -9,6 +9,13 @@ import type {
   CyclePerformance, 
   EvaluationSummary 
 } from '../types';
+import { messageQueue } from './messageQueue';
+import { createThrottle, batchUpdates } from '../utils/throttle';
+
+const WS_BASE_URL = process.env.REACT_APP_WS_BASE_URL || '';
+
+const MAX_UPDATES_PER_SECOND = 10;
+const DEFAULT_HUB_PATH = '/hubs/dashboard';
 
 type EventHandlers = {
   onPortfolioUpdated?: (data: PortfolioSummary) => void;
@@ -27,8 +34,17 @@ type EventHandlers = {
 let hubConnection: signalR.HubConnection | null = null;
 let handlers: EventHandlers = {};
 
+const throttledPriceUpdates = batchUpdates<PriceTicker>((updates) => {
+  updates.forEach((data) => handlers.onPriceUpdated?.(data));
+}, 100);
+
+const throttledPortfolioUpdates = batchUpdates<PortfolioSummary>((updates) => {
+  const latest = updates[updates.length - 1];
+  handlers.onPortfolioUpdated?.(latest);
+}, 100);
+
 export const signalRService = {
-  connect: (url = '/hubs/dashboard') => {
+  connect: (url = `${WS_BASE_URL}${DEFAULT_HUB_PATH}`) => {
     if (hubConnection?.state === signalR.HubConnectionState.Connected) {
       return;
     }
@@ -40,11 +56,31 @@ export const signalRService = {
       .build();
 
     hubConnection.on('PortfolioUpdated', (data: PortfolioSummary) => {
+      if (hubConnection?.state !== signalR.HubConnectionState.Connected) {
+        messageQueue.enqueue('PortfolioUpdated', data);
+        return;
+      }
       handlers.onPortfolioUpdated?.(data);
     });
 
+    hubConnection.on('PositionUpdated', (data: { asset: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number }) => {
+      handlers.onPortfolioUpdated?.({
+        totalValue: data.currentPrice * data.quantity,
+        realizedPnL: data.pnl,
+        unrealizedPnL: 0,
+      } as PortfolioSummary);
+    });
+
+    hubConnection.on('PositionClosed', (data: { asset: string }) => {
+      console.log('Position closed:', data.asset);
+    });
+
     hubConnection.on('PriceUpdated', (data: PriceTicker) => {
-      handlers.onPriceUpdated?.(data);
+      if (hubConnection?.state !== signalR.HubConnectionState.Connected) {
+        messageQueue.enqueue('PriceUpdated', data);
+        return;
+      }
+      throttledPriceUpdates(data);
     });
 
     hubConnection.on('AgentStateChanged', (data: AgentState) => {
@@ -85,6 +121,25 @@ export const signalRService = {
 
     hubConnection.onreconnecting(() => {
       console.log('SignalR reconnecting...');
+      messageQueue.replay((message) => {
+        switch (message.type) {
+          case 'PortfolioUpdated':
+            handlers.onPortfolioUpdated?.(message.data as PortfolioSummary);
+            break;
+          case 'PriceUpdated':
+            handlers.onPriceUpdated?.(message.data as PriceTicker);
+            break;
+          case 'AgentStateChanged':
+            handlers.onAgentStateChanged?.(message.data as AgentState);
+            break;
+          case 'StrategyUpdated':
+            handlers.onStrategyUpdated?.(message.data as Strategy);
+            break;
+          case 'CycleCompleted':
+            handlers.onCycleCompleted?.(message.data as CyclePerformance);
+            break;
+        }
+      });
     });
 
     hubConnection.onreconnected(() => {
