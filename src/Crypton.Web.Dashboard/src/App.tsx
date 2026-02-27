@@ -94,7 +94,7 @@ function App() {
 
     signalRService.subscribe({
       onPriceUpdated: (ticker: PriceTicker) => {
-        const currentPrices = market.prices || [];
+        const currentPrices = useDashboardStore.getState().market.prices || [];
         const existingIndex = currentPrices.findIndex(p => p.asset === ticker.asset);
         if (existingIndex >= 0) {
           const updatedPrices = [...currentPrices];

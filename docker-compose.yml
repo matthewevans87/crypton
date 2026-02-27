@@ -67,6 +67,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5001
       - MarketDataService__Url=http://market-data-service:5002
+    depends_on:
+      market-data-service:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: "json-file"

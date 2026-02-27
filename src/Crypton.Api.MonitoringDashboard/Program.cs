@@ -63,14 +63,26 @@ marketDataClient.OnConnectionStatus += (sender, isConnected) =>
     logger.LogInformation("Market Data Service connection status changed: {IsConnected}", isConnected);
 };
 
-try
+_ = Task.Run(async () =>
 {
-    await marketDataClient.ConnectAsync();
-}
-catch (Exception ex)
-{
-    logger.LogError(ex, "Failed to connect to Market Data Service");
-}
+    while (true)
+    {
+        try
+        {
+            if (!marketDataClient.IsConnected)
+            {
+                await marketDataClient.ConnectAsync();
+                logger.LogInformation("Connected to Market Data Service");
+            }
+            break;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to connect to Market Data Service, retrying in 5s...");
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+    }
+});
 
 app.UseSerilogRequestLogging();
 
