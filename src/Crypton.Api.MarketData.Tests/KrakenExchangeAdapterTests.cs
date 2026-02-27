@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.Json;
 using MarketDataService.Adapters;
 using MarketDataService.Models;
 using Microsoft.Extensions.Logging;
@@ -321,6 +322,118 @@ public class KrakenExchangeAdapterTests
                 }
             }
         }";
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithValidData_ReturnsTrade()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""1234567890"", ""b""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.NotNull(result);
+        Assert.Equal("BTC/USD_1234567890", result.Id);
+        Assert.Equal("BTC/USD", result.Symbol);
+        Assert.Equal(50000.5m, result.Price);
+        Assert.Equal(0.5m, result.Quantity);
+        Assert.Equal("b", result.Side);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithInsufficientData_ReturnsNull()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithEmptyArray_ReturnsNull()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithInvalidPrice_ReturnsNull()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""invalid"", ""0.5"", ""1234567890"", ""b""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithInvalidQuantity_ReturnsNull()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""invalid"", ""1234567890"", ""b""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithSellSide_ReturnsCorrectSide()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""1234567890"", ""s""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "ETH/USD" }) as Trade;
+        
+        Assert.NotNull(result);
+        Assert.Equal("s", result.Side);
+    }
+
+    [Fact]
+    public void ParseTradeUpdate_WithZeroTimestamp_ReturnsEpochTime()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object);
+        
+        var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate", 
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""0"", ""b""]");
+        
+        var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
+        
+        Assert.NotNull(result);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(0).UtcDateTime, result.Timestamp);
     }
 }
 

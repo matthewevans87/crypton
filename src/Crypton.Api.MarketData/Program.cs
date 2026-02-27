@@ -73,6 +73,11 @@ try
         _ = hubContext.Clients.All.OnConnectionStatus(isConnected);
     };
 
+    exchangeAdapter.OnTrade += (sender, trade) =>
+    {
+        _ = hubContext.Clients.All.OnTrade(trade);
+    };
+
     _ = Task.Run(async () =>
     {
         try
