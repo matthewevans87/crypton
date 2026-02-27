@@ -89,6 +89,7 @@ export const signalRService = {
 
     hubConnection.onreconnected(() => {
       handlers.onConnected?.();
+      console.log('SignalR reconnected');
     });
 
     hubConnection.start()

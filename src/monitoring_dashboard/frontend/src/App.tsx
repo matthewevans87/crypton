@@ -26,6 +26,8 @@ function App() {
     setMaximizedPanel,
   } = useDashboardStore();
 
+  const market = useDashboardStore((state) => state.market);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -53,9 +55,36 @@ function App() {
 
     loadData();
 
+    signalRService.subscribe({
+      onPriceUpdated: (ticker: PriceTicker) => {
+        const currentPrices = market.prices || [];
+        const existingIndex = currentPrices.findIndex(p => p.asset === ticker.asset);
+        if (existingIndex >= 0) {
+          const updatedPrices = [...currentPrices];
+          updatedPrices[existingIndex] = ticker;
+          setMarketData({ prices: updatedPrices });
+        } else {
+          setMarketData({ prices: [...currentPrices, ticker] });
+        }
+      },
+      onPortfolioUpdated: (summary: PortfolioSummary) => {
+        setPortfolioData({ summary });
+      },
+      onAgentStateChanged: (state) => {
+        setAgentData({ state });
+      },
+      onStrategyUpdated: (strategy) => {
+        setStrategyData({ current: strategy });
+      },
+      onCycleCompleted: (cycle) => {
+        setPerformanceData({ currentCycle: cycle });
+      },
+    });
+
     signalRService.connect();
 
     return () => {
+      signalRService.unsubscribe();
       signalRService.disconnect();
     };
   }, []);
