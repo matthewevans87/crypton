@@ -6,8 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test AgentRunner
+        run: dotnet test src/Crypton.Api.AgentRunner.Tests/Crypton.Api.AgentRunner.Tests.csproj --verbosity normal
+
+      - name: Test MarketData
+        run: dotnet test src/Crypton.Api.MarketData.Tests/Crypton.Api.MarketData.Tests.csproj --verbosity normal
+
   build:
     runs-on: self-hosted
+    needs: test
     permissions:
       contents: read
     steps:
