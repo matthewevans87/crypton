@@ -4,6 +4,7 @@ import { PortfolioSummaryPanel } from '../panels/PortfolioSummaryPanel';
 import { StrategyOverviewPanel } from '../panels/StrategyOverviewPanel';
 import { AgentStatePanel } from '../panels/AgentStatePanel';
 import { PriceTickerPanel } from '../panels/PriceTickerPanel';
+import { PriceChartPanel } from '../panels/PriceChartPanel';
 import { CyclePerformancePanel } from '../panels/CyclePerformancePanel';
 import { HoldingsPanel } from '../panels/HoldingsPanel';
 import { OpenPositionsPanel } from '../panels/OpenPositionsPanel';
@@ -38,7 +39,7 @@ const PANEL_COMPONENTS: Record<string, React.FC<{ config?: Record<string, unknow
   'agent-state': AgentStatePanel,
   'agent-activity': AgentStatePanel,
   'price-ticker': PriceTickerPanel,
-  'price-chart': PriceTickerPanel,
+  'price-chart': PriceChartPanel,
   'technical-indicators': TechnicalIndicatorsPanel,
   'cycle-performance': CyclePerformancePanel,
   'daily-loss-limit': DailyLossLimitPanel,
