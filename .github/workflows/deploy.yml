@@ -25,43 +25,27 @@ jobs:
 
       - name: Build Agent Runner
         run: |
-          for attempt in 1 2 3; do
-            docker build --no-cache --load --provenance=false \
-              --tag crypton-agent-runner:latest \
-              -f src/Crypton.Api.AgentRunner/Dockerfile . && break
-            echo "Attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
+          docker build --no-cache --load --provenance=false \
+            --tag crypton-agent-runner:latest \
+            -f src/Crypton.Api.AgentRunner/Dockerfile .
 
       - name: Build Monitoring Dashboard Backend
         run: |
-          for attempt in 1 2 3; do
-            docker build --no-cache --load --provenance=false \
-              --tag crypton-monitoring-dashboard-api:latest \
-              -f src/Crypton.Api.MonitoringDashboard/Dockerfile . && break
-            echo "Attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
+          docker build --no-cache --load --provenance=false \
+            --tag crypton-monitoring-dashboard-api:latest \
+            -f src/Crypton.Api.MonitoringDashboard/Dockerfile .
 
       - name: Build Monitoring Dashboard Frontend
         run: |
-          for attempt in 1 2 3; do
-            docker build --no-cache --load --provenance=false \
-              --tag crypton-monitoring-dashboard-web:latest \
-              -f src/Crypton.Web.Dashboard/Dockerfile . && break
-            echo "Attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
+          docker build --no-cache --load --provenance=false \
+            --tag crypton-monitoring-dashboard-web:latest \
+            -f src/Crypton.Web.Dashboard/Dockerfile .
 
       - name: Build Market Data Service
         run: |
-          for attempt in 1 2 3; do
-            docker build --no-cache --load --provenance=false \
-              --tag crypton-market-data-service:latest \
-              -f src/Crypton.Api.MarketData/Dockerfile . && break
-            echo "Attempt $attempt failed, retrying in 15s..."
-            sleep 15
-          done
+          docker build --no-cache --load --provenance=false \
+            --tag crypton-market-data-service:latest \
+            -f src/Crypton.Api.MarketData/Dockerfile .
 
       - name: Prune dangling images
         run: docker image prune -f
@@ -71,7 +55,7 @@ jobs:
     needs: build
     steps:
       - name: Deploy all services
-        run: docker compose -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build
+        run: docker compose -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build --pull never --env-file /home/matthew-evans/.config/crypton/.env
 
   verify:
     runs-on: self-hosted
