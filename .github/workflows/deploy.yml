@@ -20,6 +20,9 @@ jobs:
       - name: Test MarketData
         run: dotnet test src/Crypton.Api.MarketData.Tests/Crypton.Api.MarketData.Tests.csproj --verbosity normal
 
+      - name: Test ExecutionService
+        run: dotnet test src/Crypton.Api.ExecutionService.Tests/Crypton.Api.ExecutionService.Tests.csproj --verbosity normal
+
   build:
     runs-on: self-hosted
     needs: test
@@ -34,7 +37,7 @@ jobs:
 
       - name: Clean up old images
         run: |
-          for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service; do
+          for service in agent-runner monitoring-dashboard-api monitoring-dashboard-web market-data-service execution-service; do
             docker rmi crypton-$service:latest || true
           done
 
@@ -62,6 +65,12 @@ jobs:
             --tag crypton-market-data-service:latest \
             -f src/Crypton.Api.MarketData/Dockerfile .
 
+      - name: Build Execution Service
+        run: |
+          docker build --no-cache --load --provenance=false \
+            --tag crypton-execution-service:latest \
+            -f src/Crypton.Api.ExecutionService/Dockerfile .
+
       - name: Prune dangling images
         run: docker image prune -f
 
@@ -83,7 +92,7 @@ jobs:
 
           echo ""
           echo "Container logs:"
-          for container in crypton-agent-runner crypton-market-data-service crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web; do
+          for container in crypton-agent-runner crypton-market-data-service crypton-execution-service crypton-monitoring-dashboard-api crypton-monitoring-dashboard-web; do
             echo "=== $container (last 5 lines) ==="
             docker logs --tail 5 $container 2>&1 || true
           done
@@ -101,3 +110,4 @@ jobs:
           echo "  - Dashboard API:       http://localhost:5001"
           echo "  - Market Data Service: http://localhost:5002"
           echo "  - Agent Runner:        http://localhost:5003"
+          echo "  - Execution Service:   http://localhost:5004"
