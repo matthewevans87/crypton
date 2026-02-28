@@ -13,6 +13,9 @@ src/**/State/
 config.yaml
 .env
 
+# Local appsettings overrides (may contain environment-specific secrets)
+appsettings.*.json
+
 docs/notes
 
 # GitHub Actions runner internals

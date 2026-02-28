@@ -1,5 +1,9 @@
+using Crypton.Configuration;
 using Crypton.Api.ExecutionService.Cli;
 using Crypton.Api.ExecutionService.Configuration;
+
+// Load .env file before the host builder so values flow into IConfiguration.
+DotEnvLoader.Load();
 
 var cliVerbs = new[] { "status", "safe-mode", "strategy", "promote-to-live", "demote-to-paper" };
 

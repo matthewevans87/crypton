@@ -7,5 +7,7 @@
     <Project Path="src/Crypton.Api.MarketData.Tests/Crypton.Api.MarketData.Tests.csproj" />
     <Project Path="src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj" />
     <Project Path="src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj" />
+    <Project Path="src/Crypton.Configuration/Crypton.Configuration.csproj" />
+    <Project Path="src/Crypton.Configuration.Tests/Crypton.Configuration.Tests.csproj" />
   </Folder>
 </Solution>

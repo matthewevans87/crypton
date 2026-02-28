@@ -9,13 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="config.yaml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="YamlDotNet" Version="15.1.0" />
+    <ProjectReference Include="..\Crypton.Configuration\Crypton.Configuration.csproj" />
   </ItemGroup>
 
   <ItemGroup>

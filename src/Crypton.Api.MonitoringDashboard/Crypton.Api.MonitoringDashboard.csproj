@@ -17,4 +17,8 @@
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Crypton.Configuration\Crypton.Configuration.csproj" />
+  </ItemGroup>
+
 </Project>

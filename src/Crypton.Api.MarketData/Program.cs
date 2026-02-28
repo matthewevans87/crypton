@@ -1,3 +1,4 @@
+using Crypton.Configuration;
 using MarketDataService.Adapters;
 using MarketDataService.Hubs;
 using MarketDataService.Models;
@@ -5,6 +6,9 @@ using MarketDataService.Services;
 using Microsoft.AspNetCore.SignalR;
 using Scalar.AspNetCore;
 using Serilog;
+
+// Load .env file before the host builder so values flow into IConfiguration.
+DotEnvLoader.Load();
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -26,11 +30,12 @@ try
     builder.Services.AddHttpClient();
     builder.Services.AddLogging();
     builder.Services.AddSingleton<IMarketDataCache, InMemoryMarketDataCache>();
-    builder.Services.AddSingleton<IExchangeAdapter>(sp => 
+    builder.Services.AddSingleton<IExchangeAdapter>(sp =>
         new KrakenExchangeAdapter(
             sp.GetRequiredService<HttpClient>(),
             sp.GetRequiredService<ILogger<KrakenExchangeAdapter>>(),
-            sp.GetRequiredService<ILoggerFactory>()));
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetRequiredService<IConfiguration>()));
     builder.Services.AddSingleton<ITechnicalIndicatorService, TechnicalIndicatorService>();
     builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
 
@@ -56,9 +61,9 @@ try
     {
         cache.SetPrice(ticker);
         metrics.RecordPriceUpdateLatency(TimeSpan.Zero);
-        
+
         var symbol = ticker.Asset;
-        
+
         _ = hubContext.Clients.All.OnPriceUpdate(ticker);
         _ = hubContext.Clients.Group($"symbol_{symbol}").OnPriceUpdate(ticker);
         _ = hubContext.Clients.Group("prices").OnPriceUpdate(ticker);
@@ -67,7 +72,7 @@ try
     exchangeAdapter.OnOrderBookUpdate += (sender, orderBook) =>
     {
         cache.SetOrderBook(orderBook);
-        
+
         _ = hubContext.Clients.All.OnOrderBookUpdate(orderBook);
         _ = hubContext.Clients.Group($"symbol_{orderBook.Symbol}").OnOrderBookUpdate(orderBook);
     };
@@ -75,7 +80,7 @@ try
     exchangeAdapter.OnTrade += (sender, trade) =>
     {
         var symbol = trade.Symbol;
-        
+
         _ = hubContext.Clients.All.OnTrade(trade);
         _ = hubContext.Clients.Group($"trades_{symbol}").OnTrade(trade);
     };
@@ -115,15 +120,16 @@ try
     app.MapHub<MarketDataHub>("/hubs/marketdata");
 
     app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
-    app.MapGet("/health/ready", () => 
+    app.MapGet("/health/ready", () =>
     {
         var metricsData = metrics.GetMetrics();
         var isHealthy = metricsData.IsHealthy;
         var status = isHealthy ? "ready" : "degraded";
-        
-        return Results.Ok(new { 
-            status, 
-            exchange = exchangeAdapter.ExchangeName, 
+
+        return Results.Ok(new
+        {
+            status,
+            exchange = exchangeAdapter.ExchangeName,
             connected = exchangeAdapter.IsConnected,
             pricesStale = metrics.IsPricesStale(),
             circuitBreakerState = exchangeAdapter.CircuitBreakerState.ToString()

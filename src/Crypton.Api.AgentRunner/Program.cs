@@ -7,15 +7,25 @@ using AgentRunner.Mailbox;
 using AgentRunner.Telemetry;
 using AgentRunner.StateMachine;
 using AgentRunner.Tools;
+using Crypton.Configuration;
 using Microsoft.Extensions.Hosting;
 using Prometheus;
 using Scalar.AspNetCore;
 using Serilog;
 
+// Load a .env file (if present) into environment variables before the host builder
+// reads IConfiguration. Real environment variables (e.g. from Docker) are never
+// overwritten, so the precedence is: env vars > .env file > appsettings.json.
+DotEnvLoader.Load();
+
 var builder = WebApplication.CreateBuilder(args);
 
-var configLoader = new ConfigLoader("config.yaml");
-var config = configLoader.Load();
+// Bind configuration from IConfiguration (appsettings.json + env vars + cmdline).
+// Secrets are provided via environment variables using the __ hierarchy convention:
+//   Tools__BraveSearch__ApiKey  →  AgentRunnerConfig.Tools.BraveSearch.ApiKey
+//   Api__ApiKey                 →  AgentRunnerConfig.Api.ApiKey
+var config = builder.Configuration.Get<AgentRunnerConfig>()
+    ?? throw new InvalidOperationException("Failed to bind AgentRunnerConfig from IConfiguration.");
 
 var logger = new EventLogger(
     Path.Combine(config.Logging.OutputPath, "agent_runner.log"),
@@ -29,15 +39,11 @@ Log.Logger = new LoggerConfiguration()
 
 Log.Information("Starting Agent Runner...");
 
-var apiKeyManager = new ApiKeyManager();
-if (!apiKeyManager.ValidateApiKeys())
-{
-    Log.Warning("One or more API keys are not configured. Set environment variables: BRAVE_SEARCH_API_KEY");
-}
+if (string.IsNullOrEmpty(config.Tools.BraveSearch.ApiKey))
+    Log.Warning("Brave Search API key not configured. Set env var: Tools__BraveSearch__ApiKey");
 
-apiKeyManager.StartAutoReload(TimeSpan.FromMinutes(5));
-
-configLoader.StartWatching();
+if (string.IsNullOrEmpty(config.Api.ApiKey))
+    Log.Warning("Agent Runner API key not configured. Set env var: Api__ApiKey");
 
 var artifactManager = new ArtifactManager(config.Storage);
 var mailboxManager = new MailboxManager(config.Storage);
@@ -67,7 +73,6 @@ builder.Services.AddSingleton(statePersistence);
 builder.Services.AddSingleton(contextBuilder);
 builder.Services.AddSingleton(agentInvoker);
 builder.Services.AddSingleton(agentRunnerService);
-builder.Services.AddSingleton(configLoader);
 builder.Services.AddSingleton(metricsCollector);
 
 builder.Services.AddControllers();
@@ -102,7 +107,6 @@ lifetime.ApplicationStopping.Register(async () =>
 {
     try
     {
-        configLoader.StopWatching();
         await agentRunnerService.StopAsync();
     }
     catch (Exception ex)

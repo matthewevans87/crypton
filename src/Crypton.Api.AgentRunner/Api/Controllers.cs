@@ -23,7 +23,7 @@ public class ApiKeyAttribute : Attribute, IAsyncAuthorizationFilter
         }
 
         var config = context.HttpContext.RequestServices.GetRequiredService<AgentRunnerConfig>();
-        
+
         if (string.IsNullOrEmpty(config.Api.ApiKey))
         {
             return;
@@ -118,7 +118,7 @@ public class StatusController : ControllerBase
         var errors = new List<object>();
 
         var currentCycle = _agentRunner.CurrentCycle;
-        
+
         foreach (var cycleId in cycles)
         {
             if (currentCycle?.CycleId == cycleId)
@@ -254,9 +254,9 @@ public class HealthController : ControllerBase
     {
         var state = _agentRunner.CurrentState;
         var isReady = state != LoopState.Failed;
-        
-        return isReady 
-            ? Ok(new { status = "ready" }) 
+
+        return isReady
+            ? Ok(new { status = "ready" })
             : StatusCode(503, new { status = "not ready", currentState = state.ToString() });
     }
 }
@@ -267,23 +267,22 @@ public class HealthController : ControllerBase
 public class ConfigController : ControllerBase
 {
     private readonly AgentRunnerService _agentRunner;
-    private readonly Configuration.ConfigLoader _configLoader;
+    private readonly AgentRunnerConfig _config;
 
-    public ConfigController(AgentRunnerService agentRunner, Configuration.ConfigLoader configLoader)
+    public ConfigController(AgentRunnerService agentRunner, AgentRunnerConfig config)
     {
         _agentRunner = agentRunner;
-        _configLoader = configLoader;
+        _config = config;
     }
 
     [HttpGet("cycle-interval")]
     public IActionResult GetCycleInterval()
     {
-        var config = _configLoader.Load();
-        return Ok(new 
-        { 
-            cycleIntervalMinutes = config.Cycle.ScheduleIntervalMinutes,
-            minInterval = config.Cycle.MinDurationMinutes,
-            maxInterval = config.Cycle.MaxDurationMinutes
+        return Ok(new
+        {
+            cycleIntervalMinutes = _config.Cycle.ScheduleIntervalMinutes,
+            minInterval = _config.Cycle.MinDurationMinutes,
+            maxInterval = _config.Cycle.MaxDurationMinutes
         });
     }
 
@@ -295,52 +294,47 @@ public class ConfigController : ControllerBase
             return BadRequest(new { error = "cycleIntervalMinutes must be positive" });
         }
 
-        var config = _configLoader.Load();
-
-        if (request.CycleIntervalMinutes < config.Cycle.MinDurationMinutes || 
-            request.CycleIntervalMinutes > config.Cycle.MaxDurationMinutes)
+        if (request.CycleIntervalMinutes < _config.Cycle.MinDurationMinutes ||
+            request.CycleIntervalMinutes > _config.Cycle.MaxDurationMinutes)
         {
-            return BadRequest(new 
-            { 
-                error = $"cycleIntervalMinutes must be between {config.Cycle.MinDurationMinutes} and {config.Cycle.MaxDurationMinutes}" 
+            return BadRequest(new
+            {
+                error = $"cycleIntervalMinutes must be between {_config.Cycle.MinDurationMinutes} and {_config.Cycle.MaxDurationMinutes}"
             });
         }
 
-        config.Cycle.ScheduleIntervalMinutes = request.CycleIntervalMinutes;
-        _configLoader.Save(config);
+        _config.Cycle.ScheduleIntervalMinutes = request.CycleIntervalMinutes;
 
-        return Ok(new 
-        { 
-            cycleIntervalMinutes = config.Cycle.ScheduleIntervalMinutes,
-            message = "Cycle interval updated. Changes will take effect on next cycle." 
+        return Ok(new
+        {
+            cycleIntervalMinutes = _config.Cycle.ScheduleIntervalMinutes,
+            message = "Cycle interval updated. Changes will take effect on next cycle."
         });
     }
 
     [HttpGet("resilience")]
     public IActionResult GetResilienceConfig()
     {
-        var config = _configLoader.Load();
-        return Ok(config.Resilience);
+        return Ok(_config.Resilience);
     }
 
     [HttpGet("all")]
     public IActionResult GetAllConfig()
     {
-        var config = _configLoader.Load();
         return Ok(new
         {
-            cycle = config.Cycle,
-            resilience = config.Resilience,
+            cycle = _config.Cycle,
+            resilience = _config.Resilience,
             agents = new
             {
-                plan = new { model = config.Agents.Plan.Model, timeoutMinutes = config.Agents.Plan.TimeoutMinutes },
-                research = new { model = config.Agents.Research.Model, timeoutMinutes = config.Agents.Research.TimeoutMinutes },
-                analyze = new { model = config.Agents.Analyze.Model, timeoutMinutes = config.Agents.Analyze.TimeoutMinutes },
-                synthesis = new { model = config.Agents.Synthesis.Model, timeoutMinutes = config.Agents.Synthesis.TimeoutMinutes },
-                evaluation = new { model = config.Agents.Evaluation.Model, timeoutMinutes = config.Agents.Evaluation.TimeoutMinutes }
+                plan = new { model = _config.Agents.Plan.Model, timeoutMinutes = _config.Agents.Plan.TimeoutMinutes },
+                research = new { model = _config.Agents.Research.Model, timeoutMinutes = _config.Agents.Research.TimeoutMinutes },
+                analyze = new { model = _config.Agents.Analyze.Model, timeoutMinutes = _config.Agents.Analyze.TimeoutMinutes },
+                synthesis = new { model = _config.Agents.Synthesis.Model, timeoutMinutes = _config.Agents.Synthesis.TimeoutMinutes },
+                evaluation = new { model = _config.Agents.Evaluation.Model, timeoutMinutes = _config.Agents.Evaluation.TimeoutMinutes }
             },
-            storage = config.Storage,
-            api = new { port = config.Api.Port }
+            storage = _config.Storage,
+            api = new { port = _config.Api.Port }
         });
     }
 }
@@ -378,7 +372,7 @@ public class MemoryController : ControllerBase
 
         var contentWithTimestamp = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {request.Content}";
         _artifactManager.AppendToMemory(agent, contentWithTimestamp);
-        
+
         return Ok(new { message = $"Appended to {agent} memory", agent });
     }
 

@@ -60,6 +60,7 @@ public class ToolConfig
 
 public class BraveSearchConfig
 {
+    /// <summary>Injected at runtime via env var Tools__BraveSearch__ApiKey.</summary>
     public string ApiKey { get; set; } = string.Empty;
 }
 
@@ -87,6 +88,7 @@ public class ApiConfig
 {
     public string Host { get; set; } = "0.0.0.0";
     public int Port { get; set; } = 5003;
+    /// <summary>Injected at runtime via env var Api__ApiKey.</summary>
     public string ApiKey { get; set; } = string.Empty;
 }
 

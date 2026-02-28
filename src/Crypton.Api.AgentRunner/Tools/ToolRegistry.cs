@@ -25,11 +25,11 @@ public class ToolRegistry
         var webSearchTool = new WebSearchTool(httpClient, config.Tools.BraveSearch.ApiKey);
         var webFetchTool = new WebFetchTool(httpClient);
         var currentPositionTool = new CurrentPositionTool(
-            httpClient, 
+            httpClient,
             config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
         var technicalIndicatorsTool = new TechnicalIndicatorsTool(
-            httpClient, 
+            httpClient,
             config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
         var birdTool = new BirdTool(config.Tools.DefaultTimeoutSeconds);

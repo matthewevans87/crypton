@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using MarketDataService.Models;
 using MarketDataService.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace MarketDataService.Adapters;
 
@@ -59,16 +60,18 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         { "SOL/USD", "SOLUSD" }
     };
 
-    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory)
+    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory, IConfiguration configuration)
     {
         _httpClient = httpClient;
         _logger = logger;
         _loggerFactory = loggerFactory;
-        _httpClient.BaseAddress = new Uri("https://api.kraken.com");
+        _httpClient.BaseAddress = new Uri(configuration["Kraken:RestBaseUrl"] ?? "https://api.kraken.com");
         _currentReconnectDelay = _initialReconnectDelay;
 
-        _apiKey = Environment.GetEnvironmentVariable("KRAKEN_API_KEY");
-        _apiSecret = Environment.GetEnvironmentVariable("KRAKEN_SECRET_KEY");
+        // Keys are injected via env vars Kraken__ApiKey and Kraken__ApiSecret,
+        // which IConfiguration maps to Kraken:ApiKey and Kraken:ApiSecret.
+        _apiKey = configuration["Kraken:ApiKey"];
+        _apiSecret = configuration["Kraken:ApiSecret"];
 
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
         {
@@ -290,7 +293,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     }
 
     private CancellationTokenSource? _balanceUpdateCts;
-    
+
     public async Task<bool> ConnectAsync(CancellationToken cancellationToken = default)
     {
         _shouldReconnect = true;

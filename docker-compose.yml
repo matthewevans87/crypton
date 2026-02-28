@@ -10,13 +10,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5003
-      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY}
-      - AGENT_RUNNER_API_KEY=${AGENT_RUNNER_API_KEY}
-      - MarketDataService__Url=http://market-data-service:5002
+      - Tools__BraveSearch__ApiKey=${BRAVE_SEARCH_API_KEY}
+      - Api__ApiKey=${AGENT_RUNNER_API_KEY}
+      - Tools__MarketDataService__BaseUrl=http://market-data-service:5002
     volumes:
       - /home/matthew-evans/.config/crypton/artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/logs:/app/logs
-      - /home/matthew-evans/.config/crypton/config.yaml:/app/config.yaml
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -41,8 +40,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5002
-      - KRAKEN_API_KEY=${KRAKEN_API_KEY}
-      - KRAKEN_SECRET_KEY=${KRAKEN_SECRET_KEY}
+      - Kraken__ApiKey=${KRAKEN_API_KEY}
+      - Kraken__ApiSecret=${KRAKEN_SECRET_KEY}
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -66,13 +65,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5004
-      - KRAKEN_API_KEY=${KRAKEN_API_KEY}
-      - KRAKEN_SECRET_KEY=${KRAKEN_SECRET_KEY}
-      - EXECUTION_SERVICE_API_KEY=${EXECUTION_SERVICE_API_KEY}
+      - EXECUTION_SERVICE__KRAKEN__ApiKey=${KRAKEN_API_KEY}
+      - EXECUTION_SERVICE__KRAKEN__ApiSecret=${KRAKEN_SECRET_KEY}
+      - EXECUTION_SERVICE__API__ApiKey=${EXECUTION_SERVICE_API_KEY}
     volumes:
       - /home/matthew-evans/.config/crypton/execution/artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/execution/logs:/app/logs
-      - /home/matthew-evans/.config/crypton/execution/config.yaml:/app/config.yaml
     depends_on:
       market-data-service:
         condition: service_healthy

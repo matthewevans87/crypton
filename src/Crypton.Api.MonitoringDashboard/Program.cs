@@ -1,3 +1,4 @@
+using Crypton.Configuration;
 using MonitoringDashboard.Hubs;
 using MonitoringDashboard.Models;
 using MonitoringDashboard.Services;
@@ -5,6 +6,9 @@ using Microsoft.AspNetCore.SignalR;
 using Scalar.AspNetCore;
 using Serilog;
 using DashboardPriceTicker = MonitoringDashboard.Models.PriceTicker;
+
+// Load .env file before the host builder so values flow into IConfiguration.
+DotEnvLoader.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
