@@ -1,6 +1,7 @@
 using Crypton.Configuration;
 using Crypton.Api.ExecutionService.Cli;
 using Crypton.Api.ExecutionService.Configuration;
+using Scalar.AspNetCore;
 
 // Load .env file before the host builder so values flow into IConfiguration.
 DotEnvLoader.Load();
@@ -20,9 +21,12 @@ builder.Services.AddExecutionServiceCore(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+app.MapOpenApi();
+app.MapScalarApiReference();
 app.MapControllers();
 app.MapHub<Crypton.Api.ExecutionService.Hubs.ExecutionHub>("/hubs/execution");
 app.MapHealthChecks("/health/live");
