@@ -29,7 +29,6 @@ function App() {
     setConnectionStatus,
   } = useDashboardStore();
 
-  const market = useDashboardStore((state) => state.market);
   const agent = useDashboardStore((state) => state.agent);
 
   const startPolling = () => {
