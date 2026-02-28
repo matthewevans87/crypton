@@ -78,6 +78,9 @@ jobs:
     runs-on: self-hosted
     needs: build
     steps:
+      - name: Remove orphaned containers
+        run: docker compose --env-file /home/matthew-evans/.config/crypton/.env -f $GITHUB_WORKSPACE/docker-compose.yml down --remove-orphans
+
       - name: Deploy all services
         run: docker compose --env-file /home/matthew-evans/.config/crypton/.env -f $GITHUB_WORKSPACE/docker-compose.yml up -d --no-build --pull never
 
