@@ -242,28 +242,28 @@ public class MockHttpMessageHandler : HttpMessageHandler
         _timeouts.Add(url);
     }
 
-    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var url = request.RequestUri?.ToString() ?? "";
 
         if (_timeouts.Contains(url))
         {
-            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new TaskCanceledException("Simulated request timeout");
         }
 
         if (_errors.Contains(url))
         {
-            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
         }
 
         if (_responses.TryGetValue(url, out var response))
         {
-            return new HttpResponseMessage(HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = JsonContent.Create(response)
-            };
+            });
         }
 
-        return new HttpResponseMessage(HttpStatusCode.NotFound);
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
     }
 }

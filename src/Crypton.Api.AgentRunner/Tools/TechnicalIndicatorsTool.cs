@@ -42,7 +42,11 @@ public class TechnicalIndicatorsTool : Tool
             return new ToolResult { Success = false, Error = "Missing or invalid 'asset' parameter" };
         }
 
-        var timeframe = parameters.GetString("timeframe") ?? "1d";
+        var timeframe = parameters.GetString("timeframe");
+        if (string.IsNullOrWhiteSpace(timeframe))
+        {
+            return new ToolResult { Success = false, Error = "Missing or invalid 'timeframe' parameter" };
+        }
 
         var indicators = new List<string>();
         if (parameters.TryGetValue("indicators", out var indObj))
@@ -90,7 +94,9 @@ public class TechnicalIndicatorsTool : Tool
             };
             if (string.IsNullOrWhiteSpace(assetUpper)) assetUpper = "BTC";
             var symbol = assetUpper + "/USD";
-            var url = $"{_marketDataServiceUrl}/api/indicators?symbol={Uri.EscapeDataString(symbol)}&timeframe={Uri.EscapeDataString(timeframe)}";
+            // Use the symbol as-is in the query string; '/' is permitted in query values
+            // and the MarketData API expects the literal 'BTC/USD' format.
+            var url = $"{_marketDataServiceUrl}/api/indicators?symbol={symbol}&timeframe={Uri.EscapeDataString(timeframe)}";
             if (indicators.Any())
             {
                 url += $"&indicators={string.Join(",", indicators)}";
