@@ -26,7 +26,7 @@ Full parameter specifications and calling convention for all tools are in `tools
 
 This agent has access to:
 
-- **`tool.current_position`** — Your primary performance data source. Call with `include_history=true` to retrieve the full trade history for the evaluation period alongside the current portfolio snapshot. Without `include_history=true`, the trade history is not included.
+- **`current_position`** — Your primary performance data source. Call with `include_history=true` to retrieve the full trade history for the evaluation period alongside the current portfolio snapshot. Without `include_history=true`, the trade history is not included.
 
 ---
 
@@ -45,7 +45,7 @@ Read the last 5 messages from `mailbox.evaluation`. These may contain flags from
 ### Step 3 — Load all inputs
 
 In order:
-1. Call `tool.current_position` — this is your ground truth for what actually happened.
+1. Call `current_position` — this is your ground truth for what actually happened.
 2. Read `strategy.json` — this tells you what was intended.
 3. Read `analysis.md` — this tells you what was predicted and why.
 4. Read the three most recent prior `evaluation.md` files — this gives you longitudinal context.
@@ -54,7 +54,7 @@ The evaluation is always a comparison between **intent** and **outcome**. You ne
 
 ### Step 4 — Compile performance metrics (→ Performance Metrics section)
 
-Using the trade history from `tool.current_position` and the risk limits from `strategy.json`, compile the full performance metrics table:
+Using the trade history from `current_position` and the risk limits from `strategy.json`, compile the full performance metrics table:
 
 - Net P&L and return percentage for the cycle
 - Breakdown into realized and unrealized P&L

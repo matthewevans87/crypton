@@ -210,6 +210,57 @@ public class AgentRunnerConfigBindingTests
     }
 
     // ────────────────────────────────────────────────────────────────
+    // Ollama configuration binding
+    // ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Bind_EmptyConfiguration_OllamaDefaults()
+    {
+        var config = BuildConfig();
+        var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
+
+        Assert.Equal("http://localhost:11434", result.Ollama.BaseUrl);
+        Assert.Equal(300, result.Ollama.TimeoutSeconds);
+    }
+
+    [Fact]
+    public void Bind_OllamaSection_OverridesDefaults()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Ollama:BaseUrl"] = "http://ollama-host:11434",
+            ["Ollama:TimeoutSeconds"] = "600",
+        });
+
+        var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
+
+        Assert.Equal("http://ollama-host:11434", result.Ollama.BaseUrl);
+        Assert.Equal(600, result.Ollama.TimeoutSeconds);
+    }
+
+    [Fact]
+    public void Bind_OllamaEnvVars_OverrideAppsettings()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Ollama:BaseUrl"] = "http://from-appsettings:11434",
+                ["Ollama:TimeoutSeconds"] = "300",
+            })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                // Simulates env var Ollama__BaseUrl using __ flattened to : by AddEnvironmentVariables
+                ["Ollama:BaseUrl"] = "http://from-env:11434",
+            })
+            .Build();
+
+        var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
+
+        // Second AddInMemoryCollection wins (higher precedence in this builder)
+        Assert.Equal("http://from-env:11434", result.Ollama.BaseUrl);
+    }
+
+    // ────────────────────────────────────────────────────────────────
     // Helper
     // ────────────────────────────────────────────────────────────────
 

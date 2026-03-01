@@ -15,9 +15,10 @@ public class WebSearchTool : Tool
         Type = "object",
         Properties = new Dictionary<string, ToolParameterProperty>
         {
-            ["query"] = new ToolParameterProperty { Type = "string", Description = "The search query" },
-            ["num_results"] = new ToolParameterProperty { Type = "integer", Description = "Number of results to return", Default = 10 },
-            ["recency"] = new ToolParameterProperty { Type = "string", Description = "Recency filter (e.g., '24h', '7d', '30d')" }
+            ["query"]   = new ToolParameterProperty { Type = "string",  Description = "The search query. Be specific; include asset names, dates, and key terms." },
+            ["count"]   = new ToolParameterProperty { Type = "integer", Description = "Number of results (1-20)", Default = 10 },
+            ["recency"] = new ToolParameterProperty { Type = "string",  Description = "Age filter: day, week, month, year, any", Default = "any" },
+            ["market"]  = new ToolParameterProperty { Type = "string",  Description = "Locale string for regional filtering", Default = "en-US" }
         },
         Required = new List<string> { "query" }
     };
@@ -30,21 +31,39 @@ public class WebSearchTool : Tool
 
     public override async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters, CancellationToken cancellationToken = default)
     {
-        if (!parameters.TryGetValue("query", out var queryObj) || queryObj is not string query)
+        var query = parameters.GetString("query");
+        if (string.IsNullOrWhiteSpace(query))
         {
             return new ToolResult { Success = false, Error = "Missing or invalid 'query' parameter" };
         }
 
-        var numResults = 10;
-        if (parameters.TryGetValue("num_results", out var numObj) && numObj is JsonElement numElement)
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            numResults = numElement.GetInt32();
+            return new ToolResult { Success = false, Error = "Brave Search API key not configured. Set env var BRAVE_SEARCH_API_KEY." };
         }
+
+        var numResults = parameters.ContainsKey("count")
+
+            ? parameters.GetInt("count", 10)
+            : parameters.GetInt("num_results", 10);
+        numResults = Math.Clamp(numResults, 1, 20);
+
+        // Map recency string to Brave freshness param
+        var recency = parameters.GetString("recency") ?? "any";
+        var freshness = recency switch
+        {
+            "day"   => "pd",
+            "week"  => "pw",
+            "month" => "pm",
+            "year"  => "py",
+            _       => null
+        };
 
         try
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, 
-                $"https://api.search.brave.com/res/v1/web/search?q={Uri.EscapeDataString(query)}&count={numResults}");
+            var url = $"https://api.search.brave.com/res/v1/web/search?q={Uri.EscapeDataString(query)}&count={numResults}";
+            if (freshness != null) url += $"&freshness={freshness}";
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("Accept", "application/json");
             request.Headers.Add("X-Subscription-Token", _apiKey);
 

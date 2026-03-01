@@ -6,6 +6,7 @@ public class AgentRunnerConfig
     public ResilienceConfig Resilience { get; set; } = new();
     public AgentConfig Agents { get; set; } = new();
     public ToolConfig Tools { get; set; } = new();
+    public OllamaConfig Ollama { get; set; } = new();
     public StorageConfig Storage { get; set; } = new();
     public ApiConfig Api { get; set; } = new();
     public LoggingConfig Logging { get; set; } = new();
@@ -56,6 +57,15 @@ public class ToolConfig
     public MarketDataServiceConfig MarketDataService { get; set; } = new();
     public int DefaultTimeoutSeconds { get; set; } = 30;
     public int CacheTtlSeconds { get; set; } = 60;
+}
+
+public class OllamaConfig
+{
+    /// <summary>Base URL for the Ollama API. Override via env var: Ollama__BaseUrl</summary>
+    public string BaseUrl { get; set; } = "http://localhost:11434";
+
+    /// <summary>Request timeout in seconds when calling the Ollama API.</summary>
+    public int TimeoutSeconds { get; set; } = 300;
 }
 
 public class BraveSearchConfig

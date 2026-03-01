@@ -26,7 +26,7 @@ Full parameter specifications and calling convention for all tools are in `tools
 
 This agent has access to:
 
-- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this before generating any position entries. You cannot set `allocation_pct`, define entry conditions, or respect `max_total_exposure_pct` without knowing what is already deployed.
+- **`current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this before generating any position entries. You cannot set `allocation_pct`, define entry conditions, or respect `max_total_exposure_pct` without knowing what is already deployed.
 
 ---
 
@@ -65,7 +65,7 @@ Read the last 5 messages from `mailbox.synthesis`. Messages may contain correcti
 
 ### Step 3 — Load your inputs
 
-Read `analysis.md` in full. Pay close attention to the **Synthesis Briefing** section — it is specifically written for you and should be your primary guide. Also call `tool.current_position` to understand the existing portfolio state.
+Read `analysis.md` in full. Pay close attention to the **Synthesis Briefing** section — it is specifically written for you and should be your primary guide. Also call `current_position` to understand the existing portfolio state.
 
 Cross-reference the Synthesis Briefing's recommended posture and per-asset actions against the full analysis to ensure you understand the reasoning. If the Synthesis Briefing seems inconsistent with the body of analysis, trust the body of analysis and use your judgment.
 
@@ -98,7 +98,7 @@ For each asset with a recommended direction in the Synthesis Briefing, define a 
 
 ### Step 6 — Handle existing positions not in the current plan
 
-Call `tool.current_position` and check whether there are any open positions not addressed by the current Synthesis Briefing. For each:
+Call `current_position` and check whether there are any open positions not addressed by the current Synthesis Briefing. For each:
 - If the Analysis Agent assessed it and recommends no change, carry it forward as an `active` position with its existing management rules.
 - If the Analysis Agent assessed it and flagged misalignment, add a `close` entry.
 - If the Analysis Agent did not address it, apply your own judgment. Do not leave unaddressed positions without a strategy entry.

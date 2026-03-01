@@ -21,16 +21,15 @@ public class LoopStateMachine
     {
         _validTransitions = new Dictionary<LoopState, List<LoopState>>
         {
-            { LoopState.Idle, new List<LoopState> { LoopState.Plan } },
-            { LoopState.Plan, new List<LoopState> { LoopState.Research, LoopState.Failed, LoopState.Paused } },
-            { LoopState.Research, new List<LoopState> { LoopState.Analyze, LoopState.Failed, LoopState.Paused } },
-            { LoopState.Analyze, new List<LoopState> { LoopState.Synthesize, LoopState.Failed, LoopState.Paused } },
-            { LoopState.Synthesize, new List<LoopState> { LoopState.Execute, LoopState.Failed, LoopState.Paused } },
-            { LoopState.Execute, new List<LoopState> { LoopState.Evaluate, LoopState.Failed, LoopState.Paused } },
-            { LoopState.Evaluate, new List<LoopState> { LoopState.WaitingForNextCycle, LoopState.Failed } },
-            { LoopState.WaitingForNextCycle, new List<LoopState> { LoopState.Plan, LoopState.Idle, LoopState.Paused } },
-            { LoopState.Paused, new List<LoopState> { LoopState.Plan, LoopState.Idle } },
-            { LoopState.Failed, new List<LoopState> { LoopState.Idle } }
+            { LoopState.Idle,               new List<LoopState> { LoopState.Plan, LoopState.Evaluate } },
+            { LoopState.Evaluate,           new List<LoopState> { LoopState.Plan, LoopState.Failed } },
+            { LoopState.Plan,               new List<LoopState> { LoopState.Research, LoopState.Failed, LoopState.Paused } },
+            { LoopState.Research,           new List<LoopState> { LoopState.Analyze, LoopState.Failed, LoopState.Paused } },
+            { LoopState.Analyze,            new List<LoopState> { LoopState.Synthesize, LoopState.Failed, LoopState.Paused } },
+            { LoopState.Synthesize,         new List<LoopState> { LoopState.WaitingForNextCycle, LoopState.Failed, LoopState.Paused } },
+            { LoopState.WaitingForNextCycle, new List<LoopState> { LoopState.Evaluate, LoopState.Plan, LoopState.Idle, LoopState.Paused } },
+            { LoopState.Paused,             new List<LoopState> { LoopState.Plan, LoopState.Evaluate, LoopState.Idle } },
+            { LoopState.Failed,             new List<LoopState> { LoopState.Idle } }
         };
     }
 
@@ -67,7 +66,7 @@ public class LoopStateMachine
     {
         lock (_lock)
         {
-            return _currentState == LoopState.Idle || 
+            return _currentState == LoopState.Idle ||
                    _currentState == LoopState.Failed ||
                    _currentState == LoopState.Paused;
         }
@@ -80,12 +79,13 @@ public class LoopStateMachine
             return _currentState switch
             {
                 LoopState.Idle => LoopState.Plan,
+                LoopState.Evaluate => LoopState.Plan,
                 LoopState.Plan => LoopState.Research,
                 LoopState.Research => LoopState.Analyze,
                 LoopState.Analyze => LoopState.Synthesize,
-                LoopState.Synthesize => LoopState.Execute,
-                LoopState.Execute => LoopState.Evaluate,
-                LoopState.Evaluate => LoopState.WaitingForNextCycle,
+                LoopState.Synthesize => LoopState.WaitingForNextCycle,
+                // WaitingForNextCycle → Evaluate or Plan is decided by AgentRunnerService
+                // based on whether a previous completed cycle exists.
                 LoopState.WaitingForNextCycle => LoopState.Plan,
                 _ => _currentState
             };

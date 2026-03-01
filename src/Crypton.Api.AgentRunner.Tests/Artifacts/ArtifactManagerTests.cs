@@ -39,7 +39,7 @@ public class ArtifactManagerTests : IDisposable
         // IDs may be same if created in same second, but directories should exist
         var dir1 = _artifactManager.GetCycleDirectory(id1);
         var dir2 = _artifactManager.GetCycleDirectory(id2);
-        
+
         Assert.True(Directory.Exists(dir1));
         Assert.True(Directory.Exists(dir2));
     }
@@ -49,7 +49,7 @@ public class ArtifactManagerTests : IDisposable
     {
         var cycleId = _artifactManager.CreateCycleDirectory();
         var content = "# Test Plan\n\nThis is a test plan.";
-        
+
         _artifactManager.SaveArtifact(cycleId, "plan.md", content);
         var read = _artifactManager.ReadArtifact(cycleId, "plan.md");
 
@@ -60,11 +60,11 @@ public class ArtifactManagerTests : IDisposable
     public void ArtifactExists_ReturnsCorrectly()
     {
         var cycleId = _artifactManager.CreateCycleDirectory();
-        
+
         Assert.False(_artifactManager.ArtifactExists(cycleId, "plan.md"));
-        
+
         _artifactManager.SaveArtifact(cycleId, "plan.md", "content");
-        
+
         Assert.True(_artifactManager.ArtifactExists(cycleId, "plan.md"));
     }
 
@@ -96,7 +96,7 @@ public class ArtifactManagerTests : IDisposable
     public void MemoryPath_CreatesDirectory()
     {
         var path = _artifactManager.GetMemoryPath("plan");
-        
+
         Assert.True(Directory.Exists(Path.GetDirectoryName(path)));
     }
 
@@ -110,5 +110,55 @@ public class ArtifactManagerTests : IDisposable
 
         Assert.Contains("First entry", memory);
         Assert.Contains("Second entry", memory);
+    }
+
+    [Fact]
+    public void GetLatestCompletedCycleId_WhenNoCycles_ReturnsNull()
+    {
+        var result = _artifactManager.GetLatestCompletedCycleId();
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void GetLatestCompletedCycleId_WhenCycleHasNoStrategyJson_ReturnsNull()
+    {
+        var cycleId = _artifactManager.CreateCycleDirectory();
+        _artifactManager.SaveArtifact(cycleId, "plan.md", "some plan");
+
+        var result = _artifactManager.GetLatestCompletedCycleId();
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void GetLatestCompletedCycleId_WhenStrategyJsonExists_ReturnsId()
+    {
+        var cycleId = _artifactManager.CreateCycleDirectory();
+        _artifactManager.SaveArtifact(cycleId, "plan.md", "some plan");
+        _artifactManager.SaveArtifact(cycleId, "strategy.json", "{}");
+
+        var result = _artifactManager.GetLatestCompletedCycleId();
+
+        Assert.Equal(cycleId, result);
+    }
+
+    [Fact]
+    public void GetLatestCompletedCycleId_WithMultipleCycles_ReturnsMostRecent()
+    {
+        // Older cycle — complete
+        var older = _artifactManager.CreateCycleDirectory();
+        _artifactManager.SaveArtifact(older, "strategy.json", "{}");
+
+        // Small delay to ensure different timestamp-based IDs
+        System.Threading.Thread.Sleep(1100);
+
+        // Newer cycle — also complete
+        var newer = _artifactManager.CreateCycleDirectory();
+        _artifactManager.SaveArtifact(newer, "strategy.json", "{}");
+
+        var result = _artifactManager.GetLatestCompletedCycleId();
+
+        // Should return the newer one (GetRecentCycles is OrderByDescending)
+        Assert.Equal(newer, result);
     }
 }

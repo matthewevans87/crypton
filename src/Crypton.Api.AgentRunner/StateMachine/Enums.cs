@@ -7,7 +7,6 @@ public enum LoopState
     Research,
     Analyze,
     Synthesize,
-    Execute,
     Evaluate,
     WaitingForNextCycle,
     Paused,

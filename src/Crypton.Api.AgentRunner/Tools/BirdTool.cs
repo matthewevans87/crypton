@@ -21,11 +21,12 @@ public class BirdTool : Tool
         Type = "object",
         Properties = new Dictionary<string, ToolParameterProperty>
         {
-            ["mode"] = new ToolParameterProperty { Type = "string", Description = "Operation mode: timeline or search" },
-            ["query"] = new ToolParameterProperty { Type = "string", Description = "Search query (required for search mode)" },
-            ["limit"] = new ToolParameterProperty { Type = "integer", Description = "Number of tweets to fetch (default: 10)" }
+            ["query"]  = new ToolParameterProperty { Type = "string",  Description = "Search query or @username for timeline mode" },
+            ["mode"]   = new ToolParameterProperty { Type = "string",  Description = "search (default) or timeline", Default = "search" },
+            ["count"]  = new ToolParameterProperty { Type = "integer", Description = "Number of posts to return (1-50)", Default = 20 },
+            ["recency"] = new ToolParameterProperty { Type = "string", Description = "Time window: hour, day, week", Default = "day" }
         },
-        Required = new List<string> { "mode" }
+        Required = new List<string> { "query" }
     };
 
     public override async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters, CancellationToken cancellationToken)
@@ -34,24 +35,31 @@ public class BirdTool : Tool
 
         try
         {
-            var mode = parameters.GetValueOrDefault("mode")?.ToString() ?? "timeline";
-            var query = parameters.GetValueOrDefault("query")?.ToString();
-            var limit = parameters.GetValueOrDefault("limit")?.ToString() ?? "10";
-
-            if (mode == "search" && string.IsNullOrEmpty(query))
+            // tools.md spec: query is required, mode defaults to "search"
+            var query = parameters.GetString("query");
+            if (string.IsNullOrWhiteSpace(query))
             {
-                return new ToolResult
-                {
-                    Success = false,
-                    Error = "query is required for search mode"
-                };
+                return new ToolResult { Success = false, Error = "Missing or invalid 'query' parameter", Duration = stopwatch.Elapsed };
             }
+
+            var mode = parameters.GetString("mode") ?? "search";
+            // Accept both 'count' (tools.md spec) and legacy 'limit'
+            var count = parameters.ContainsKey("count")
+                ? parameters.GetInt("count", 20)
+                : parameters.GetInt("limit", 20);
+            count = Math.Clamp(count, 1, 50);
 
             var args = mode switch
             {
-                "search" => $"search --json --count {limit} {EscapeArgument(query!)}",
-                "timeline" => $"home --json --count {limit}",
-                _ => $"home --json --count {limit}"
+                // @username → use "from:username" search operator (strip the @)
+                "timeline" when query.StartsWith("@") =>
+                    $"search --json -n {count} {EscapeArgument($"from:{query[1..]}")}",
+                // timeline without @username → use home feed
+                "timeline" =>
+                    $"home --json -n {count}",
+                // default: keyword/operator search  
+                _ =>
+                    $"search --json -n {count} {EscapeArgument(query)}"
             };
 
             var result = await ExecuteBirdAsync(args, cancellationToken);

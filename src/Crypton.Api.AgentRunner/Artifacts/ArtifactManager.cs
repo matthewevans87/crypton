@@ -93,13 +93,13 @@ public class ArtifactManager
             var cycleDir = GetCycleDirectory(cycleId);
             var historyDir = GetHistoryDirectory();
             var destDir = Path.Combine(historyDir, cycleId);
-            
+
             if (Directory.Exists(cycleDir) && !Directory.Exists(destDir))
             {
                 Directory.Move(cycleDir, destDir);
             }
         }
-        
+
         CompressOldCycles();
     }
 
@@ -108,24 +108,24 @@ public class ArtifactManager
         var historyDir = GetHistoryDirectory();
         if (!Directory.Exists(historyDir))
             return;
-        
+
         var cycleDirs = Directory.GetDirectories(historyDir);
-        
+
         foreach (var cycleDir in cycleDirs)
         {
             var cycleId = Path.GetFileName(cycleDir);
             var zipPath = Path.Combine(historyDir, $"{cycleId}.zip");
-            
+
             if (File.Exists(zipPath) || Directory.GetFiles(cycleDir).Length == 0)
                 continue;
-            
+
             try
             {
                 if (File.Exists(zipPath.Replace(".zip", "")))
                     continue;
-                    
+
                 ZipFile.CreateFromDirectory(cycleDir, zipPath, CompressionLevel.Optimal, false);
-                
+
                 // Remove original directory after successful compression
                 Directory.Delete(cycleDir, true);
             }
@@ -141,7 +141,7 @@ public class ArtifactManager
         var historyDir = GetHistoryDirectory();
         var zipPath = Path.Combine(historyDir, $"{cycleId}.zip");
         var extractDir = GetCycleDirectory(cycleId);
-        
+
         if (File.Exists(zipPath) && !Directory.Exists(extractDir))
         {
             ZipFile.ExtractToDirectory(zipPath, extractDir);
@@ -153,12 +153,12 @@ public class ArtifactManager
         var dir = Path.Combine(GetMemoryDirectory(), agentName);
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "memory.md");
-        
+
         if (!File.Exists(path))
         {
             File.WriteAllText(path, $"# {agentName.ToUpper()} Memory\n\nAgent-specific memory and learnings.\n");
         }
-        
+
         return path;
     }
 
@@ -207,6 +207,16 @@ public class ArtifactManager
         return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 
+    /// <summary>
+    /// Returns the cycle ID of the most recent cycle that produced a strategy.json,
+    /// indicating a fully completed synthesis step. Returns null if no completed cycle exists.
+    /// </summary>
+    public string? GetLatestCompletedCycleId()
+    {
+        return GetRecentCycles(20)
+            .FirstOrDefault(cycleId => ArtifactExists(cycleId, "strategy.json"));
+    }
+
     public List<string> GetRecentEvaluations(int count = 3)
     {
         var cycles = GetRecentCycles(count * 2);
@@ -230,20 +240,20 @@ public class ArtifactManager
     {
         var results = new List<MemorySearchResult>();
         var path = GetMemoryPath(agentName);
-        
+
         if (!File.Exists(path))
             return results;
 
         var content = File.ReadAllText(path);
         var lines = content.Split('\n');
-        
+
         var currentEntry = new System.Text.StringBuilder();
         var currentEntryStart = 0;
-        
+
         for (int i = 0; i < lines.Length; i++)
         {
             currentEntry.AppendLine(lines[i]);
-            
+
             if (lines[i].TrimStart().StartsWith("---") || i == lines.Length - 1)
             {
                 var entryText = currentEntry.ToString();
@@ -261,7 +271,7 @@ public class ArtifactManager
                 currentEntryStart = i + 1;
             }
         }
-        
+
         return results.Take(maxResults).ToList();
     }
 
@@ -269,13 +279,13 @@ public class ArtifactManager
     {
         var allResults = new List<MemorySearchResult>();
         var agentNames = new[] { "plan", "research", "analysis", "evaluation" };
-        
+
         foreach (var agent in agentNames)
         {
             var results = SearchMemory(agent, query, maxResults);
             allResults.AddRange(results);
         }
-        
+
         return allResults.Take(maxResults).ToList();
     }
 
@@ -284,13 +294,13 @@ public class ArtifactManager
         var timestampPattern = new System.Text.RegularExpressions.Regex(
             @"(\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2})",
             System.Text.RegularExpressions.RegexOptions.RightToLeft);
-        
+
         var match = timestampPattern.Match(entry);
         if (match.Success && DateTime.TryParse(match.Value, out var timestamp))
         {
             return timestamp;
         }
-        
+
         return DateTime.UtcNow;
     }
 }

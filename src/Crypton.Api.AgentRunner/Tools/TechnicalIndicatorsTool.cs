@@ -36,20 +36,32 @@ public class TechnicalIndicatorsTool : Tool
 
     public override async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters, CancellationToken cancellationToken = default)
     {
-        if (!parameters.TryGetValue("asset", out var assetObj) || assetObj is not string asset)
+        var asset = parameters.GetString("asset");
+        if (string.IsNullOrWhiteSpace(asset))
         {
             return new ToolResult { Success = false, Error = "Missing or invalid 'asset' parameter" };
         }
 
-        if (!parameters.TryGetValue("timeframe", out var tfObj) || tfObj is not string timeframe)
-        {
-            return new ToolResult { Success = false, Error = "Missing or invalid 'timeframe' parameter" };
-        }
+        var timeframe = parameters.GetString("timeframe") ?? "1d";
 
         var indicators = new List<string>();
-        if (parameters.TryGetValue("indicators", out var indObj) && indObj is JsonElement indElement)
+        if (parameters.TryGetValue("indicators", out var indObj))
         {
-            indicators = indElement.EnumerateArray().Select(i => i.GetString() ?? "").ToList();
+            if (indObj is JsonElement { ValueKind: JsonValueKind.Array } indElement)
+            {
+                indicators = indElement.EnumerateArray()
+                    .Select(i => i.GetString() ?? "")
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+            }
+            // If passed as a string (e.g. "all", "RSI,MACD"), parse it  
+            else if (indObj is JsonElement { ValueKind: JsonValueKind.String } strElement)
+            {
+                var raw = strElement.GetString() ?? "";
+                if (!string.Equals(raw, "all", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(raw))
+                    indicators = raw.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+                // "all" → empty list means fetch everything  
+            }
         }
 
         var cacheKey = $"{asset}_{timeframe}_{string.Join(",", indicators)}";
@@ -62,8 +74,23 @@ public class TechnicalIndicatorsTool : Tool
 
         try
         {
-            var symbol = asset.ToUpper() + "/USD";
-            var url = $"{_marketDataServiceUrl}/api/indicators?symbol={symbol}&timeframe={timeframe}";
+            // Normalise asset: map aliases (XBT → BTC), strip /USD suffix, URL-encode
+            var assetUpper = asset.ToUpper().Trim();
+            // Strip trailing /USD or USD
+            if (assetUpper.EndsWith("/USD")) assetUpper = assetUpper[..^4];
+            else if (assetUpper.EndsWith("USD") && assetUpper.Length > 3) assetUpper = assetUpper[..^3];
+            // Map common aliases
+            assetUpper = assetUpper switch
+            {
+                "XBT" => "BTC",
+                "WBTC" => "BTC",
+                "WETH" => "ETH",
+                "XETH" => "ETH",
+                _ => assetUpper
+            };
+            if (string.IsNullOrWhiteSpace(assetUpper)) assetUpper = "BTC";
+            var symbol = assetUpper + "/USD";
+            var url = $"{_marketDataServiceUrl}/api/indicators?symbol={Uri.EscapeDataString(symbol)}&timeframe={Uri.EscapeDataString(timeframe)}";
             if (indicators.Any())
             {
                 url += $"&indicators={string.Join(",", indicators)}";

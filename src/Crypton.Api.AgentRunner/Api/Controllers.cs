@@ -69,7 +69,7 @@ public class StatusController : ControllerBase
                 .OrderByDescending(s => s.Value.EndTime)
                 .FirstOrDefault().Key,
             nextScheduledTime = _agentRunner.CurrentState == LoopState.WaitingForNextCycle
-                ? DateTime.UtcNow.AddHours(6)
+                ? _agentRunner.NextScheduledRunTime
                 : (DateTime?)null,
             isPaused = _agentRunner.CurrentCycle?.IsPaused ?? false,
             pauseReason = _agentRunner.CurrentCycle?.PauseReason
@@ -192,6 +192,13 @@ public class OverrideController : ControllerBase
     {
         _agentRunner.Pause(request?.Reason);
         return Ok(new { message = "Agent Runner paused", reason = request?.Reason });
+    }
+
+    [HttpPost("resume")]
+    public IActionResult Resume()
+    {
+        _agentRunner.Resume();
+        return Ok(new { message = "Agent Runner resumed" });
     }
 
     [HttpPost("abort")]

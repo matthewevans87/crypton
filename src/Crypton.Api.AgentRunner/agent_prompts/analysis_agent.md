@@ -28,8 +28,8 @@ Full parameter specifications and calling convention for all tools are in `tools
 
 This agent has access to:
 
-- **`tool.current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this early; it is essential context for the Current Position Assessment section and for calibrating risk guidance in the Synthesis Briefing.
-- **`tool.technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Always call this directly rather than relying solely on what `research.md` reported — indicator values change, and the Research Agent's data may be from an earlier timestamp. Use `atr` when calibrating stop placement in the Synthesis Briefing.
+- **`current_position`** — Retrieve the current portfolio state: open positions, holdings, available capital, unrealized P&L, and recent trade history. Call this early; it is essential context for the Current Position Assessment section and for calibrating risk guidance in the Synthesis Briefing.
+- **`technical_indicators`** — Fetch or compute technical indicator data for a given asset and timeframe. Always call this directly rather than relying solely on what `research.md` reported — indicator values change, and the Research Agent's data may be from an earlier timestamp. Use `atr` when calibrating stop placement in the Synthesis Briefing.
 
 ---
 
@@ -47,7 +47,7 @@ Read the last 5 messages from `mailbox.analysis`. These may contain context pass
 
 ### Step 3 — Load your inputs
 
-Read `research.md` in full. Then call `tool.current_position` to load the current portfolio state. Then call `tool.technical_indicators` for all assets under consideration to get current indicator values directly — do not rely solely on the Research Agent's technical reporting.
+Read `research.md` in full. Then call `current_position` to load the current portfolio state. Then call `technical_indicators` for all assets under consideration to get current indicator values directly — do not rely solely on the Research Agent's technical reporting.
 
 Hold all of this in mind simultaneously. The synthesis you are about to perform requires you to reason across all of it.
 
@@ -63,7 +63,7 @@ Push yourself to be specific about causality — why is the market in this state
 
 For each asset with actionable signal, work through a complete analysis:
 
-**a) Technical situation.** Check the current indicator values from `tool.technical_indicators`. What is the technical character of price action? What are the most important levels? What does the confluence of signals indicate? Identify your key levels: resistance, support, and the price that would invalidate your thesis.
+**a) Technical situation.** Check the current indicator values from `technical_indicators`. What is the technical character of price action? What are the most important levels? What does the confluence of signals indicate? Identify your key levels: resistance, support, and the price that would invalidate your thesis.
 
 **b) Fundamental and news factors.** What narrative or fundamental factors are specifically moving this asset? Are there upcoming catalysts (events, protocol changes, ETF flows, regulatory decisions) that could act as triggers?
 
@@ -75,7 +75,7 @@ For each asset with actionable signal, work through a complete analysis:
 
 ### Step 6 — Assess current positions (→ Current Position Assessment section)
 
-With `tool.current_position` data and your per-asset theses in hand, assess each open position:
+With `current_position` data and your per-asset theses in hand, assess each open position:
 - Is it aligned with, against, or neutral to your current thesis?
 - What does the analysis indicate should happen to the position?
 

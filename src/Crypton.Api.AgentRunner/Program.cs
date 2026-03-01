@@ -1,6 +1,7 @@
 using AgentRunner.Agents;
 using AgentRunner.Api;
 using AgentRunner.Artifacts;
+using AgentRunner.Cli;
 using AgentRunner.Configuration;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
@@ -13,10 +14,47 @@ using Prometheus;
 using Scalar.AspNetCore;
 using Serilog;
 
-// Load a .env file (if present) into environment variables before the host builder
-// reads IConfiguration. Real environment variables (e.g. from Docker) are never
-// overwritten, so the precedence is: env vars > .env file > appsettings.json.
-DotEnvLoader.Load();
+// Load a .env file into environment variables before the host builder reads
+// IConfiguration. Precedence: real env vars > .env file > appsettings.json.
+//
+// Resolution order:
+//   1. --env-file <path> CLI argument (supports ~ expansion)
+//   2. ~/.config/crypton/.env  (user-level secrets, never committed)
+//   3. Walk up from cwd looking for a .env file (project-level)
+var envFileArg = Array.FindIndex(args, a => a == "--env-file");
+if (envFileArg >= 0 && envFileArg + 1 < args.Length)
+{
+    var raw = args[envFileArg + 1];
+    var resolved = raw.StartsWith("~/")
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), raw[2..])
+        : raw;
+    DotEnvLoader.Load(new FileInfo(resolved));
+}
+else
+{
+    var userEnv = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".config", "crypton", ".env");
+    if (File.Exists(userEnv))
+        DotEnvLoader.Load(new FileInfo(userEnv));
+    else
+        DotEnvLoader.Load();  // walk up from cwd
+}
+
+// Map short-form env var names (common in .env files) to the double-underscore
+// hierarchy form that ASP.NET Core IConfiguration expects. Only applied when the
+// target key is not already set (short form wins if both are present).
+var envAliases = new Dictionary<string, string>
+{
+    ["BRAVE_SEARCH_API_KEY"] = "Tools__BraveSearch__ApiKey",
+    ["AGENT_RUNNER_API_KEY"]  = "Api__ApiKey",
+};
+foreach (var (shortKey, fullKey) in envAliases)
+{
+    var val = Environment.GetEnvironmentVariable(shortKey);
+    if (val is not null && Environment.GetEnvironmentVariable(fullKey) is null)
+        Environment.SetEnvironmentVariable(fullKey, val);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +101,14 @@ var agentRunnerService = new AgentRunnerService(
     agentInvoker,
     logger,
     metricsCollector);
+
+// CLI mode: `dotnet run -- --cli <command> [options]`
+// Run a single step or full cycle with verbose console output, then exit.
+if (args.Contains("--cli"))
+{
+    await CliRunner.RunAsync(args, config, artifactManager, contextBuilder, agentInvoker);
+    return;
+}
 
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(artifactManager);

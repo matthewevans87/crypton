@@ -27,16 +27,13 @@ public class WebFetchTool : Tool
 
     public override async Task<ToolResult> ExecuteAsync(Dictionary<string, object> parameters, CancellationToken cancellationToken = default)
     {
-        if (!parameters.TryGetValue("url", out var urlObj) || urlObj is not string url)
+        var url = parameters.GetString("url");
+        if (string.IsNullOrWhiteSpace(url))
         {
             return new ToolResult { Success = false, Error = "Missing or invalid 'url' parameter" };
         }
 
-        var format = "markdown";
-        if (parameters.TryGetValue("format", out var formatObj) && formatObj is string formatStr)
-        {
-            format = formatStr;
-        }
+        var format = parameters.GetString("format") ?? "markdown";
 
         try
         {

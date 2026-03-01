@@ -6,19 +6,23 @@ This document is the authoritative specification for all agent-callable tools. R
 
 ## Calling Convention
 
-Tools are invoked as synchronous function calls. Use the following syntax:
+Tools are invoked using XML tags with a JSON argument object. Use the following syntax on its own line:
 
 ```
-tool.<name>(<param>=<value>, ...)
+<tool_call>tool_name {"param": "value", "param2": value}</tool_call>
 ```
 
-All parameter values must be quoted strings or unquoted numbers/booleans. Omit optional parameters to use their defaults. Do not invent parameter names — only those listed here are valid.
-
-If a tool call fails, the error message will describe the cause. Do not retry indefinitely; log the failure and proceed with the information you have, noting the gap in your output.
+Rules:
+- The tag must be `<tool_call>` (lowercase, no namespace).
+- The tool name immediately follows the opening tag, separated by a space from the JSON object.
+- The JSON object must be valid JSON (`"key": "value"` — always double-quoted keys).
+- Omit optional parameters to use their defaults.
+- Do not invent parameter names — only those listed here are valid.
+- If a tool call fails, the error message will describe the cause. Do not retry indefinitely; log the failure and proceed with the information you have, noting the gap in your output.
 
 ---
 
-## `tool.web_search`
+## `web_search`
 
 Search the web via the Brave Search API. Returns a ranked list of results suitable for identifying sources to fetch.
 
@@ -42,18 +46,18 @@ A list of up to `count` results, each containing:
 ### Example
 
 ```
-tool.web_search(query="Kraken exchange withdrawal issues February 2026", count=5, recency="week")
+<tool_call>web_search {"query": "Kraken exchange withdrawal issues February 2026", "count": 5, "recency": "week"}</tool_call>
 ```
 
 ### Notes
 
-- Results contain snippets only — use `tool.web_fetch` to read content in full.
+- Results contain snippets only — use `web_fetch` to read content in full.
 - Prefer specific queries over broad ones. `"Fed funds rate decision March 2026"` returns better results than `"Fed interest rates"`.
 - Use `recency` aggressively. For news and sentiment signals, stale results are worse than no results.
 
 ---
 
-## `tool.web_fetch`
+## `web_fetch`
 
 Fetch and extract the readable content of a web page. Strips navigation, ads, and boilerplate, returning clean prose.
 
@@ -71,18 +75,18 @@ A single string containing the cleaned, readable content of the page. If extract
 ### Example
 
 ```
-tool.web_fetch(url="https://www.federalreserve.gov/monetarypolicy/fomcminutes20260129.htm")
+<tool_call>web_fetch {"url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260129.htm"}</tool_call>
 ```
 
 ### Notes
 
-- Always validate the URL from a `tool.web_search` result before fetching. Snippets can mislead.
+- Always validate the URL from a `web_search` result before fetching. Snippets can mislead.
 - If the page is a PDF, the tool will attempt text extraction but formatting may be degraded.
 - For data-heavy pages (e.g., Quiver Quant, Capitol Trades), fetch the specific URL for the asset or topic in question rather than the homepage.
 
 ---
 
-## `tool.bird`
+## `bird`
 
 Query X (Twitter) for posts, user timelines, and trending topics via the `bird` CLI. Used for real-time sentiment, influencer signals, and first-hand market commentary.
 
@@ -92,7 +96,7 @@ Query X (Twitter) for posts, user timelines, and trending topics via the `bird` 
 | --------- | ------- | -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `query`   | string  | yes      | —          | A search query or `@username` for a specific account's timeline. Supports standard X search operators (`from:`, `since:`, `until:`, `#hashtag`, `-filter:retweets`). |
 | `count`   | integer | no       | 20         | Number of posts to return. Range: 1–50.                                                                                                                              |
-| `recency` | string  | no       | `"day"`    | Time window. Accepts: `"hour"`, `"day"`, `"week"`. Social signals degrade quickly; default is tighter than `tool.web_search`.                                        |
+| `recency` | string  | no       | `"day"`    | Time window. Accepts: `"hour"`, `"day"`, `"week"`. Social signals degrade quickly; default is tighter than `web_search`.                                             |
 | `mode`    | string  | no       | `"search"` | `"search"` for keyword/operator queries; `"timeline"` for a specific user's recent posts. When using `"timeline"`, `query` should be `@username`.                    |
 
 ### Returns
@@ -106,19 +110,19 @@ A list of posts, each containing:
 ### Example
 
 ```
-tool.bird(query="@unusualwhales", mode="timeline", count=10, recency="day")
-tool.bird(query="bitcoin ETF inflows -filter:retweets", count=20, recency="day")
+<tool_call>bird {"query": "@unusualwhales", "mode": "timeline", "count": 10, "recency": "day"}</tool_call>
+<tool_call>bird {"query": "bitcoin ETF inflows -filter:retweets", "count": 20, "recency": "day"}</tool_call>
 ```
 
 ### Notes
 
 - Engagement counts are a rough signal-to-noise filter: high-engagement posts from credible accounts carry more weight than low-engagement posts from unknown accounts.
-- Cross-verify social claims with `tool.web_search` before including them in findings. X is a primary signal source, not a ground truth.
+- Cross-verify social claims with `web_search` before including them in findings. X is a primary signal source, not a ground truth.
 - For trend-spotting, use keyword search. For known high-signal accounts (e.g., `@unusualwhales`, `@WatcherGuru`), use `timeline` mode directly.
 
 ---
 
-## `tool.current_position`
+## `current_position`
 
 Retrieve the current portfolio state from the Execution Service via a REST call. This is the ground truth for all portfolio-aware reasoning.
 
@@ -151,8 +155,8 @@ A structured object containing:
 ### Example
 
 ```
-tool.current_position()
-tool.current_position(include_history=true)
+<tool_call>current_position {}</tool_call>
+<tool_call>current_position {"include_history": true}</tool_call>
 ```
 
 ### Notes
@@ -163,7 +167,7 @@ tool.current_position(include_history=true)
 
 ---
 
-## `tool.technical_indicators`
+## `technical_indicators`
 
 Fetch or compute technical indicator data for a specified asset and timeframe. Returns structured summaries suitable for direct inclusion in agent context.
 
@@ -171,7 +175,7 @@ Fetch or compute technical indicator data for a specified asset and timeframe. R
 
 | Parameter    | Type    | Required | Default | Description                                                                                                                                                                               |
 | ------------ | ------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `asset`      | string  | yes      | —       | Trading pair in Kraken format, e.g., `"XBTUSD"`, `"ETHUSD"`, `"SOLUSD"`.                                                                                                                  |
+| `asset`      | string  | yes      | —       | Base asset symbol. Use **`"BTC"`**, **`"ETH"`**, `"SOL"`, `"XRP"`, etc. Do NOT include the quote currency (no `"XBTUSD"` or `"BTC/USD"`).                                                 |
 | `timeframe`  | string  | yes      | —       | Candle interval. Accepts: `"1h"`, `"4h"`, `"1d"`, `"1w"`.                                                                                                                                 |
 | `indicators` | string  | no       | `"all"` | Comma-separated list of indicators to compute. Accepts: `"rsi"`, `"macd"`, `"bbands"`, `"ema_20"`, `"ema_50"`, `"ema_200"`, `"volume_profile"`, `"atr"`, `"obv"`, `"stoch_rsi"`, `"all"`. |
 | `lookback`   | integer | no       | 100     | Number of candles to include in calculations and trend summaries.                                                                                                                         |
@@ -189,8 +193,8 @@ A structured object containing:
 ### Example
 
 ```
-tool.technical_indicators(asset="XBTUSD", timeframe="1d", indicators="rsi,macd,ema_200,atr")
-tool.technical_indicators(asset="ETHUSD", timeframe="4h", indicators="all")
+<tool_call>technical_indicators {"asset": "BTC", "timeframe": "1d"}</tool_call>
+<tool_call>technical_indicators {"asset": "ETH", "timeframe": "4h"}</tool_call>
 ```
 
 ### Notes
