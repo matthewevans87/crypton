@@ -47,6 +47,8 @@ public class AgentSettings
     public int MaxTokens { get; set; } = 4096;
     public int TimeoutMinutes { get; set; } = 30;
     public int MaxRetries { get; set; } = 3;
+    /// <summary>Maximum number of LLM ↔ tool-call iterations per agent invocation.</summary>
+    public int MaxIterations { get; set; } = 50;
     public string SystemPromptPath { get; set; } = string.Empty;
 }
 
@@ -57,6 +59,10 @@ public class ToolConfig
     public MarketDataServiceConfig MarketDataService { get; set; } = new();
     public int DefaultTimeoutSeconds { get; set; } = 30;
     public int CacheTtlSeconds { get; set; } = 60;
+    /// <summary>Maximum number of retry attempts for a failed tool call.</summary>
+    public int MaxRetries { get; set; } = 3;
+    /// <summary>Maximum delay in seconds applied between retries (exponential backoff is capped here).</summary>
+    public int MaxRetryDelaySeconds { get; set; } = 30;
 }
 
 public class OllamaConfig

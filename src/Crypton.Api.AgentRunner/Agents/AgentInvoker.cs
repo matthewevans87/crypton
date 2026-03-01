@@ -10,7 +10,6 @@ public class AgentInvoker
     private readonly AgentRunnerConfig _config;
     private readonly ToolExecutor _toolExecutor;
     private readonly HttpClient _httpClient;
-    private readonly int _maxToolIterations = 15;
 
     public AgentInvoker(AgentRunnerConfig config, ToolExecutor toolExecutor)
     {
@@ -53,9 +52,10 @@ public class AgentInvoker
             var allToolCalls = new List<ToolCall>();
             var allToolResults = new List<ToolResult>();
 
-            for (int iteration = 0; iteration < _maxToolIterations; iteration++)
+            var maxIterations = GetMaxIterationsForAgent(context.AgentName);
+            for (int iteration = 0; iteration < maxIterations; iteration++)
             {
-                onEvent?.Invoke($"[iter {iteration + 1}/{_maxToolIterations}] Calling LLM...");
+                onEvent?.Invoke($"[iter {iteration + 1}/{maxIterations}] Calling LLM...");
 
                 var output = await CallLlmAsync(
                     conversationHistory,
@@ -103,7 +103,7 @@ public class AgentInvoker
             }
 
             var finalOutput = conversationHistory.LastOrDefault(m => m.Role == "assistant")?.Content ?? "";
-            onEvent?.Invoke($"[max iterations reached] Returning last assistant response.");
+            onEvent?.Invoke($"[max iterations reached ({maxIterations})] Returning last assistant response.");
 
             return new AgentInvocationResult
             {
@@ -111,7 +111,7 @@ public class AgentInvoker
                 Output = finalOutput,
                 ToolCalls = allToolCalls,
                 ToolResults = allToolResults,
-                Iterations = _maxToolIterations
+                Iterations = maxIterations
             };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -130,6 +130,19 @@ public class AgentInvoker
                 Error = ex.Message
             };
         }
+    }
+
+    private int GetMaxIterationsForAgent(string agentName)
+    {
+        return agentName.ToLower() switch
+        {
+            "plan"       => _config.Agents.Plan.MaxIterations,
+            "research"   => _config.Agents.Research.MaxIterations,
+            "analysis"   => _config.Agents.Analyze.MaxIterations,
+            "synthesis"  => _config.Agents.Synthesis.MaxIterations,
+            "evaluation" => _config.Agents.Evaluation.MaxIterations,
+            _            => _config.Agents.Plan.MaxIterations
+        };
     }
 
     private TimeSpan GetTimeoutForAgent(string agentName)

@@ -394,6 +394,12 @@ public class AgentContext
             sb.AppendLine("**ANALYSIS AGENT TOOL BUDGET:**");
             sb.AppendLine("Make NO MORE THAN 10 tool calls total across the entire session. After calling current_position (1 call) and technical_indicators for your primary assets across 2–3 timeframes (up to 8 calls), STOP making tool calls and write analysis.md immediately. You do not need ATR as a separate call — it is not returned by the indicator endpoint. Do not loop fetching the same indicators repeatedly.");
         }
+        else if (AgentName == "Plan")
+        {
+            sb.AppendLine();
+            sb.AppendLine("**PLAN AGENT TOOL BUDGET:**");
+            sb.AppendLine("Make NO MORE THAN 12 tool calls total. Once you have gathered data from web_search (3–4 calls), technical_indicators for BTC and ETH (2 calls), on-chain sources (1–2 calls), and congressional/political signals (1–2 calls), STOP making tool calls and write plan.md immediately. Do not keep searching for more data — you will never have complete information. Write the document with what you have.");
+        }
 
         return sb.ToString();
     }

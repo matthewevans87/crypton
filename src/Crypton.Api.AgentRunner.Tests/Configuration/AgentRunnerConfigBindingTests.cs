@@ -238,6 +238,113 @@ public class AgentRunnerConfigBindingTests
         Assert.Equal(600, result.Ollama.TimeoutSeconds);
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // MaxIterations — per-agent iteration limit
+    // ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Bind_EmptyConfiguration_AgentMaxIterationsDefaultsTo50()
+    {
+        var config = BuildConfig();
+        var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
+
+        Assert.Equal(50, result.Agents.Plan.MaxIterations);
+        Assert.Equal(50, result.Agents.Research.MaxIterations);
+        Assert.Equal(50, result.Agents.Analyze.MaxIterations);
+        Assert.Equal(50, result.Agents.Synthesis.MaxIterations);
+        Assert.Equal(50, result.Agents.Evaluation.MaxIterations);
+    }
+
+    [Fact]
+    public void Bind_AgentMaxIterations_BindsFromConfig()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Agents:Plan:MaxIterations"]     = "20",
+            ["Agents:Research:MaxIterations"] = "30",
+            ["Agents:Synthesis:MaxIterations"] = "10",
+        });
+
+        var result = config.Get<AgentRunnerConfig>()!;
+
+        Assert.Equal(20, result.Agents.Plan.MaxIterations);
+        Assert.Equal(30, result.Agents.Research.MaxIterations);
+        Assert.Equal(10, result.Agents.Synthesis.MaxIterations);
+        // Unset agents retain the property default
+        Assert.Equal(50, result.Agents.Analyze.MaxIterations);
+        Assert.Equal(50, result.Agents.Evaluation.MaxIterations);
+    }
+
+    [Fact]
+    public void Bind_AgentMaxIterations_EnvVarOverridesAppsettings()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Agents:Plan:MaxIterations"] = "50",
+            })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Agents:Plan:MaxIterations"] = "15",
+            })
+            .Build();
+
+        var result = config.Get<AgentRunnerConfig>()!;
+
+        Assert.Equal(15, result.Agents.Plan.MaxIterations);
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // Tool retry configuration
+    // ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Bind_EmptyConfiguration_ToolRetryDefaults()
+    {
+        var config = BuildConfig();
+        var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
+
+        Assert.Equal(3, result.Tools.MaxRetries);
+        Assert.Equal(30, result.Tools.MaxRetryDelaySeconds);
+    }
+
+    [Fact]
+    public void Bind_ToolRetrySettings_BindFromConfig()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Tools:MaxRetries"]           = "5",
+            ["Tools:MaxRetryDelaySeconds"] = "60",
+        });
+
+        var result = config.Get<AgentRunnerConfig>()!;
+
+        Assert.Equal(5, result.Tools.MaxRetries);
+        Assert.Equal(60, result.Tools.MaxRetryDelaySeconds);
+    }
+
+    [Fact]
+    public void Bind_ToolRetrySettings_EnvVarOverridesAppsettings()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Tools:MaxRetries"]           = "3",
+                ["Tools:MaxRetryDelaySeconds"] = "30",
+            })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Tools:MaxRetries"]           = "7",
+                ["Tools:MaxRetryDelaySeconds"] = "45",
+            })
+            .Build();
+
+        var result = config.Get<AgentRunnerConfig>()!;
+
+        Assert.Equal(7, result.Tools.MaxRetries);
+        Assert.Equal(45, result.Tools.MaxRetryDelaySeconds);
+    }
+
     [Fact]
     public void Bind_OllamaEnvVars_OverrideAppsettings()
     {

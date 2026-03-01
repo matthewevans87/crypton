@@ -9,13 +9,15 @@ public class ToolExecutor
     private readonly Dictionary<string, CircuitBreaker> _circuitBreakers = new();
     private readonly int _maxConcurrentExecutions;
     private readonly int _maxRetries;
+    private readonly int _maxRetryDelaySeconds;
     private readonly bool _enableRetry;
 
-    public ToolExecutor(int defaultTimeoutSeconds = 30, int maxConcurrentExecutions = 5, int maxRetries = 3, bool enableRetry = true)
+    public ToolExecutor(int defaultTimeoutSeconds = 30, int maxConcurrentExecutions = 5, int maxRetries = 3, bool enableRetry = true, int maxRetryDelaySeconds = 30)
     {
         _defaultTimeoutSeconds = defaultTimeoutSeconds;
         _maxConcurrentExecutions = maxConcurrentExecutions;
         _maxRetries = maxRetries;
+        _maxRetryDelaySeconds = maxRetryDelaySeconds;
         _enableRetry = enableRetry;
     }
 
@@ -142,8 +144,9 @@ public class ToolExecutor
         var transientPatterns = new[]
         {
             "timeout", "timed out", "504", "502", "503", "500",
-            "network", "connection", "unavailable", "too many requests",
-            "rate limit", "temporary"
+            "network", "connection", "unavailable",
+            "too many requests", "TooManyRequests", "429",
+            "rate limit", "ratelimit", "temporary"
         };
         
         return transientPatterns.Any(p => error.Contains(p, StringComparison.OrdinalIgnoreCase));
@@ -151,7 +154,8 @@ public class ToolExecutor
 
     private TimeSpan CalculateBackoff(int attempt)
     {
-        return TimeSpan.FromSeconds(Math.Pow(2, attempt) * 1);
+        var seconds = Math.Min(Math.Pow(2, attempt), _maxRetryDelaySeconds);
+        return TimeSpan.FromSeconds(seconds);
     }
 
     private async Task<ToolResult> ExecuteWithTimeoutAsync(

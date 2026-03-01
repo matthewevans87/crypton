@@ -11,7 +11,10 @@ public class ToolRegistry
 
     public ToolRegistry(AgentRunnerConfig config)
     {
-        _executor = new ToolExecutor(config.Tools.DefaultTimeoutSeconds);
+        _executor = new ToolExecutor(
+            defaultTimeoutSeconds: config.Tools.DefaultTimeoutSeconds,
+            maxRetries: config.Tools.MaxRetries,
+            maxRetryDelaySeconds: config.Tools.MaxRetryDelaySeconds);
         InitializeTools(config);
     }
 
