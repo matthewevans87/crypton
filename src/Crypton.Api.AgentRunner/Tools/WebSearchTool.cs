@@ -15,10 +15,10 @@ public class WebSearchTool : Tool
         Type = "object",
         Properties = new Dictionary<string, ToolParameterProperty>
         {
-            ["query"]   = new ToolParameterProperty { Type = "string",  Description = "The search query. Be specific; include asset names, dates, and key terms." },
-            ["count"]   = new ToolParameterProperty { Type = "integer", Description = "Number of results (1-20)", Default = 10 },
-            ["recency"] = new ToolParameterProperty { Type = "string",  Description = "Age filter: day, week, month, year, any", Default = "any" },
-            ["market"]  = new ToolParameterProperty { Type = "string",  Description = "Locale string for regional filtering", Default = "en-US" }
+            ["query"] = new ToolParameterProperty { Type = "string", Description = "The search query. Be specific; include asset names, dates, and key terms." },
+            ["count"] = new ToolParameterProperty { Type = "integer", Description = "Number of results (1-20)", Default = 10 },
+            ["recency"] = new ToolParameterProperty { Type = "string", Description = "Age filter: day, week, month, year, any", Default = "any" },
+            ["market"] = new ToolParameterProperty { Type = "string", Description = "Locale string for regional filtering", Default = "en-US" }
         },
         Required = new List<string> { "query" }
     };
@@ -52,11 +52,11 @@ public class WebSearchTool : Tool
         var recency = parameters.GetString("recency") ?? "any";
         var freshness = recency switch
         {
-            "day"   => "pd",
-            "week"  => "pw",
+            "day" => "pd",
+            "week" => "pw",
             "month" => "pm",
-            "year"  => "py",
-            _       => null
+            "year" => "py",
+            _ => null
         };
 
         try
@@ -68,7 +68,7 @@ public class WebSearchTool : Tool
             request.Headers.Add("X-Subscription-Token", _apiKey);
 
             var response = await _httpClient.SendAsync(request, cancellationToken);
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 return new ToolResult { Success = false, Error = $"Brave API error: {response.StatusCode}" };
@@ -78,7 +78,7 @@ public class WebSearchTool : Tool
             var results = JsonSerializer.Deserialize<JsonElement>(content);
 
             var webResults = new List<WebSearchResult>();
-            if (results.TryGetProperty("web", out var webResultsElement) && 
+            if (results.TryGetProperty("web", out var webResultsElement) &&
                 webResultsElement.TryGetProperty("results", out var resultsArray))
             {
                 foreach (var result in resultsArray.EnumerateArray())

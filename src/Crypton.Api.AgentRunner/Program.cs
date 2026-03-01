@@ -47,7 +47,7 @@ else
 var envAliases = new Dictionary<string, string>
 {
     ["BRAVE_SEARCH_API_KEY"] = "Tools__BraveSearch__ApiKey",
-    ["AGENT_RUNNER_API_KEY"]  = "Api__ApiKey",
+    ["AGENT_RUNNER_API_KEY"] = "Api__ApiKey",
 };
 foreach (var (shortKey, fullKey) in envAliases)
 {

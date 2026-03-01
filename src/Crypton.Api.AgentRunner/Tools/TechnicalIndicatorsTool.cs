@@ -18,10 +18,10 @@ public class TechnicalIndicatorsTool : Tool
         {
             ["asset"] = new ToolParameterProperty { Type = "string", Description = "Asset symbol (e.g., BTC, ETH)" },
             ["timeframe"] = new ToolParameterProperty { Type = "string", Description = "Timeframe (1h, 4h, 1d, 1w)", Default = "1d" },
-            ["indicators"] = new ToolParameterProperty 
-            { 
-                Type = "array", 
-                Description = "Optional list of specific indicators (RSI, MACD, BB, EMA, Volume)" 
+            ["indicators"] = new ToolParameterProperty
+            {
+                Type = "array",
+                Description = "Optional list of specific indicators (RSI, MACD, BB, EMA, Volume)"
             }
         },
         Required = new List<string> { "asset", "timeframe" }
@@ -65,8 +65,8 @@ public class TechnicalIndicatorsTool : Tool
         }
 
         var cacheKey = $"{asset}_{timeframe}_{string.Join(",", indicators)}";
-        
-        if (_cache.TryGetValue(cacheKey, out var cached) && 
+
+        if (_cache.TryGetValue(cacheKey, out var cached) &&
             (DateTime.UtcNow - cached.Timestamp).TotalSeconds < _cacheTtlSeconds)
         {
             return new ToolResult { Success = true, Data = cached.Data };
@@ -97,14 +97,14 @@ public class TechnicalIndicatorsTool : Tool
             }
 
             var response = await _httpClient.GetAsync(url, cancellationToken);
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 return new ToolResult { Success = false, Error = $"Market Data Service error: {response.StatusCode}" };
             }
 
             var data = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-            
+
             _cache[cacheKey] = (DateTime.UtcNow, data);
 
             return new ToolResult { Success = true, Data = data };

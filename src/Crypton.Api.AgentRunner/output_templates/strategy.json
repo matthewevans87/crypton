@@ -1,51 +1,68 @@
 {
-    "_template_note": "strategy.json template. Replace ALL placeholder values. REMOVE ALL '_comment' and '_template_note' keys from final output. Field names and structure must match exactly — the Execution Service validates against strategy.schema.json.",
-    "version": "1.0",
-    "cycle": "<ISO 8601 datetime of the cycle that produced this strategy>",
-    "generatedAt": "<ISO 8601 datetime>",
-    "generatedBy": "Synthesis Agent",
-    "mode": "<'paper' | 'live'>",
-    "validUntil": "<ISO 8601 datetime — the Execution Service will not open new pending positions after this time>",
+    "_template_note": "REMOVE ALL '_template_note' AND '_comment' KEYS FROM YOUR OUTPUT. This is an authoring aid only. Field names are snake_case and must match exactly. The Execution Service deserialises with strict JsonPropertyName bindings — wrong field names are silently ignored.",
+
+    "mode": "paper",
+    "validity_window": "<ISO 8601 UTC datetime — e.g. 2026-03-02T14:00:00Z. The Execution Service will not open NEW pending positions after this time. Existing active positions continue to be managed by their own exit conditions.>",
     "posture": "<'aggressive' | 'moderate' | 'defensive' | 'flat' | 'exit_all'>",
-    "rationale": "<2–4 sentences. The dominant thesis for this cycle, what market conditions support it, and the key risk. This is logged and shown on the Monitoring Dashboard — write it as if you will be asked to defend it after a losing trade.>",
-    "risk": {
-        "_comment": "All values are fractions of portfolio capital (0.10 = 10%). These are hard limits enforced by the Execution Service.",
-        "maxDrawdown": "<number 0–1 — halt all trading if total portfolio drawdown exceeds this fraction>",
-        "dailyLossLimit": "<number 0–1 — suspend new entries for the calendar day if daily loss reaches this fraction>",
-        "maxExposure": "<number 0–1 — maximum fraction of portfolio that may be deployed at once>",
-        "maxPositionSize": "<number 0–1 — maximum allocation to any single position>",
-        "safeModeTrigger": "<'consecutive_losses' | 'max_drawdown' | 'manual'>"
+    "posture_rationale": "<1–2 sentences: why this posture was chosen.>",
+    "strategy_rationale": "<2–4 sentences: the dominant thesis for this cycle, what market conditions support it, and the key risk. Logged and shown on the dashboard. Write it as if you will be asked to defend it after a losing trade.>",
+
+    "portfolio_risk": {
+        "_comment": "Hard limits enforced by the Execution Service. max_drawdown_pct / max_total_exposure_pct / max_per_position_pct are fractions (0.15 = 15%). daily_loss_limit_usd is an ABSOLUTE USD AMOUNT, not a fraction.",
+        "max_drawdown_pct": "<number 0–1 — halt all trading if total portfolio drawdown reaches this fraction>",
+        "daily_loss_limit_usd": "<number — suspend new entries for today if cumulative daily loss (in USD) reaches this amount>",
+        "max_total_exposure_pct": "<number 0–1 — maximum fraction of portfolio deployed across all open positions at once>",
+        "max_per_position_pct": "<number 0–1 — hard cap on any single position's allocation>",
+        "safe_mode_triggers": ["<'consecutive_losses' | 'max_drawdown' | 'manual' — list one or more>"]
     },
+
     "positions": [
         {
-            "_comment": "One object per intended position. 'direction': 'close' exits immediately. 'long'/'short' opens or manages a position.",
-            "asset": "<trading pair, e.g. 'BTC/USD'>",
-            "direction": "<'long' | 'short' | 'close'>",
-            "allocation": "<number 0–1 — fraction of total portfolio capital, e.g. 0.10 for 10%>",
-            "entryType": "<'market' | 'limit' | 'conditional'>",
-            "entryConditions": {
-                "_comment": "Required only for entryType='conditional'. Single condition evaluated by Execution Service against live data.",
-                "indicator": "<'price' | 'rsi' | 'macd' | 'ema' | 'bollinger_upper' | 'bollinger_lower' | 'volume' | 'atr'>",
-                "operator": "<'gt' | 'lt' | 'gte' | 'lte' | 'crosses_above' | 'crosses_below'>",
-                "value": "<number — threshold value>"
-            },
-            "takeProfit": [
-                {
-                    "_comment": "Scaled exits supported — list multiple targets. Execute in order.",
-                    "target": "<number — price target>",
-                    "percentage": "<number 0–1 — fraction of this position to close at this target>"
-                }
+            "_comment": "MARKET ENTRY EXAMPLE — enter immediately at current price.",
+            "id": "<short stable identifier unique within this strategy, e.g. 'btc-long-1'>",
+            "asset": "BTC/USD",
+            "direction": "long",
+            "allocation_pct": 0.10,
+            "entry_type": "market",
+            "take_profit_targets": [
+                { "price": 69000, "close_pct": 0.5 },
+                { "price": 72000, "close_pct": 0.5 }
             ],
-            "stopLoss": "<number — hard stop price. Required for all non-flat, non-close positions.>",
-            "trailingStop": "<number | null — trailing stop as a fraction e.g. 0.03 for 3%. null if not used.>",
-            "timeBasedExit": "<ISO 8601 datetime | null — close at this time regardless of P&L. null if unused.>",
-            "invalidationCondition": {
-                "_comment": "The market state that means the thesis is wrong. Recorded for evaluation.",
-                "indicator": "<indicator name>",
-                "operator": "<operator>",
-                "value": "<threshold number>",
-                "description": "<human-readable description of what this condition means>"
-            }
+            "stop_loss": { "type": "hard", "price": 63000 },
+            "time_exit_utc": null,
+            "invalidation_condition": "price(BTC/USD) >= 70500"
+        },
+        {
+            "_comment": "LIMIT ENTRY EXAMPLE — place a limit order; fill when price reaches entry_limit_price.",
+            "id": "eth-long-limit-1",
+            "asset": "ETH/USD",
+            "direction": "long",
+            "allocation_pct": 0.08,
+            "entry_type": "limit",
+            "entry_limit_price": 1860,
+            "take_profit_targets": [
+                { "price": 2050, "close_pct": 0.6 },
+                { "price": 2200, "close_pct": 0.4 }
+            ],
+            "stop_loss": { "type": "trailing", "trail_pct": 0.04 },
+            "time_exit_utc": "2026-03-03T18:00:00Z",
+            "invalidation_condition": null
+        },
+        {
+            "_comment": "CONDITIONAL ENTRY EXAMPLE — enter only when the DSL expression evaluates true against live data.",
+            "id": "btc-short-oversold-1",
+            "asset": "BTC/USD",
+            "direction": "short",
+            "allocation_pct": 0.10,
+            "entry_type": "conditional",
+            "entry_condition": "AND(rsi(14, BTC/USD) > 72, price(BTC/USD) crosses_below 68500)",
+            "take_profit_targets": [
+                { "price": 65000, "close_pct": 0.5 },
+                { "price": 62000, "close_pct": 0.5 }
+            ],
+            "stop_loss": { "type": "hard", "price": 70500 },
+            "time_exit_utc": null,
+            "invalidation_condition": "price(BTC/USD) >= 70500"
         }
     ]
 }

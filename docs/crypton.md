@@ -23,7 +23,9 @@ Crypton is an autonomous cryptocurrency portfolio management system built around
 
 ### System Contract: `strategy.json`
 
-The `strategy.json` file is the formal contract between the Learning Loop and the Execution Service. It is produced by the `Synthesis Agent` at the end of each loop cycle and consumed deterministically by the `Execution Service`. It fully specifies all entry and exit rules, position sizing, and risk management parameters. Valid strategies include "no trade", "hold", and "liquidate all holdings". A domain-specific language (DSL) should be considered for expressing complex conditional rules within the strategy schema.
+The `strategy.json` file is the formal contract between the Learning Loop and the Execution Service. It is produced by the `Synthesis Agent` at the end of each loop cycle and consumed deterministically by the `Execution Service`. It fully specifies all entry and exit rules, position sizing, and risk management parameters. Valid strategies include "no trade" (`posture: flat`), "hold", and "liquidate all holdings" (`posture: exit_all`).
+
+Entry and exit conditions are expressed using a lightweight **DSL** (domain-specific language) evaluated by the Execution Service against live market snapshots on every tick. Conditions support price comparisons (`price(BTC/USD) < 65000`), indicator comparisons (`rsi(14, BTC/USD) < 35`), edge-detected crossings (`price(BTC/USD) crosses_below 64000`), and composite logic (`AND(...)`, `OR(...)`, `NOT(...)`). All field names in the JSON are snake_case and match the Execution Service's `[JsonPropertyName]` bindings exactly — the full schema is in `output_templates/strategy.schema.json`.
 
 ### Inter-Agent Communication
 
@@ -156,19 +158,22 @@ The `Synthesis Agent` is the decision-maker of the Learning Loop. It reads the f
 3. Read `analysis.md` in full, with particular attention to the **Synthesis Briefing** section.
 4. Call `tool.current_position` to load the current portfolio state.
 5. Determine the most rational course of action given the analysis, current positions, and risk environment.
-6. Generate a `strategy.json` file that strictly adheres to the strategy schema. The file must specify:
-   - **Mode:** `paper` or `live`
-   - **Validity window:** the datetime at which this strategy expires and must be replaced by the next cycle
-   - **Posture:** overall risk stance (aggressive / moderate / defensive / flat / exit_all) with rationale
-   - **Portfolio-level risk management:** maximum drawdown threshold, daily loss limit, maximum total exposure, maximum per-position size, and safe-mode trigger conditions
-   - **Positions:** one entry per position to open, manage, or close. Each position specifies:
-     - Asset, direction, and capital allocation percentage
-     - Entry type (`market`, `limit`, or `conditional`) and entry conditions expressed as evaluable rules over live indicator data
-     - Scaled take-profit targets with partial close percentages
-     - Stop-loss (hard and/or trailing)
-     - Optional time-based exit
-     - Invalidation condition (the market state that signals the thesis is wrong)
-   - **Strategy rationale:** a brief prose explanation of the overall logic for logging and dashboard display
+6. Generate a `strategy.json` file that strictly adheres to the strategy schema. All field names are **snake_case**. The file must specify:
+   - **`mode`:** always `"paper"` unless live trading has been explicitly enabled by a human operator
+   - **`validity_window`:** ISO 8601 UTC datetime at which this strategy expires
+   - **`posture`:** overall risk stance — one of `aggressive`, `moderate`, `defensive`, `flat`, `exit_all` — with `posture_rationale`
+   - **`portfolio_risk`:** four hard risk limits — `max_drawdown_pct` (fraction), `daily_loss_limit_usd` (absolute USD), `max_total_exposure_pct` (fraction), `max_per_position_pct` (fraction) — plus a `safe_mode_triggers` list
+   - **`positions`:** one entry per position to open or manage. Each position specifies:
+     - `id` — stable short identifier (e.g. `'btc-short-1'`)
+     - `asset`, `direction` (`long` or `short`), and `allocation_pct` (fraction of portfolio)
+     - `entry_type` — `market`, `limit`, or `conditional`
+     - `entry_condition` — DSL expression string (required for `conditional`; e.g. `"AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)"`)
+     - `entry_limit_price` — required for `limit` entry
+     - `take_profit_targets` — array of `{price, close_pct}` for scaled exits
+     - `stop_loss` — object `{type: "hard"|"trailing", price?, trail_pct?}`
+     - `time_exit_utc` — optional UTC datetime for time-based exit
+     - `invalidation_condition` — DSL string; closes the position when the thesis is demonstrably broken
+   - **`strategy_rationale`:** 2–4 sentence prose summary for logging and dashboard display
 7. Deposit a feedback message in `mailbox.analysis` noting whether `analysis.md` provided sufficient clarity for strategy construction — specifically, whether the Synthesis Briefing was actionable and whether conviction ratings and invalidation conditions were clear. One to two sentences.
 8. Deposit a brief forward-context message in `mailbox.evaluation` noting any deliberate deviations from the Analysis Agent's recommendations and the rationale, so the Evaluation Agent can properly assess intent versus outcome. One to two sentences.
 

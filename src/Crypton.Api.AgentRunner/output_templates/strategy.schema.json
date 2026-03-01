@@ -1,157 +1,166 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Crypton Trading Strategy",
-  "description": "Schema for the strategy.json file produced by the Synthesis Agent",
+  "description": "Schema for the strategy.json file produced by the Synthesis Agent and consumed by the Execution Service.\n\nAll field names are snake_case and must match exactly — the Execution Service deserialises this with strict JsonPropertyName bindings.\n\nDSL CONDITION GRAMMAR\n=====================\nThe 'entry_condition' and 'invalidation_condition' fields are DSL expression STRINGS evaluated at runtime by the Execution Service against live market snapshots.\n\nAtom — price comparison:\n  price(ASSET) OP VALUE\n  e.g.  price(BTC/USD) < 66000\n        price(ETH/USD) >= 1950\n\nAtom — indicator comparison (period first, asset last):\n  INDICATOR_NAME(PERIOD, ASSET) OP VALUE\n  INDICATOR_NAME(ASSET) OP VALUE   (no configurable period)\n  e.g.  rsi(14, BTC/USD) < 35\n        macd(BTC/USD) > 0\n        bollinger_lower(BTC/USD) >= 64000\n\nEdge-detected crossing operators (fire on the tick value transitions):\n  price(ASSET) crosses_above VALUE\n  price(ASSET) crosses_below VALUE\n  INDICATOR_NAME(PERIOD, ASSET) crosses_above VALUE\n\nComposite:\n  AND(expr, expr, ...)   all children must be true\n  OR(expr, expr, ...)    at least one child must be true\n  NOT(expr)              logical negation\n  e.g.  AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)\n        OR(price(BTC/USD) crosses_below 64000, rsi(14, BTC/USD) crosses_below 30)\n        AND(rsi(14, BTC/USD) < 40, NOT(price(BTC/USD) >= 70000))\n\nComparison operators: >   >=   <   <=   ==   !=   crosses_above   crosses_below\n\nIndicators available in MarketSnapshot (populated by the MarketData service):\n  rsi(14, ASSET)           RSI 14-period\n  macd(ASSET)              MACD line\n  macd_signal(ASSET)       MACD signal line\n  macd_histogram(ASSET)    MACD histogram (macd − signal)\n  bollinger_upper(ASSET)   Upper Bollinger Band (20-period)\n  bollinger_middle(ASSET)  Middle / 20-period SMA\n  bollinger_lower(ASSET)   Lower Bollinger Band (20-period)",
   "type": "object",
-  "required": ["mode", "validUntil", "posture", "risk", "positions"],
+  "required": ["mode", "validity_window", "posture", "portfolio_risk", "positions"],
+  "additionalProperties": true,
   "properties": {
     "mode": {
       "type": "string",
       "enum": ["paper", "live"],
-      "description": "Execution mode: paper (simulated) or live (real capital)"
+      "description": "Execution mode. Always 'paper' unless a human operator has explicitly enabled live trading."
     },
-    "validUntil": {
+    "validity_window": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO 8601 datetime when this strategy expires"
+      "description": "ISO 8601 UTC datetime. The Execution Service will not open new pending positions after this time. Active positions continue to be managed by their own exit conditions."
     },
     "posture": {
       "type": "string",
       "enum": ["aggressive", "moderate", "defensive", "flat", "exit_all"],
-      "description": "Overall risk stance for this strategy cycle"
+      "description": "Overall portfolio stance. 'flat' suppresses all new entries; 'exit_all' closes every open position immediately."
     },
-    "rationale": {
+    "posture_rationale": {
       "type": "string",
-      "description": "Brief prose explanation of the overall strategy logic"
+      "description": "1–2 sentence explanation of why this posture was chosen. Logged and displayed on the dashboard."
     },
-    "risk": {
+    "strategy_rationale": {
+      "type": "string",
+      "description": "2–4 sentence summary of the overall trading thesis: what is being bet on, what market conditions support it, and the key risk. Read by the Evaluation Agent and displayed on the dashboard."
+    },
+    "portfolio_risk": {
       "type": "object",
-      "required": ["maxDrawdown", "dailyLossLimit", "maxExposure", "maxPositionSize"],
+      "description": "Portfolio-level hard limits enforced by the Execution Service. Breaches halt or restrict trading automatically.",
+      "required": ["max_drawdown_pct", "daily_loss_limit_usd", "max_total_exposure_pct", "max_per_position_pct"],
+      "additionalProperties": false,
       "properties": {
-        "maxDrawdown": {
+        "max_drawdown_pct": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Fraction (0.15 = 15%). Halt all trading if total portfolio drawdown reaches this level."
+        },
+        "daily_loss_limit_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Absolute USD amount. Suspend all new entries for the calendar day if cumulative daily loss reaches this value."
+        },
+        "max_total_exposure_pct": {
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "Maximum portfolio drawdown threshold (0.1 = 10%)"
+          "description": "Fraction (0.30 = 30%). Maximum total capital deployed across all open positions simultaneously."
         },
-        "dailyLossLimit": {
+        "max_per_position_pct": {
           "type": "number",
-          "minimum": 0,
+          "exclusiveMinimum": 0,
           "maximum": 1,
-          "description": "Maximum daily loss before suspending trading (0.03 = 3%)"
+          "description": "Fraction (0.15 = 15%). Hard cap on any single position's allocation."
         },
-        "maxExposure": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Maximum total portfolio exposure (0.7 = 70%)"
-        },
-        "maxPositionSize": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Maximum size for any single position (0.15 = 15%)"
-        },
-        "safeModeTrigger": {
-          "type": "string",
-          "enum": ["consecutive_losses", "max_drawdown", "manual"],
-          "description": "Condition that triggers safe mode"
+        "safe_mode_triggers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["consecutive_losses", "max_drawdown", "manual"]
+          },
+          "description": "Conditions that activate safe mode and halt all activity. Any subset of: 'consecutive_losses', 'max_drawdown', 'manual'."
         }
       }
     },
     "positions": {
       "type": "array",
-      "description": "Array of positions to open, manage, or close",
+      "description": "List of position instructions. Empty for 'flat' or 'exit_all' postures. One object per trade the Execution Service should open or manage.",
       "items": {
         "type": "object",
-        "required": ["asset", "direction", "allocation", "entryType"],
+        "required": ["id", "asset", "direction", "allocation_pct", "entry_type"],
+        "additionalProperties": false,
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable short identifier unique within this strategy document, e.g. 'btc-short-1'. Used to correlate open positions with strategy entries. Should not change if a position is carried forward to the next cycle."
+          },
           "asset": {
             "type": "string",
-            "description": "Trading pair (e.g., 'BTC/USD', 'ETH/USD')"
+            "description": "Kraken trading pair, e.g. 'BTC/USD', 'ETH/USD'."
           },
           "direction": {
             "type": "string",
-            "enum": ["long", "short", "close"],
-            "description": "Trade direction"
+            "enum": ["long", "short"],
+            "description": "'long' = buy; 'short' = sell/short."
           },
-          "allocation": {
+          "allocation_pct": {
             "type": "number",
-            "minimum": 0,
+            "exclusiveMinimum": 0,
             "maximum": 1,
-            "description": "Capital allocation percentage (0.10 = 10%)"
+            "description": "Fraction of total portfolio capital (0.10 = 10%). Must not exceed portfolio_risk.max_per_position_pct."
           },
-          "entryType": {
+          "entry_type": {
             "type": "string",
             "enum": ["market", "limit", "conditional"],
-            "description": "Order type for entry"
+            "description": "'market' = execute immediately; 'limit' = place limit order at entry_limit_price; 'conditional' = wait until entry_condition evaluates true."
           },
-          "entryConditions": {
-            "type": "object",
-            "description": "Conditions for conditional entry (evaluated against live indicator data)",
-            "properties": {
-              "indicator": {
-                "type": "string",
-                "description": "Indicator name (e.g., 'RSI', 'MACD')"
-              },
-              "operator": {
-                "type": "string",
-                "enum": ["gt", "lt", "eq", "gte", "lte", "crosses_above", "crosses_below"]
-              },
-              "value": {
-                "type": "number"
-              }
-            }
+          "entry_condition": {
+            "type": "string",
+            "description": "DSL condition string. Required when entry_type='conditional'. Evaluated on every market tick against live snapshots. Example: \"AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)\""
           },
-          "takeProfit": {
+          "entry_limit_price": {
+            "type": "number",
+            "description": "Limit price for entry. Required when entry_type='limit'. Long fills at or below this price; short fills at or above."
+          },
+          "take_profit_targets": {
             "type": "array",
+            "description": "Scaled take-profit exits. Multiple targets enable tranche-based profit taking. Sum of close_pct must not exceed 1.0.",
             "items": {
               "type": "object",
-              "required": ["target", "percentage"],
+              "required": ["price", "close_pct"],
+              "additionalProperties": false,
               "properties": {
-                "target": {
+                "price": {
                   "type": "number",
-                  "description": "Price target for partial close"
+                  "exclusiveMinimum": 0,
+                  "description": "Price at which to close this tranche. For longs must be above entry; for shorts must be below entry."
                 },
-                "percentage": {
+                "close_pct": {
                   "type": "number",
-                  "minimum": 0,
+                  "exclusiveMinimum": 0,
                   "maximum": 1,
-                  "description": "Percentage of position to close at this target"
+                  "description": "Fraction of the position to close at this target (0.50 = 50%)."
                 }
               }
             }
           },
-          "stopLoss": {
-            "type": "number",
-            "description": "Stop loss price (null if no stop loss)"
-          },
-          "trailingStop": {
-            "type": "number",
-            "description": "Trailing stop percentage (e.g., 0.02 = 2%)"
-          },
-          "timeBasedExit": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Exit position at this time if still open"
-          },
-          "invalidationCondition": {
+          "stop_loss": {
             "type": "object",
-            "description": "Market state that signals the thesis is wrong",
+            "description": "Stop-loss rule. Strongly recommended for all non-flat positions.",
+            "required": ["type"],
+            "additionalProperties": false,
             "properties": {
-              "indicator": {
-                "type": "string"
+              "type": {
+                "type": "string",
+                "enum": ["hard", "trailing"],
+                "description": "'hard' = fixed price stop; 'trailing' = ratcheting stop that follows price by trail_pct."
               },
-              "operator": {
-                "type": "string"
+              "price": {
+                "type": "number",
+                "description": "Fixed stop price. Required when type='hard'. For longs must be below entry; for shorts must be above entry."
               },
-              "value": {
-                "type": "number"
-              },
-              "description": {
-                "type": "string"
+              "trail_pct": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Trailing distance as a fraction of price (0.03 = 3%). Required when type='trailing'."
               }
             }
+          },
+          "time_exit_utc": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 UTC datetime. Close the position at this time regardless of P&L. Use for catalyst-window trades."
+          },
+          "invalidation_condition": {
+            "type": "string",
+            "description": "DSL condition string. If this evaluates true, the trade thesis is considered broken and the position is closed at market. Example (for a short): \"price(BTC/USD) >= 70000\""
           }
         }
       }

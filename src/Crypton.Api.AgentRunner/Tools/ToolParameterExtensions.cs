@@ -19,11 +19,11 @@ public static class ToolParameterExtensions
 
         return value switch
         {
-            string s                                    => s,
+            string s => s,
             JsonElement { ValueKind: JsonValueKind.String } je => je.GetString(),
-            JsonElement je                              => je.ToString(),
-            null                                        => null,
-            _                                           => value.ToString()
+            JsonElement je => je.ToString(),
+            null => null,
+            _ => value.ToString()
         };
     }
 
@@ -36,11 +36,11 @@ public static class ToolParameterExtensions
 
         return value switch
         {
-            int i                                              => i,
-            long l                                             => (int)l,
+            int i => i,
+            long l => (int)l,
             JsonElement { ValueKind: JsonValueKind.Number } je => je.TryGetInt32(out var n) ? n : defaultValue,
-            JsonElement je                                     => int.TryParse(je.ToString(), out var n) ? n : defaultValue,
-            _                                                  => int.TryParse(value?.ToString(), out var n) ? n : defaultValue
+            JsonElement je => int.TryParse(je.ToString(), out var n) ? n : defaultValue,
+            _ => int.TryParse(value?.ToString(), out var n) ? n : defaultValue
         };
     }
 
@@ -53,11 +53,11 @@ public static class ToolParameterExtensions
 
         return value switch
         {
-            bool b                                             => b,
-            JsonElement { ValueKind: JsonValueKind.True }  _  => true,
-            JsonElement { ValueKind: JsonValueKind.False } _  => false,
-            JsonElement je                                     => bool.TryParse(je.ToString(), out var b) ? b : defaultValue,
-            _                                                  => bool.TryParse(value?.ToString(), out var b) ? b : defaultValue
+            bool b => b,
+            JsonElement { ValueKind: JsonValueKind.True } _ => true,
+            JsonElement { ValueKind: JsonValueKind.False } _ => false,
+            JsonElement je => bool.TryParse(je.ToString(), out var b) ? b : defaultValue,
+            _ => bool.TryParse(value?.ToString(), out var b) ? b : defaultValue
         };
     }
 }

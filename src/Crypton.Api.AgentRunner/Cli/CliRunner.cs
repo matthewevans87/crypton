@@ -132,7 +132,7 @@ public static class CliRunner
         // Streaming callbacks
         Action<string>? onToken = verbose
             ? token => { Console.ForegroundColor = ConsoleColor.White; Console.Write(token); Console.ResetColor(); }
-            : null;
+        : null;
 
         Action<string> onEvent = msg =>
         {

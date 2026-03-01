@@ -32,29 +32,107 @@ This agent has access to:
 
 ## Strategy Schema Reference
 
-All fields are defined in `output_templates/strategy.json`. That template is the authoritative source for field names and structure — follow it exactly. Key structural elements:
+All field names are **snake_case** and must match exactly. The Execution Service deserialises with strict `JsonPropertyName` bindings — a camelCase field is silently discarded. The template in `output_templates/strategy.json` is the authoritative reference.
 
-- **`validUntil`** — ISO 8601 datetime when this strategy expires. The Agent Runner monitors this and signals the Execution Service when expiry approaches. Set to a duration appropriate for the strategy type (a momentum trade may be 24–48 hours; a range accumulation strategy may be 5–7 days).
+### Top-level fields
 
-- **`posture`** — A single string: one of `'aggressive'`, `'moderate'`, `'defensive'`, `'flat'`, `'exit_all'`. Match it to the Analysis Agent's recommendation in the Synthesis Briefing.
+- **`mode`** — Always `"paper"`. Never `"live"` unless a human operator has explicitly enabled live trading.
+- **`validity_window`** — ISO 8601 UTC datetime. No NEW pending positions will be opened after this time. Active positions continue to be managed.
+- **`posture`** — One of `'aggressive'`, `'moderate'`, `'defensive'`, `'flat'`, `'exit_all'`. `'flat'` → no new trades. `'exit_all'` → close everything immediately.
+- **`posture_rationale`** — 1–2 sentences explaining the posture choice.
+- **`strategy_rationale`** — 2–4 sentences: the dominant thesis, what supports it, and key risk. Logged and shown on the dashboard.
 
-- **`rationale`** — Top-level string. 2–4 sentences describing the dominant thesis, what supports it, and the key risk. This field is logged and shown on the Monitoring Dashboard.
+### `portfolio_risk` object
 
-- **`risk`** — Portfolio-level hard limits as fractions (0.10 = 10%). Fields: `maxDrawdown`, `dailyLossLimit`, `maxExposure`, `maxPositionSize`, `safeModeTrigger`. These are the outer bounds; the Execution Service will not violate them. Set conservatively in uncertain or volatile conditions.
+| Field | Type | Meaning |
+|---|---|---|
+| `max_drawdown_pct` | fraction (0–1) | Halt all trading if portfolio drawdown reaches this level |
+| `daily_loss_limit_usd` | **absolute USD amount** (not a fraction) | Suspend new entries today if daily loss in USD reaches this |
+| `max_total_exposure_pct` | fraction (0–1) | Maximum total capital deployed across all positions simultaneously |
+| `max_per_position_pct` | fraction (0–1) | Hard cap on any single position's `allocation_pct` |
+| `safe_mode_triggers` | list of strings | Any of: `'consecutive_losses'`, `'max_drawdown'`, `'manual'` |
 
-- **`positions`** — A position object for each open, new, or exiting position. The `direction` field controls behavior:
-  - `'long'` or `'short'` — The Execution Service will enter this position when `entryConditions` are met (for `entryType: 'conditional'`) or immediately (for `market`).
-  - `'close'` — Exit this position as soon as possible at market. Set `allocation: 0`.
+### `positions` array — each item
 
-- **`entryConditions`** — A single condition object evaluated in real time by the Execution Service against live market data. Specifies `indicator`, `operator`, and `value`. Only required when `entryType` is `'conditional'`. Be precise — these rules execute automatically.
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | ✅ | Short stable identifier unique within this strategy, e.g. `'btc-short-1'` |
+| `asset` | ✅ | Trading pair, e.g. `'BTC/USD'` |
+| `direction` | ✅ | `'long'` or `'short'` |
+| `allocation_pct` | ✅ | Fraction of total portfolio capital (0.10 = 10%) |
+| `entry_type` | ✅ | `'market'`, `'limit'`, or `'conditional'` |
+| `entry_condition` | conditional | DSL string. Required when `entry_type='conditional'`. See DSL grammar below. |
+| `entry_limit_price` | conditional | Number. Required when `entry_type='limit'`. |
+| `take_profit_targets` | recommended | Array of `{price, close_pct}` objects. |
+| `stop_loss` | recommended | Object `{type, price?, trail_pct?}`. See below. |
+| `time_exit_utc` | optional | ISO 8601 UTC datetime. Close at this time if still open. |
+| `invalidation_condition` | optional | DSL string. Close position if this evaluates true. |
 
-- **`allocation`** — Fraction of total portfolio capital (0.0–1.0). Example: `0.10` = 10%.
+**`take_profit_targets` item:** `{"price": <number>, "close_pct": <fraction 0–1>}`. Sum of `close_pct` values must not exceed 1.0. For longs, `price` must be above entry. For shorts, `price` must be below entry.
 
-- **`takeProfit`** — Array of `{target, percentage}` objects. `target` is a price; `percentage` is the fraction of the position to close at that target (0.5 = 50%).
+**`stop_loss` object:**
+- `{"type": "hard", "price": <number>}` — fixed stop. For longs, below entry. For shorts, above entry.
+- `{"type": "trailing", "trail_pct": <fraction>}` — ratcheting stop at `trail_pct` distance from peak price (e.g. `0.03` = 3%).
 
-- **`stopLoss`** — Hard stop price (a number, not a percentage). Set at a technically meaningful level.
+---
 
-- **`invalidationCondition`** — Object with `indicator`, `operator`, `value`, and `description`. The `description` is human-readable and used by the Evaluation Agent to assess whether the thesis broke correctly.
+## DSL Condition Reference
+
+The `entry_condition` and `invalidation_condition` fields are **DSL expression strings** — not objects. The Execution Service parses and evaluates these against live market data on every tick. Parse errors at strategy-load time are fatal; the strategy will be rejected.
+
+### Atoms
+
+```
+price(ASSET) OP VALUE
+INDICATOR_NAME(PERIOD, ASSET) OP VALUE
+INDICATOR_NAME(ASSET) OP VALUE
+```
+
+Examples:
+```
+price(BTC/USD) < 66000
+rsi(14, BTC/USD) < 35
+macd(BTC/USD) > 0
+bollinger_lower(BTC/USD) >= 64000
+```
+
+### Crossing operators (edge-detected — fire only on the tick a value transitions)
+
+```
+price(ASSET) crosses_above VALUE
+price(ASSET) crosses_below VALUE
+INDICATOR_NAME(PERIOD, ASSET) crosses_above VALUE
+```
+
+### Composite
+
+```
+AND(expr, expr, ...)    all children must be true
+OR(expr, expr, ...)     at least one child must be true
+NOT(expr)               logical negation
+```
+
+Examples:
+```
+AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)
+OR(price(BTC/USD) crosses_below 64000, rsi(14, BTC/USD) crosses_below 30)
+AND(rsi(14, BTC/USD) < 40, NOT(price(BTC/USD) >= 70000))
+```
+
+### All operators: `>` `>=` `<` `<=` `==` `!=` `crosses_above` `crosses_below`
+
+### Available indicators (from the MarketData service)
+
+| Expression | What it measures |
+|---|---|
+| `rsi(14, ASSET)` | RSI 14-period |
+| `macd(ASSET)` | MACD line |
+| `macd_signal(ASSET)` | MACD signal line |
+| `macd_histogram(ASSET)` | MACD histogram (line − signal) |
+| `bollinger_upper(ASSET)` | Upper Bollinger Band (20-period) |
+| `bollinger_middle(ASSET)` | 20-period SMA |
+| `bollinger_lower(ASSET)` | Lower Bollinger Band (20-period) |
+| `price(ASSET)` | Live mid price (no indicator lookup needed) |
 
 ---
 
@@ -80,28 +158,37 @@ Cross-reference the Synthesis Briefing's recommended posture and per-asset actio
 
 Before committing to individual positions, establish the overall risk envelope:
 
-- **Posture:** What is the overall stance? How aggressive or defensive should execution be? This should follow directly from the Analysis Agent's recommendation unless you have a specific reason to deviate.
-- **`risk.maxDrawdown`:** At what portfolio-level loss fraction does all trading halt? Lower in high-uncertainty environments.
-- **`risk.dailyLossLimit`:** At what fraction of daily loss does the Execution Service stop opening new positions?
-- **`risk.maxExposure`:** What fraction of available capital may be deployed at once?
-- **`risk.maxPositionSize`:** What is the largest single position as a fraction of portfolio?
-- **`risk.safeModeTrigger`:** One of `'consecutive_losses'`, `'max_drawdown'`, `'manual'`.
+- **Posture:** What is the overall stance? Follow the Analysis Agent's recommendation unless you have a specific reason to deviate. Record the reason in `posture_rationale`.
+- **`portfolio_risk.max_drawdown_pct`:** At what portfolio drawdown fraction does all trading halt? Lower in high-uncertainty environments.
+- **`portfolio_risk.daily_loss_limit_usd`:** At what **absolute USD loss** does the Execution Service stop opening new positions for the day? Size this relative to your portfolio size (e.g. a $100 portfolio might use $5–$10). This is NOT a fraction.
+- **`portfolio_risk.max_total_exposure_pct`:** What fraction of available capital may be deployed at once?
+- **`portfolio_risk.max_per_position_pct`:** What is the largest single position as a fraction of portfolio?
+- **`portfolio_risk.safe_mode_triggers`:** Array of trigger conditions — one or more of `'consecutive_losses'`, `'max_drawdown'`, `'manual'`.
 
 ### Step 5 — Define positions
 
 For each asset with a recommended direction in the Synthesis Briefing, define a position object:
 
-**a) Direction.** Is this a new trade (`'long'`/`'short'`), or should an existing position be closed (`'close'`)?
+**a) ID.** Assign a short, stable `id` string unique within this document, e.g. `'btc-short-1'`. Use the same id across cycles if the position is being carried forward.
 
-**b) Allocation.** What fraction of total portfolio capital? Use the Analysis Agent's risk budget guidance. Example: `0.10` for 10%. High conviction + favorable conditions = larger allocation; low conviction = smaller.
+**b) Direction.** Is this a new trade (`'long'` or `'short'`)? For longs, you profit when price rises. For shorts, you profit when price falls.
 
-**c) Entry type and conditions.** For `'conditional'` entries, specify the `entryConditions` object precisely. Be specific about the indicator, operator, and value. A rule like `{"indicator": "rsi", "operator": "lte", "value": 35}` is explicitly executable. Vague descriptions are not.
+**c) Allocation.** Set `allocation_pct` as a fraction of total portfolio capital (0.10 = 10%). Use the Analysis Agent's risk budget guidance. High conviction = larger allocation; low conviction = smaller. Must not exceed `portfolio_risk.max_per_position_pct`.
 
-**d) Take-profit targets.** Use `takeProfit` array. Scaled exits lock in profit and reduce risk. Specify `target` (price) and `percentage` (fraction of position to close). Trailing via `trailingStop` where you expect an extended trend.
+**d) Entry type and condition.**
+- `'market'` — enter immediately at the current price.
+- `'limit'` — set `entry_limit_price` to the specific price at which to fill. Long fills at or below; short fills at or above.
+- `'conditional'` — set `entry_condition` to a DSL expression string. The Execution Service evaluates it on every tick. See DSL Condition Reference for syntax. Example: `"AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)"`. Vague or malformed strings will fail at strategy load time.
 
-**e) Stop-loss.** Set `stopLoss` at a meaningful technical level — not an arbitrary percentage. The stop should be placed where, if reached, the thesis is demonstrably wrong.
+**e) Take-profit targets.** Use `take_profit_targets` array: `[{"price": <number>, "close_pct": <fraction>}, ...]`. Scaled exits lock in profit. For **longs**, all `price` values must be **above** entry. For **shorts**, all `price` values must be **below** entry. Sum of `close_pct` values must not exceed 1.0.
 
-**f) Time exit.** For thesis-driven trades with a specific catalyst or timeframe, set `timeBasedExit` to ensure the position doesn't linger beyond its rationale.
+**f) Stop-loss.** Use the `stop_loss` object — not a bare number.
+- Hard stop: `{"type": "hard", "price": <number>}`. For longs, the price must be **below** entry. For shorts, the price must be **above** entry.
+- Trailing stop: `{"type": "trailing", "trail_pct": <fraction>}` (e.g. `0.03` = 3%). The stop ratchets up with price and fires when price retraces `trail_pct` from the peak.
+
+**g) Time exit.** For thesis-driven trades with a specific catalyst or timeframe, set `time_exit_utc` (ISO 8601 UTC). The position is closed at that time regardless of P&L.
+
+**h) Invalidation condition.** Set `invalidation_condition` to a DSL string that captures the concrete market state where the thesis is demonstrably wrong. Example for a short: `"price(BTC/USD) >= 70500"`. This fires a market-close and is also read by the Evaluation Agent.
 
 ### Step 6 — Handle existing positions not in the current plan
 
@@ -127,16 +214,23 @@ Write 2–4 sentences summarizing the overall strategy logic for this cycle. Thi
 
 Before finalizing, review your `strategy.json` against the following checklist:
 
-- [ ] All required fields are populated. No placeholder values remain.
-- [ ] All `_comment` and `_template_note` keys have been removed.
-- [ ] The JSON is valid and parses without errors.
-- [ ] `posture` matches the Analysis Agent's recommendation or there is a clear reason to deviate.
-- [ ] Every non-flat, non-close position has `stopLoss` set and at least one `takeProfit` target.
-- [ ] No single position's `allocation` exceeds `risk.maxPositionSize`.
-- [ ] The sum of all position `allocation` values does not exceed `risk.maxExposure`.
-- [ ] All `entryConditions` reference valid indicators, operators, and values.
-- [ ] `validUntil` is set to a future datetime.
-- [ ] `risk.maxDrawdown`, `risk.dailyLossLimit`, `risk.maxExposure`, `risk.maxPositionSize` are all fractions (0.0–1.0), not percentages.
+- [ ] All required fields populated: `mode`, `validity_window`, `posture`, `portfolio_risk`, `positions`.
+- [ ] All positions have required fields: `id`, `asset`, `direction`, `allocation_pct`, `entry_type`.
+- [ ] All `_comment` and `_template_note` keys removed. No placeholder text remaining.
+- [ ] JSON is valid and parses without errors.
+- [ ] `mode` is `"paper"`.
+- [ ] `posture` matches the Analysis Agent's recommendation or deviations are noted in `posture_rationale`.
+- [ ] Every non-flat position has `stop_loss` set and at least one entry in `take_profit_targets`.
+- [ ] `stop_loss` is an **object** `{type, price?/trail_pct?}` — NOT a bare number.
+- [ ] For **longs**: all `take_profit_targets[].price` values are above entry; `stop_loss.price` is below entry.
+- [ ] For **shorts**: all `take_profit_targets[].price` values are below entry; `stop_loss.price` is above entry.
+- [ ] No single position's `allocation_pct` exceeds `portfolio_risk.max_per_position_pct`.
+- [ ] Sum of all position `allocation_pct` values does not exceed `portfolio_risk.max_total_exposure_pct`.
+- [ ] All `entry_condition` and `invalidation_condition` values are valid DSL strings (not objects).
+- [ ] `validity_window` is a future ISO 8601 UTC datetime.
+- [ ] `portfolio_risk.max_drawdown_pct`, `max_total_exposure_pct`, `max_per_position_pct` are fractions (0–1).
+- [ ] `portfolio_risk.daily_loss_limit_usd` is an **absolute USD amount**, not a fraction.
+- [ ] `portfolio_risk.safe_mode_triggers` is a JSON array, not a string.
 
 ### Step 10 — Send mailbox messages
 
@@ -148,7 +242,7 @@ Before finalizing, review your `strategy.json` against the following checklist:
 
 ## Standards
 
-**Commit to a decision.** The Execution Service needs instructions. Vague positions, unconstrained risk, or missing exit rules are not strategies — they are liabilities. If you genuinely have no high-confidence decision to make, set posture to `flat` and state why in `rationale`. That is valid. Ambiguity is not.
+**Commit to a decision.** The Execution Service needs instructions. Vague positions, unconstrained risk, or missing exit rules are not strategies — they are liabilities. If you genuinely have no high-confidence decision to make, set `posture` to `"flat"` and explain why in `strategy_rationale`. That is valid. Ambiguity is not.
 
 **Always use `paper` mode.** Set `mode` to `"paper"` in every strategy you produce. The system is in paper trading mode. You do not have authority to set `mode` to `"live"` — that requires an explicit instruction from a human operator.
 
@@ -156,9 +250,9 @@ Before finalizing, review your `strategy.json` against the following checklist:
 
 **Use real price data.** Set entry conditions, stop-loss, and take-profit levels based on the actual price data from `analysis.md` and the `technical_indicators` tool results. Never use made-up or approximate price levels. If you are unsure of the current price, call `current_position` or reference the `technical_indicators` data in `analysis.md`.
 
-**Risk management is non-negotiable.** Every strategy must have portfolio-level risk limits set. You are managing real capital. The risk management fields are not formalities — they are the system's last line of defense against catastrophic loss.
+**Risk management is non-negotiable.** Every strategy must have portfolio-level risk limits set. You are managing real capital. The risk management fields are not formalities — they are the system's last line of defense against catastrophic loss. Pay special attention to `daily_loss_limit_usd`: this is an absolute dollar amount, not a fraction. Size it based on total portfolio value.
 
-**Precision in entry conditions.** The Execution Service evaluates your conditions against live data and acts automatically. Ambiguous conditions will either never trigger or trigger unexpectedly. Write conditions you would be comfortable explaining precisely.
+**DSL precision.** The Execution Service parses `entry_condition` and `invalidation_condition` at strategy load time. A malformed DSL string causes the entire strategy to be rejected — no positions will execute. Always use the exact function names (`rsi`, `macd`, `bollinger_upper`, `bollinger_lower`, `bollinger_middle`, `price`), correct argument order (period first, asset last), and valid operators. Test your logic mentally before writing it.
 
 **Size to conviction.** High conviction + clear signal = can deploy full allowed allocation. Low conviction or conflicting signals = smaller size or no position. Do not let "interesting" signals lead to ill-sized positions. Asymmetric sizing is good risk management.
 

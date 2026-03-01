@@ -21,9 +21,9 @@ public class BirdTool : Tool
         Type = "object",
         Properties = new Dictionary<string, ToolParameterProperty>
         {
-            ["query"]  = new ToolParameterProperty { Type = "string",  Description = "Search query or @username for timeline mode" },
-            ["mode"]   = new ToolParameterProperty { Type = "string",  Description = "search (default) or timeline", Default = "search" },
-            ["count"]  = new ToolParameterProperty { Type = "integer", Description = "Number of posts to return (1-50)", Default = 20 },
+            ["query"] = new ToolParameterProperty { Type = "string", Description = "Search query or @username for timeline mode" },
+            ["mode"] = new ToolParameterProperty { Type = "string", Description = "search (default) or timeline", Default = "search" },
+            ["count"] = new ToolParameterProperty { Type = "integer", Description = "Number of posts to return (1-50)", Default = 20 },
             ["recency"] = new ToolParameterProperty { Type = "string", Description = "Time window: hour, day, week", Default = "day" }
         },
         Required = new List<string> { "query" }
