@@ -55,7 +55,7 @@ public class ToolExecutor
         }
 
         var circuitBreaker = _circuitBreakers[call.ToolName];
-        
+
         if (circuitBreaker.IsOpen)
         {
             return new ToolResult
@@ -68,25 +68,25 @@ public class ToolExecutor
 
         var stopwatch = Stopwatch.StartNew();
         ToolResult? lastResult = null;
-        
+
         for (int attempt = 0; attempt <= _maxRetries; attempt++)
         {
             try
             {
                 var timeout = TimeSpan.FromSeconds(_defaultTimeoutSeconds);
                 var result = await ExecuteWithTimeoutAsync(tool, call.Parameters, timeout, cancellationToken);
-                
+
                 result.CallId = call.Id;
                 result.Duration = stopwatch.Elapsed;
-                
+
                 if (result.Success || !IsTransientError(result.Error))
                 {
                     circuitBreaker.RecordSuccess();
                     return result;
                 }
-                
+
                 lastResult = result;
-                
+
                 if (attempt < _maxRetries)
                 {
                     var delay = CalculateBackoff(attempt);
@@ -97,7 +97,7 @@ public class ToolExecutor
             {
                 stopwatch.Stop();
                 circuitBreaker.RecordFailure();
-                
+
                 return new ToolResult
                 {
                     CallId = call.Id,
@@ -115,7 +115,7 @@ public class ToolExecutor
                     Error = ex.Message,
                     Duration = stopwatch.Elapsed
                 };
-                
+
                 if (attempt < _maxRetries && _enableRetry)
                 {
                     var delay = CalculateBackoff(attempt);
@@ -127,7 +127,7 @@ public class ToolExecutor
 
         stopwatch.Stop();
         circuitBreaker.RecordFailure();
-        
+
         return lastResult ?? new ToolResult
         {
             CallId = call.Id,
@@ -140,7 +140,7 @@ public class ToolExecutor
     private bool IsTransientError(string? error)
     {
         if (string.IsNullOrEmpty(error)) return false;
-        
+
         var transientPatterns = new[]
         {
             "timeout", "timed out", "504", "502", "503", "500",
@@ -148,7 +148,7 @@ public class ToolExecutor
             "too many requests", "TooManyRequests", "429",
             "rate limit", "ratelimit", "temporary"
         };
-        
+
         return transientPatterns.Any(p => error.Contains(p, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -159,8 +159,8 @@ public class ToolExecutor
     }
 
     private async Task<ToolResult> ExecuteWithTimeoutAsync(
-        Tool tool, 
-        Dictionary<string, object> parameters, 
+        Tool tool,
+        Dictionary<string, object> parameters,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
@@ -173,7 +173,7 @@ public class ToolExecutor
     public async Task<List<ToolResult>> ExecuteBatchAsync(IEnumerable<ToolCall> calls, CancellationToken cancellationToken = default)
     {
         var callList = calls.ToList();
-        
+
         if (callList.Count == 0)
             return new List<ToolResult>();
 
@@ -207,7 +207,7 @@ public class CircuitBreaker
     private readonly int _failureThreshold;
     private readonly int _resetTimeoutSeconds;
     private readonly int _halfOpenAttempts;
-    
+
     private int _failureCount;
     private int _successCount;
     private DateTime _lastFailureTime;
@@ -278,7 +278,7 @@ public class CircuitBreaker
         {
             _failureCount++;
             _lastFailureTime = DateTime.UtcNow;
-            
+
             if (_state == CircuitBreakerState.HalfOpen)
             {
                 _state = CircuitBreakerState.Open;

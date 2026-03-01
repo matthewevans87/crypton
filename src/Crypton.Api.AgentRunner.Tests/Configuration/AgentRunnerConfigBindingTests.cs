@@ -260,7 +260,7 @@ public class AgentRunnerConfigBindingTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Agents:Plan:MaxIterations"]     = "20",
+            ["Agents:Plan:MaxIterations"] = "20",
             ["Agents:Research:MaxIterations"] = "30",
             ["Agents:Synthesis:MaxIterations"] = "10",
         });
@@ -313,7 +313,7 @@ public class AgentRunnerConfigBindingTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Tools:MaxRetries"]           = "5",
+            ["Tools:MaxRetries"] = "5",
             ["Tools:MaxRetryDelaySeconds"] = "60",
         });
 
@@ -329,12 +329,12 @@ public class AgentRunnerConfigBindingTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Tools:MaxRetries"]           = "3",
+                ["Tools:MaxRetries"] = "3",
                 ["Tools:MaxRetryDelaySeconds"] = "30",
             })
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Tools:MaxRetries"]           = "7",
+                ["Tools:MaxRetries"] = "7",
                 ["Tools:MaxRetryDelaySeconds"] = "45",
             })
             .Build();

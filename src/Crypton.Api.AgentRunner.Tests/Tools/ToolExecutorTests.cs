@@ -11,9 +11,9 @@ public class ToolExecutorTests
     {
         var executor = new ToolExecutor(30);
         var tool = new TestTool();
-        
+
         executor.RegisterTool(tool);
-        
+
         var retrieved = executor.GetTool("test_tool");
         Assert.NotNull(retrieved);
         Assert.Equal("test_tool", retrieved.Name);
@@ -23,9 +23,9 @@ public class ToolExecutorTests
     public void GetTool_UnknownTool_ReturnsNull()
     {
         var executor = new ToolExecutor(30);
-        
+
         var result = executor.GetTool("nonexistent");
-        
+
         Assert.Null(result);
     }
 
@@ -34,15 +34,15 @@ public class ToolExecutorTests
     {
         var executor = new ToolExecutor(30);
         executor.RegisterTool(new TestTool());
-        
+
         var call = new ToolCall
         {
             ToolName = "test_tool",
             Parameters = new Dictionary<string, object> { { "value", 42 } }
         };
-        
+
         var result = await executor.ExecuteAsync(call);
-        
+
         Assert.True(result.Success);
         Assert.Equal("Success: 42", result.Data);
     }
@@ -51,10 +51,10 @@ public class ToolExecutorTests
     public async Task ExecuteAsync_UnknownTool_ReturnsError()
     {
         var executor = new ToolExecutor(30);
-        
+
         var call = new ToolCall { ToolName = "unknown" };
         var result = await executor.ExecuteAsync(call);
-        
+
         Assert.False(result.Success);
         Assert.Contains("not found", result.Error);
     }
@@ -64,15 +64,15 @@ public class ToolExecutorTests
     {
         var executor = new ToolExecutor(30);
         executor.RegisterTool(new TestTool());
-        
+
         var calls = new List<ToolCall>
         {
             new() { ToolName = "test_tool", Parameters = new() { { "value", 1 } } },
             new() { ToolName = "test_tool", Parameters = new() { { "value", 2 } } }
         };
-        
+
         var results = await executor.ExecuteBatchAsync(calls);
-        
+
         Assert.Equal(2, results.Count);
         Assert.True(results.All(r => r.Success));
     }

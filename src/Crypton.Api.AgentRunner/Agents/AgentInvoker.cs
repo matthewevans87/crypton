@@ -136,12 +136,12 @@ public class AgentInvoker
     {
         return agentName.ToLower() switch
         {
-            "plan"       => _config.Agents.Plan.MaxIterations,
-            "research"   => _config.Agents.Research.MaxIterations,
-            "analysis"   => _config.Agents.Analyze.MaxIterations,
-            "synthesis"  => _config.Agents.Synthesis.MaxIterations,
+            "plan" => _config.Agents.Plan.MaxIterations,
+            "research" => _config.Agents.Research.MaxIterations,
+            "analysis" => _config.Agents.Analyze.MaxIterations,
+            "synthesis" => _config.Agents.Synthesis.MaxIterations,
             "evaluation" => _config.Agents.Evaluation.MaxIterations,
-            _            => _config.Agents.Plan.MaxIterations
+            _ => _config.Agents.Plan.MaxIterations
         };
     }
 
