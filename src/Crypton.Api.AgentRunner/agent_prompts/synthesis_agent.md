@@ -32,22 +32,29 @@ This agent has access to:
 
 ## Strategy Schema Reference
 
-All fields are defined in `output_templates/strategy.json`. Key structural elements:
+All fields are defined in `output_templates/strategy.json`. That template is the authoritative source for field names and structure — follow it exactly. Key structural elements:
 
-- **`validity_window`** — This strategy expires at `expires_at`. The Agent Runner monitors this and signals the Execution Service when expiry approaches. Set the validity window to a duration appropriate for the market conditions and the type of strategy (a momentum trade may have a shorter window than a range-bound accumulation strategy).
+- **`validUntil`** — ISO 8601 datetime when this strategy expires. The Agent Runner monitors this and signals the Execution Service when expiry approaches. Set to a duration appropriate for the strategy type (a momentum trade may be 24–48 hours; a range accumulation strategy may be 5–7 days).
 
-- **`posture`** — The overall risk stance. This communicates intent to the Execution Service and is displayed on the Monitoring Dashboard. Match it to the Analysis Agent's recommendation in the Synthesis Briefing.
+- **`posture`** — A single string: one of `'aggressive'`, `'moderate'`, `'defensive'`, `'flat'`, `'exit_all'`. Match it to the Analysis Agent's recommendation in the Synthesis Briefing.
 
-- **`risk_management`** — Portfolio-level hard limits. These are the outer bounds; the Execution Service will not violate them regardless of what individual positions specify. Set them conservatively when market conditions are uncertain or volatile.
+- **`rationale`** — Top-level string. 2–4 sentences describing the dominant thesis, what supports it, and the key risk. This field is logged and shown on the Monitoring Dashboard.
 
-- **`positions`** — A position object for each open, pending, or closing position. The `status` field controls behavior:
-  - `pending` — The Execution Service will enter this position when all entry conditions are met.
-  - `active` — This position is already open. Manage it against the take-profit and stop-loss rules specified.
-  - `close` — Exit this position as soon as possible at market.
+- **`risk`** — Portfolio-level hard limits as fractions (0.10 = 10%). Fields: `maxDrawdown`, `dailyLossLimit`, `maxExposure`, `maxPositionSize`, `safeModeTrigger`. These are the outer bounds; the Execution Service will not violate them. Set conservatively in uncertain or volatile conditions.
 
-- **`entry.conditions`** — Rules evaluated in real time by the Execution Service against live market data. Each condition specifies an indicator, timeframe, operator, and value. The Execution Service evaluates these continuously and executes the entry when all conditions (if `all_conditions_required: true`) or any condition (if `false`) become true. Be precise — these rules execute automatically.
+- **`positions`** — A position object for each open, new, or exiting position. The `direction` field controls behavior:
+  - `'long'` or `'short'` — The Execution Service will enter this position when `entryConditions` are met (for `entryType: 'conditional'`) or immediately (for `market`).
+  - `'close'` — Exit this position as soon as possible at market. Set `allocation: 0`.
 
-- **`invalidation_condition`** — A human-readable description of the market state that would mean the underlying thesis is wrong. This is recorded for traceability and used by the Evaluation Agent to assess whether the thesis broke before or after the stop was hit.
+- **`entryConditions`** — A single condition object evaluated in real time by the Execution Service against live market data. Specifies `indicator`, `operator`, and `value`. Only required when `entryType` is `'conditional'`. Be precise — these rules execute automatically.
+
+- **`allocation`** — Fraction of total portfolio capital (0.0–1.0). Example: `0.10` = 10%.
+
+- **`takeProfit`** — Array of `{target, percentage}` objects. `target` is a price; `percentage` is the fraction of the position to close at that target (0.5 = 50%).
+
+- **`stopLoss`** — Hard stop price (a number, not a percentage). Set at a technically meaningful level.
+
+- **`invalidationCondition`** — Object with `indicator`, `operator`, `value`, and `description`. The `description` is human-readable and used by the Evaluation Agent to assess whether the thesis broke correctly.
 
 ---
 
@@ -74,27 +81,27 @@ Cross-reference the Synthesis Briefing's recommended posture and per-asset actio
 Before committing to individual positions, establish the overall risk envelope:
 
 - **Posture:** What is the overall stance? How aggressive or defensive should execution be? This should follow directly from the Analysis Agent's recommendation unless you have a specific reason to deviate.
-- **Portfolio drawdown limit:** At what portfolio-level loss does all trading halt? This should be lower in high-uncertainty environments.
-- **Daily loss limit:** At what point in a given day does the Execution Service stop opening new positions?
-- **Maximum total exposure:** What fraction of available capital may be deployed at once?
-- **Maximum position size:** What is the largest single position as a fraction of portfolio?
-- **Safe mode conditions:** Under what specific market conditions should the Execution Service defensively suspend new entries?
+- **`risk.maxDrawdown`:** At what portfolio-level loss fraction does all trading halt? Lower in high-uncertainty environments.
+- **`risk.dailyLossLimit`:** At what fraction of daily loss does the Execution Service stop opening new positions?
+- **`risk.maxExposure`:** What fraction of available capital may be deployed at once?
+- **`risk.maxPositionSize`:** What is the largest single position as a fraction of portfolio?
+- **`risk.safeModeTrigger`:** One of `'consecutive_losses'`, `'max_drawdown'`, `'manual'`.
 
 ### Step 5 — Define positions
 
 For each asset with a recommended direction in the Synthesis Briefing, define a position object:
 
-**a) Status.** Is this a new trade (`pending`), an existing position to manage (`active`), or a position to exit (`close`)?
+**a) Direction.** Is this a new trade (`'long'`/`'short'`), or should an existing position be closed (`'close'`)?
 
-**b) Allocation.** What percentage of total portfolio capital should this position represent? Use the Analysis Agent's risk budget guidance and your own judgment on sizing relative to conviction level. High conviction + favorable conditions = larger allocation. Low conviction or adverse conditions = smaller allocation or no position.
+**b) Allocation.** What fraction of total portfolio capital? Use the Analysis Agent's risk budget guidance. Example: `0.10` for 10%. High conviction + favorable conditions = larger allocation; low conviction = smaller.
 
-**c) Entry conditions.** Be specific. For `conditional` entries, write precise indicator rules. Think about whether you want immediate entries or patient entries waiting for confirmation. A rule like `RSI(14) crosses_below 35 on the 1h chart AND price is above EMA(200) on the 1d chart` is explicit and executable. A vague description is not.
+**c) Entry type and conditions.** For `'conditional'` entries, specify the `entryConditions` object precisely. Be specific about the indicator, operator, and value. A rule like `{"indicator": "rsi", "operator": "lte", "value": 35}` is explicitly executable. Vague descriptions are not.
 
-**d) Take-profit targets.** Use scaled exits where conviction allows. Partial close at the first target locks in profit and reduces risk on the remaining position. Specify trailing stops where you expect an extended trend.
+**d) Take-profit targets.** Use `takeProfit` array. Scaled exits lock in profit and reduce risk. Specify `target` (price) and `percentage` (fraction of position to close). Trailing via `trailingStop` where you expect an extended trend.
 
-**e) Stop-loss.** Set stops at meaningful technical levels — not arbitrary percentages. The stop should be placed where, if reached, the thesis is demonstrably wrong. A stop set too close creates unnecessary noise-driven exits; a stop set too far risks excessive loss. State the invalidation condition in human-readable form for the evaluation record.
+**e) Stop-loss.** Set `stopLoss` at a meaningful technical level — not an arbitrary percentage. The stop should be placed where, if reached, the thesis is demonstrably wrong.
 
-**f) Time exit.** For thesis-driven trades with a specific catalyst or timeframe (e.g., "this trade is based on a catalyst expected to resolve within 48 hours"), set a time-based exit to ensure the position does not linger beyond its rationale.
+**f) Time exit.** For thesis-driven trades with a specific catalyst or timeframe, set `timeBasedExit` to ensure the position doesn't linger beyond its rationale.
 
 ### Step 6 — Handle existing positions not in the current plan
 
@@ -123,13 +130,13 @@ Before finalizing, review your `strategy.json` against the following checklist:
 - [ ] All required fields are populated. No placeholder values remain.
 - [ ] All `_comment` and `_template_note` keys have been removed.
 - [ ] The JSON is valid and parses without errors.
-- [ ] `posture.stance` matches the Analysis Agent's recommendation or there is a clear reason to deviate.
-- [ ] Every `pending` position has at least one entry condition, a stop-loss, and at least one take-profit target.
-- [ ] Every `active` position has a stop-loss and at least one take-profit target.
-- [ ] No single position's `allocation_pct` exceeds `risk_management.max_position_size_pct`.
-- [ ] The sum of all position `allocation_pct` values does not exceed `risk_management.max_total_exposure_pct`.
-- [ ] All entry conditions reference valid indicators, operators, and timeframes per the schema.
-- [ ] `validity_window.expires_at` is set to a future datetime.
+- [ ] `posture` matches the Analysis Agent's recommendation or there is a clear reason to deviate.
+- [ ] Every non-flat, non-close position has `stopLoss` set and at least one `takeProfit` target.
+- [ ] No single position's `allocation` exceeds `risk.maxPositionSize`.
+- [ ] The sum of all position `allocation` values does not exceed `risk.maxExposure`.
+- [ ] All `entryConditions` reference valid indicators, operators, and values.
+- [ ] `validUntil` is set to a future datetime.
+- [ ] `risk.maxDrawdown`, `risk.dailyLossLimit`, `risk.maxExposure`, `risk.maxPositionSize` are all fractions (0.0–1.0), not percentages.
 
 ### Step 10 — Send mailbox messages
 
@@ -141,7 +148,13 @@ Before finalizing, review your `strategy.json` against the following checklist:
 
 ## Standards
 
-**Commit to a decision.** The Execution Service needs instructions. Vague positions, unconstrained risk, or missing exit rules are not strategies — they are liabilities. If you genuinely have no high-confidence decision to make, set posture to `flat` and state why in `strategy_rationale`. That is valid. Ambiguity is not.
+**Commit to a decision.** The Execution Service needs instructions. Vague positions, unconstrained risk, or missing exit rules are not strategies — they are liabilities. If you genuinely have no high-confidence decision to make, set posture to `flat` and state why in `rationale`. That is valid. Ambiguity is not.
+
+**Always use `paper` mode.** Set `mode` to `"paper"` in every strategy you produce. The system is in paper trading mode. You do not have authority to set `mode` to `"live"` — that requires an explicit instruction from a human operator.
+
+**Take-profit direction.** For `'long'` positions, take-profit `target` prices MUST be HIGHER than the entry price. For `'short'` positions, take-profit `target` prices MUST be LOWER than the entry price (you profit as price falls). Stop-loss for a `'short'` must be ABOVE the entry price. Setting a short stop-loss below the entry, or a short take-profit above the entry, is a critical error.
+
+**Use real price data.** Set entry conditions, stop-loss, and take-profit levels based on the actual price data from `analysis.md` and the `technical_indicators` tool results. Never use made-up or approximate price levels. If you are unsure of the current price, call `current_position` or reference the `technical_indicators` data in `analysis.md`.
 
 **Risk management is non-negotiable.** Every strategy must have portfolio-level risk limits set. You are managing real capital. The risk management fields are not formalities — they are the system's last line of defense against catastrophic loss.
 

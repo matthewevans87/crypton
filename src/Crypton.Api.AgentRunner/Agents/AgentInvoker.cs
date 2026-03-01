@@ -10,7 +10,7 @@ public class AgentInvoker
     private readonly AgentRunnerConfig _config;
     private readonly ToolExecutor _toolExecutor;
     private readonly HttpClient _httpClient;
-    private readonly int _maxToolIterations = 10;
+    private readonly int _maxToolIterations = 15;
 
     public AgentInvoker(AgentRunnerConfig config, ToolExecutor toolExecutor)
     {

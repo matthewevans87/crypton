@@ -184,7 +184,10 @@ public static class CliRunner
             _ => throw new InvalidOperationException()
         };
 
-        artifactManager.SaveArtifact(cycleId, artifactName, result.Output ?? "");
+        var outputToSave = artifactName.EndsWith(".json")
+            ? SanitizeJsonOutput(result.Output ?? "", artifactName)
+            : result.Output ?? "";
+        artifactManager.SaveArtifact(cycleId, artifactName, outputToSave);
 
         Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"[CLI] Artifact saved: {artifactManager.GetArtifactPath(cycleId, artifactName)}");
@@ -356,6 +359,82 @@ public static class CliRunner
         if (idx + 1 < args.Length && !args[idx + 1].StartsWith("--"))
             return args[idx + 1];
         return null;
+    }
+
+    /// <summary>
+    /// Extracts the JSON object from an LLM response that may contain prose or code-fence wrappers.
+    /// Priority: 1) ```json...``` block, 2) first '{' to last '}', 3) original string.
+    /// </summary>
+    private static string SanitizeJsonOutput(string output, string artifactName)
+    {
+        var json = ExtractJsonFromOutput(output);
+
+        // Safety backstop: strategy.json must always use paper mode
+        if (artifactName == "strategy.json" && !string.IsNullOrWhiteSpace(json))
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("mode", out var modeEl) &&
+                    modeEl.GetString() != "paper")
+                {
+                    using var ms = new System.IO.MemoryStream();
+                    using (var writer = new System.Text.Json.Utf8JsonWriter(ms,
+                        new System.Text.Json.JsonWriterOptions { Indented = true }))
+                    {
+                        writer.WriteStartObject();
+                        foreach (var prop in doc.RootElement.EnumerateObject())
+                        {
+                            if (prop.Name == "mode")
+                                writer.WriteString("mode", "paper");
+                            else
+                                prop.WriteTo(writer);
+                        }
+                        writer.WriteEndObject();
+                    }
+                    return System.Text.Encoding.UTF8.GetString(ms.ToArray());
+                }
+            }
+            catch
+            {
+                // Not valid JSON yet — return as-is; downstream schema validation will catch it
+            }
+        }
+
+        return json;
+    }
+
+    private static string ExtractJsonFromOutput(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) return output;
+
+        // Try to find a ```json ... ``` code fence
+        var fenceStart = output.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
+        if (fenceStart >= 0)
+        {
+            var contentStart = output.IndexOf('\n', fenceStart) + 1;
+            var fenceEnd = output.IndexOf("```", contentStart);
+            if (fenceEnd > contentStart)
+                return output[contentStart..fenceEnd].Trim();
+        }
+
+        // Try plain ``` code fence
+        var plainFence = output.IndexOf("```\n{");
+        if (plainFence >= 0)
+        {
+            var contentStart = output.IndexOf('{', plainFence);
+            var fenceEnd = output.IndexOf("```", contentStart);
+            if (fenceEnd > contentStart)
+                return output[contentStart..fenceEnd].Trim();
+        }
+
+        // Try to extract from first '{' to last '}'
+        var braceStart = output.IndexOf('{');
+        var braceEnd = output.LastIndexOf('}');
+        if (braceStart >= 0 && braceEnd > braceStart)
+            return output[braceStart..(braceEnd + 1)].Trim();
+
+        return output;
     }
 
     private static void PrintSection(string title, string content)

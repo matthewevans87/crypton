@@ -49,6 +49,13 @@ Read the last 5 messages from `mailbox.analysis`. These may contain context pass
 
 Read `research.md` in full. Then call `current_position` to load the current portfolio state. Then call `technical_indicators` for all assets under consideration to get current indicator values directly — do not rely solely on the Research Agent's technical reporting.
 
+**TOOL CALL BUDGET: Make no more than 10 tool calls total.** Required minimum before writing the document:
+1. Call `current_position` (1 call)
+2. Call `technical_indicators` for **BTC** on the daily timeframe (1 call)
+3. Call `technical_indicators` for **ETH** on the daily timeframe (1 call)
+
+You may make additional calls for other timeframes or assets from the research findings (up to 7 more calls). Once you have BTC and ETH daily data, you have enough to write the document. Do NOT continue making tool calls after your budget is exhausted. The endpoint does not return ATR separately — do not request it.
+
 Hold all of this in mind simultaneously. The synthesis you are about to perform requires you to reason across all of it.
 
 ### Step 4 — Build the market overview (→ Market Overview section)

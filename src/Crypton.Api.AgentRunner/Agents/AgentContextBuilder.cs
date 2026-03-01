@@ -373,6 +373,27 @@ public class AgentContext
         sb.AppendLine("- Write each tool call on its own line, and ALWAYS include the closing tag: `<tool_call>toolname {...}</tool_call>`");
         sb.AppendLine("- Wait for each tool result before proceeding to the next step.");
         sb.AppendLine("- Follow the procedure in your identity instructions step by step.");
+        sb.AppendLine("- **IMPORTANT — No preamble or postamble.** When writing your output document, start the document IMMEDIATELY on the first line. Do NOT include sentences like 'Based on the data gathered...' or 'Here is the draft of...' before the document. Your entire response should be the document itself.");
+        sb.AppendLine("- **Replace all template placeholders.** The Output Template contains example placeholder text like `[Signal name]`, `[Headline / Event]`, `<!-- date -->`, etc. Replace every placeholder with real content from your research. If there is nothing to report for a section, write 'None identified this cycle.' Do NOT copy placeholder brackets literally into your output.");
+
+        // Agent-specific guidance
+        if (AgentName == "Synthesis")
+        {
+            sb.AppendLine();
+            sb.AppendLine("**SYNTHESIS AGENT SPECIFIC RULE:**");
+            sb.AppendLine("Your ENTIRE response must be ONLY raw, valid JSON. This is critical because your output is saved directly as `strategy.json` and parsed by the Execution Service.");
+            sb.AppendLine("- Do NOT include any text before the JSON — not even one word.");
+            sb.AppendLine("- Do NOT wrap the JSON in markdown code fences (no ```json or ```).");
+            sb.AppendLine("- Do NOT include any explanation after the JSON.");
+            sb.AppendLine("- Your first character must be `{` and your last character must be `}`.");
+            sb.AppendLine("- Remove ALL `_comment` and `_template_note` keys from the JSON. These are authoring notes only.");
+        }
+        else if (AgentName == "Analysis")
+        {
+            sb.AppendLine();
+            sb.AppendLine("**ANALYSIS AGENT TOOL BUDGET:**");
+            sb.AppendLine("Make NO MORE THAN 10 tool calls total across the entire session. After calling current_position (1 call) and technical_indicators for your primary assets across 2–3 timeframes (up to 8 calls), STOP making tool calls and write analysis.md immediately. You do not need ATR as a separate call — it is not returned by the indicator endpoint. Do not loop fetching the same indicators repeatedly.");
+        }
 
         return sb.ToString();
     }

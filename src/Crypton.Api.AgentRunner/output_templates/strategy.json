@@ -1,83 +1,51 @@
 {
-    "_template_note": "This file is the strategy.json template. Replace all placeholder values. Remove all '_comment' and '_template_note' keys from production output. All fields are required unless marked optional.",
+    "_template_note": "strategy.json template. Replace ALL placeholder values. REMOVE ALL '_comment' and '_template_note' keys from final output. Field names and structure must match exactly — the Execution Service validates against strategy.schema.json.",
     "version": "1.0",
-    "cycle": "<ISO 8601 datetime of the Learning Loop cycle that produced this strategy>",
-    "generated_at": "<ISO 8601 datetime>",
-    "generated_by": "Synthesis Agent",
+    "cycle": "<ISO 8601 datetime of the cycle that produced this strategy>",
+    "generatedAt": "<ISO 8601 datetime>",
+    "generatedBy": "Synthesis Agent",
     "mode": "<'paper' | 'live'>",
-    "validity_window": {
-        "_comment": "The Execution Service must not open new positions after expires_at. It should flag expiry to the Agent Runner.",
-        "expires_at": "<ISO 8601 datetime>",
-        "max_duration_hours": "<integer — maximum hours this strategy may remain active>"
-    },
-    "posture": {
-        "_comment": "Overall risk posture for this cycle. Guides position sizing and aggressiveness of entry.",
-        "stance": "<'aggressive' | 'moderate' | 'defensive' | 'flat' | 'exit_all'>",
-        "rationale": "<1–2 sentences from analysis.md Synthesis Briefing explaining the posture choice>"
-    },
-    "risk_management": {
-        "_comment": "Portfolio-level risk constraints. All are hard limits enforced by the Execution Service.",
-        "max_portfolio_drawdown_pct": "<number — halt all trading if portfolio drawdown exceeds this percentage>",
-        "daily_loss_limit_pct": "<number — halt new entries for the remainder of the calendar day if daily loss exceeds this>",
-        "max_total_exposure_pct": "<number — maximum percentage of portfolio capital that may be deployed at once>",
-        "max_position_size_pct": "<number — maximum allocation to any single position as a percentage of portfolio>",
-        "correlation_limit": "<number 0–1 — do not open new positions that are highly correlated with existing open positions above this threshold; optional>",
-        "safe_mode_conditions": [
-            {
-                "_comment": "Conditions under which the Execution Service should enter safe mode and begin orderly position exit.",
-                "condition": "<description of the triggering condition>",
-                "action": "<'suspend_entries' | 'close_all' | 'reduce_exposure'>"
-            }
-        ]
+    "validUntil": "<ISO 8601 datetime — the Execution Service will not open new pending positions after this time>",
+    "posture": "<'aggressive' | 'moderate' | 'defensive' | 'flat' | 'exit_all'>",
+    "rationale": "<2–4 sentences. The dominant thesis for this cycle, what market conditions support it, and the key risk. This is logged and shown on the Monitoring Dashboard — write it as if you will be asked to defend it after a losing trade.>",
+    "risk": {
+        "_comment": "All values are fractions of portfolio capital (0.10 = 10%). These are hard limits enforced by the Execution Service.",
+        "maxDrawdown": "<number 0–1 — halt all trading if total portfolio drawdown exceeds this fraction>",
+        "dailyLossLimit": "<number 0–1 — suspend new entries for the calendar day if daily loss reaches this fraction>",
+        "maxExposure": "<number 0–1 — maximum fraction of portfolio that may be deployed at once>",
+        "maxPositionSize": "<number 0–1 — maximum allocation to any single position>",
+        "safeModeTrigger": "<'consecutive_losses' | 'max_drawdown' | 'manual'>"
     },
     "positions": [
         {
-            "_comment": "One object per intended position. Include positions that should remain open, be opened, or be closed.",
-            "id": "<unique string identifier for this position, e.g. 'btc-long-001'>",
+            "_comment": "One object per intended position. 'direction': 'close' exits immediately. 'long'/'short' opens or manages a position.",
             "asset": "<trading pair, e.g. 'BTC/USD'>",
-            "direction": "<'long' | 'short' | 'neutral'>",
-            "status": "<'pending' | 'active' | 'close'>",
-            "_comment_status": "'pending' = open when entry conditions are met. 'active' = already open, manage but do not re-enter. 'close' = exit this position as soon as possible.",
-            "allocation_pct": "<number — percentage of total portfolio capital to allocate to this position>",
-            "entry": {
-                "type": "<'market' | 'limit' | 'conditional'>",
-                "_comment_conditional": "For 'conditional' type, all conditions in the conditions array must evaluate to true before the order is placed.",
-                "limit_price": "<number | null — required for 'limit' type; null otherwise>",
-                "conditions": [
-                    {
-                        "_comment": "Each condition is a real-time rule evaluated by the Execution Service against live market data.",
-                        "indicator": "<'price' | 'rsi' | 'macd' | 'ema' | 'volume' | 'atr' | 'bollinger_upper' | 'bollinger_lower' | string>",
-                        "timeframe": "<'1m' | '5m' | '15m' | '1h' | '4h' | '1d'>",
-                        "operator": "<'gt' | 'lt' | 'gte' | 'lte' | 'crosses_above' | 'crosses_below'>",
-                        "value": "<number — the threshold value for the comparison>",
-                        "period": "<integer | null — indicator period, e.g. 14 for RSI(14); null for price>"
-                    }
-                ],
-                "all_conditions_required": "<true | false — true = AND logic; false = OR logic across conditions>"
+            "direction": "<'long' | 'short' | 'close'>",
+            "allocation": "<number 0–1 — fraction of total portfolio capital, e.g. 0.10 for 10%>",
+            "entryType": "<'market' | 'limit' | 'conditional'>",
+            "entryConditions": {
+                "_comment": "Required only for entryType='conditional'. Single condition evaluated by Execution Service against live data.",
+                "indicator": "<'price' | 'rsi' | 'macd' | 'ema' | 'bollinger_upper' | 'bollinger_lower' | 'volume' | 'atr'>",
+                "operator": "<'gt' | 'lt' | 'gte' | 'lte' | 'crosses_above' | 'crosses_below'>",
+                "value": "<number — threshold value>"
             },
-            "take_profit": [
+            "takeProfit": [
                 {
-                    "_comment": "Multiple take-profit targets are supported for scaling out. Execute in order.",
-                    "target_price": "<number>",
-                    "close_pct": "<number — percentage of position size to close at this target>",
-                    "trailing": "<true | false>",
-                    "trailing_distance_pct": "<number | null — required if trailing is true; null otherwise>"
+                    "_comment": "Scaled exits supported — list multiple targets. Execute in order.",
+                    "target": "<number — price target>",
+                    "percentage": "<number 0–1 — fraction of this position to close at this target>"
                 }
             ],
-            "stop_loss": {
-                "price": "<number — hard stop price>",
-                "trailing": "<true | false>",
-                "trailing_distance_pct": "<number | null — required if trailing is true>",
-                "_comment": "If both hard stop and trailing stop are specified, whichever triggers first takes effect."
-            },
-            "time_exit": {
-                "_comment": "Close this position at time_exit.expires_at regardless of P&L, unless already closed by take_profit or stop_loss.",
-                "enabled": "<true | false>",
-                "expires_at": "<ISO 8601 datetime | null>"
-            },
-            "invalidation_condition": "<string — human-readable description of the market condition that means this thesis is wrong. For logging and evaluation purposes.>",
-            "notes": "<string — brief rationale for this position, referencing the analysis.md thesis. For traceability.>"
+            "stopLoss": "<number — hard stop price. Required for all non-flat, non-close positions.>",
+            "trailingStop": "<number | null — trailing stop as a fraction e.g. 0.03 for 3%. null if not used.>",
+            "timeBasedExit": "<ISO 8601 datetime | null — close at this time regardless of P&L. null if unused.>",
+            "invalidationCondition": {
+                "_comment": "The market state that means the thesis is wrong. Recorded for evaluation.",
+                "indicator": "<indicator name>",
+                "operator": "<operator>",
+                "value": "<threshold number>",
+                "description": "<human-readable description of what this condition means>"
+            }
         }
-    ],
-    "strategy_rationale": "<2–4 sentences summarizing the overall strategy logic for this cycle. Must reference the dominant thesis from analysis.md. This field is logged and presented in the Monitoring Dashboard.>"
+    ]
 }

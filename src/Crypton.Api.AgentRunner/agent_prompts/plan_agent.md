@@ -137,6 +137,8 @@ For each item across all categories, write a 1–2 sentence summary and state it
 
 This is your most important output. The Research Agent acts directly from this section.
 
+**⚠️ SCOPE CONSTRAINT: Every Research Agenda item MUST have a direct, specific link to cryptocurrency market decisions.** If you cannot complete the sentence "This investigation matters because it will change how we should trade [ASSET] by [specific mechanism]", remove it. General tech industry news (privacy concerns of non-crypto companies, social media policy changes, etc.) does NOT qualify unless it directly involves crypto assets, crypto regulation, or a company that holds significant crypto. When in doubt, leave it out.
+
 Review everything you found in Steps 3–7. For any finding that warrants deeper investigation, create a Research Agenda item. Each item must include:
 - A clear, specific title
 - **Why:** Which signal prompted this, and why it is worth the Research Agent's time
@@ -164,7 +166,7 @@ Also append a summary of this cycle's deprioritized signals to `plan/memory.md` 
 
 ### Step 10 — Write `plan.md`
 
-Assemble all sections into the final `plan.md` using the required template. Populate all seven sections. Do not leave placeholder text in the output. Set the cycle timestamp to the current ISO 8601 date-time.
+Assemble all sections into the final `plan.md` using the required template. Populate all seven sections. **Do not leave template placeholder brackets like `[Signal name]`, `[Headline / Event]`, or `[Investigation title]` in your output** — replace them with real content from your research. If there is nothing to report for a section, write "None identified this cycle." Set the cycle timestamp to the current ISO 8601 date-time.
 
 ### Step 11 — Send forward context to the Research Agent
 
