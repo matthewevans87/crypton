@@ -44,29 +44,29 @@ All field names are **snake_case** and must match exactly. The Execution Service
 
 ### `portfolio_risk` object
 
-| Field | Type | Meaning |
-|---|---|---|
-| `max_drawdown_pct` | fraction (0–1) | Halt all trading if portfolio drawdown reaches this level |
-| `daily_loss_limit_usd` | **absolute USD amount** (not a fraction) | Suspend new entries today if daily loss in USD reaches this |
-| `max_total_exposure_pct` | fraction (0–1) | Maximum total capital deployed across all positions simultaneously |
-| `max_per_position_pct` | fraction (0–1) | Hard cap on any single position's `allocation_pct` |
-| `safe_mode_triggers` | list of strings | Any of: `'consecutive_losses'`, `'max_drawdown'`, `'manual'` |
+| Field                    | Type                                     | Meaning                                                            |
+| ------------------------ | ---------------------------------------- | ------------------------------------------------------------------ |
+| `max_drawdown_pct`       | fraction (0–1)                           | Halt all trading if portfolio drawdown reaches this level          |
+| `daily_loss_limit_usd`   | **absolute USD amount** (not a fraction) | Suspend new entries today if daily loss in USD reaches this        |
+| `max_total_exposure_pct` | fraction (0–1)                           | Maximum total capital deployed across all positions simultaneously |
+| `max_per_position_pct`   | fraction (0–1)                           | Hard cap on any single position's `allocation_pct`                 |
+| `safe_mode_triggers`     | list of strings                          | Any of: `'consecutive_losses'`, `'max_drawdown'`, `'manual'`       |
 
 ### `positions` array — each item
 
-| Field | Required | Meaning |
-|---|---|---|
-| `id` | ✅ | Short stable identifier unique within this strategy, e.g. `'btc-short-1'` |
-| `asset` | ✅ | Trading pair, e.g. `'BTC/USD'` |
-| `direction` | ✅ | `'long'` or `'short'` |
-| `allocation_pct` | ✅ | Fraction of total portfolio capital (0.10 = 10%) |
-| `entry_type` | ✅ | `'market'`, `'limit'`, or `'conditional'` |
-| `entry_condition` | conditional | DSL string. Required when `entry_type='conditional'`. See DSL grammar below. |
-| `entry_limit_price` | conditional | Number. Required when `entry_type='limit'`. |
-| `take_profit_targets` | recommended | Array of `{price, close_pct}` objects. |
-| `stop_loss` | recommended | Object `{type, price?, trail_pct?}`. See below. |
-| `time_exit_utc` | optional | ISO 8601 UTC datetime. Close at this time if still open. |
-| `invalidation_condition` | optional | DSL string. Close position if this evaluates true. |
+| Field                    | Required    | Meaning                                                                      |
+| ------------------------ | ----------- | ---------------------------------------------------------------------------- |
+| `id`                     | ✅           | Short stable identifier unique within this strategy, e.g. `'btc-short-1'`    |
+| `asset`                  | ✅           | Trading pair, e.g. `'BTC/USD'`                                               |
+| `direction`              | ✅           | `'long'` or `'short'`                                                        |
+| `allocation_pct`         | ✅           | Fraction of total portfolio capital (0.10 = 10%)                             |
+| `entry_type`             | ✅           | `'market'`, `'limit'`, or `'conditional'`                                    |
+| `entry_condition`        | conditional | DSL string. Required when `entry_type='conditional'`. See DSL grammar below. |
+| `entry_limit_price`      | conditional | Number. Required when `entry_type='limit'`.                                  |
+| `take_profit_targets`    | recommended | Array of `{price, close_pct}` objects.                                       |
+| `stop_loss`              | recommended | Object `{type, price?, trail_pct?}`. See below.                              |
+| `time_exit_utc`          | optional    | ISO 8601 UTC datetime. Close at this time if still open.                     |
+| `invalidation_condition` | optional    | DSL string. Close position if this evaluates true.                           |
 
 **`take_profit_targets` item:** `{"price": <number>, "close_pct": <fraction 0–1>}`. Sum of `close_pct` values must not exceed 1.0. For longs, `price` must be above entry. For shorts, `price` must be below entry.
 
@@ -123,16 +123,16 @@ AND(rsi(14, BTC/USD) < 40, NOT(price(BTC/USD) >= 70000))
 
 ### Available indicators (from the MarketData service)
 
-| Expression | What it measures |
-|---|---|
-| `rsi(14, ASSET)` | RSI 14-period |
-| `macd(ASSET)` | MACD line |
-| `macd_signal(ASSET)` | MACD signal line |
-| `macd_histogram(ASSET)` | MACD histogram (line − signal) |
-| `bollinger_upper(ASSET)` | Upper Bollinger Band (20-period) |
-| `bollinger_middle(ASSET)` | 20-period SMA |
-| `bollinger_lower(ASSET)` | Lower Bollinger Band (20-period) |
-| `price(ASSET)` | Live mid price (no indicator lookup needed) |
+| Expression                | What it measures                            |
+| ------------------------- | ------------------------------------------- |
+| `rsi(14, ASSET)`          | RSI 14-period                               |
+| `macd(ASSET)`             | MACD line                                   |
+| `macd_signal(ASSET)`      | MACD signal line                            |
+| `macd_histogram(ASSET)`   | MACD histogram (line − signal)              |
+| `bollinger_upper(ASSET)`  | Upper Bollinger Band (20-period)            |
+| `bollinger_middle(ASSET)` | 20-period SMA                               |
+| `bollinger_lower(ASSET)`  | Lower Bollinger Band (20-period)            |
+| `price(ASSET)`            | Live mid price (no indicator lookup needed) |
 
 ---
 
