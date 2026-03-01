@@ -17,7 +17,6 @@ public class CycleConfig
     public int MinDurationMinutes { get; set; } = 60;
     public int MaxDurationMinutes { get; set; } = 1440;
     public int ScheduleIntervalMinutes { get; set; } = 360;
-    public bool EnableParallelExecution { get; set; } = false;
     public string Schedule { get; set; } = string.Empty;
     public Dictionary<string, int> StepTimeoutOverrides { get; set; } = new();
 }

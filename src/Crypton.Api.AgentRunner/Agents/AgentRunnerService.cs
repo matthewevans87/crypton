@@ -213,111 +213,13 @@ public class AgentRunnerService
                 break;
             }
 
-            // Check for parallel execution (FR-169-170)
-            if (_config.Cycle.EnableParallelExecution && nextState == LoopState.Research)
-            {
-                await ExecuteParallelResearchAndAnalysisAsync(cancellationToken);
-            }
-            else
-            {
-                await ExecuteStepAsync(cancellationToken);
-            }
+            await ExecuteStepAsync(cancellationToken);
 
             await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
         }
 
         // Loop exited - attempt auto-restart
         await HandleLoopExitAsync(cancellationToken);
-    }
-
-    private async Task ExecuteParallelResearchAndAnalysisAsync(CancellationToken cancellationToken)
-    {
-        // Execute Research step first
-        _logger.LogInfo("Executing Research step (parallel mode)...");
-        var researchResult = await ExecuteAgentAsync(LoopState.Research, cancellationToken);
-
-        // Store research artifact
-        if (researchResult.Success)
-        {
-            _artifactManager.SaveArtifact(_currentCycle!.CycleId, "research.md", researchResult.Output ?? "");
-
-            var validationResult = ValidateArtifact(LoopState.Research, researchResult.Output ?? "");
-            if (!validationResult.IsValid)
-            {
-                _logger.LogWarning($"Research validation failed: {string.Join(", ", validationResult.Errors)}");
-                researchResult.Success = false;
-                researchResult.Error = $"Validation failed: {string.Join("; ", validationResult.Errors)}";
-            }
-
-            await HandleMailboxMessagesAsync(LoopState.Research, researchResult);
-
-            if (_currentCycle != null)
-            {
-                _currentCycle.Steps[LoopState.Research.ToString()] = new StepRecord
-                {
-                    Step = LoopState.Research,
-                    StartTime = DateTime.UtcNow.AddMinutes(-5),
-                    EndTime = DateTime.UtcNow,
-                    Outcome = researchResult.Success ? StepOutcome.Success : StepOutcome.Failed,
-                    ErrorMessage = researchResult.Error
-                };
-            }
-        }
-
-        // If Research succeeded, run Analysis in parallel
-        if (researchResult.Success)
-        {
-            _logger.LogInfo("Executing Analysis step (parallel mode)...");
-
-            // Set state to Analyze
-            _stateMachine.TransitionTo(LoopState.Analyze);
-
-            var analyzeResult = await ExecuteAgentAsync(LoopState.Analyze, cancellationToken);
-
-            if (analyzeResult.Success)
-            {
-                _artifactManager.SaveArtifact(_currentCycle!.CycleId, "analysis.md", analyzeResult.Output ?? "");
-
-                var validationResult = ValidateArtifact(LoopState.Analyze, analyzeResult.Output ?? "");
-                if (!validationResult.IsValid)
-                {
-                    _logger.LogWarning($"Analysis validation failed: {string.Join(", ", validationResult.Errors)}");
-                    analyzeResult.Success = false;
-                    analyzeResult.Error = $"Validation failed: {string.Join("; ", validationResult.Errors)}";
-                }
-
-                await HandleMailboxMessagesAsync(LoopState.Analyze, analyzeResult);
-
-                if (_currentCycle != null)
-                {
-                    _currentCycle.Steps[LoopState.Analyze.ToString()] = new StepRecord
-                    {
-                        Step = LoopState.Analyze,
-                        StartTime = DateTime.UtcNow,
-                        EndTime = DateTime.UtcNow,
-                        Outcome = analyzeResult.Success ? StepOutcome.Success : StepOutcome.Failed,
-                        ErrorMessage = analyzeResult.Error
-                    };
-                }
-            }
-
-            // Handle completion for both steps
-            if (researchResult.Success && analyzeResult.Success)
-            {
-                await HandleStepCompletionAsync(LoopState.Analyze, StepOutcome.Success, cancellationToken);
-            }
-            else
-            {
-                var failedState = !analyzeResult.Success ? LoopState.Analyze : LoopState.Research;
-                var outcome = (!analyzeResult.Success ? analyzeResult : researchResult).Success ? StepOutcome.Success : StepOutcome.Failed;
-                await HandleStepCompletionAsync(failedState, outcome, cancellationToken);
-            }
-        }
-        else
-        {
-            // Research failed, handle failure
-            await HandleStepCompletionAsync(LoopState.Research, StepOutcome.Failed, cancellationToken);
-        }
     }
 
     private async Task HandleNextCycleDelayAsync(CancellationToken cancellationToken)

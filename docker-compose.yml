@@ -13,6 +13,9 @@ services:
       - Tools__BraveSearch__ApiKey=${BRAVE_SEARCH_API_KEY}
       - Api__ApiKey=${AGENT_RUNNER_API_KEY}
       - Tools__MarketDataService__BaseUrl=http://market-data-service:5002
+      - Ollama__BaseUrl=http://host-gateway:11434
+    extra_hosts:
+      - "host-gateway:host-gateway"
     volumes:
       - /home/matthew-evans/.config/crypton/artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/logs:/app/logs
