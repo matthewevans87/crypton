@@ -1,8 +1,51 @@
+import { useState, useEffect } from 'react';
 import { useDashboardStore } from '../../store/dashboard';
+import { api } from '../../services/api';
+import type { CycleIntervalConfig } from '../../types';
+
+const INTERVAL_OPTIONS: { label: string; minutes: number }[] = [
+  { label: '1 hour', minutes: 60 },
+  { label: '2 hours', minutes: 120 },
+  { label: '4 hours', minutes: 240 },
+  { label: '6 hours', minutes: 360 },
+  { label: '12 hours', minutes: 720 },
+  { label: '24 hours', minutes: 1440 },
+];
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 export function LoopStatePanel() {
   const { agent } = useDashboardStore();
   const loop = agent.loop;
+
+  const [intervalCfg, setIntervalCfg] = useState<CycleIntervalConfig | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.agent.getCycleInterval()
+      .then((cfg) => setIntervalCfg(cfg as CycleIntervalConfig))
+      .catch(() => { /* silently ignore if AgentRunner is unavailable */ });
+  }, []);
+
+  const handleIntervalChange = async (minutes: number) => {
+    if (!intervalCfg || minutes === intervalCfg.cycleIntervalMinutes) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const updated = await api.agent.setCycleInterval(minutes) as CycleIntervalConfig;
+      setIntervalCfg((prev) => prev ? { ...prev, cycleIntervalMinutes: updated.cycleIntervalMinutes ?? minutes } : prev);
+    } catch (err) {
+      setSaveError('Failed to update — is AgentRunner reachable?');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!loop) {
     return <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>;
@@ -98,6 +141,60 @@ export function LoopStatePanel() {
           Next cycle: {new Date(loop.nextCycleExpectedAt).toLocaleString()}
         </div>
       )}
+
+      {/* Cycle Interval Picker */}
+      <div style={{ marginTop: 'var(--space-2)', borderTop: '1px solid var(--border-default)', paddingTop: 'var(--space-2)' }}>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+          Cycle Interval
+          {intervalCfg && (
+            <span style={{ color: 'var(--text-tertiary)', marginLeft: '6px' }}>
+              ({formatMinutes(intervalCfg.minInterval)}–{formatMinutes(intervalCfg.maxInterval)})
+            </span>
+          )}
+        </div>
+        {intervalCfg ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <select
+              value={intervalCfg.cycleIntervalMinutes}
+              disabled={isSaving}
+              onChange={(e) => handleIntervalChange(Number(e.target.value))}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--font-size-xs)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-default)',
+                borderRadius: '4px',
+                padding: '2px 6px',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                opacity: isSaving ? 0.6 : 1,
+              }}
+            >
+              {INTERVAL_OPTIONS
+                .filter((o) => o.minutes >= intervalCfg.minInterval && o.minutes <= intervalCfg.maxInterval)
+                .map((opt) => (
+                  <option key={opt.minutes} value={opt.minutes}>{opt.label}</option>
+                ))}
+              {/* Fallback if current value is not in preset list */}
+              {!INTERVAL_OPTIONS.some((o) => o.minutes === intervalCfg.cycleIntervalMinutes) && (
+                <option value={intervalCfg.cycleIntervalMinutes}>
+                  {formatMinutes(intervalCfg.cycleIntervalMinutes)} (custom)
+                </option>
+              )}
+            </select>
+            {isSaving && (
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>saving…</span>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>—</div>
+        )}
+        {saveError && (
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-loss)', marginTop: '4px' }}>
+            {saveError}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

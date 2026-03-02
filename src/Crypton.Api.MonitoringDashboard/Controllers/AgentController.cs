@@ -7,6 +7,15 @@ namespace MonitoringDashboard.Controllers;
 [Route("api/[controller]")]
 public class AgentController : ControllerBase
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly string _agentRunnerUrl;
+
+    public AgentController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    {
+        _httpClientFactory = httpClientFactory;
+        _agentRunnerUrl = (configuration["AgentRunner:Url"] ?? "http://localhost:5003").TrimEnd('/');
+    }
+
     [HttpGet("state")]
     public ActionResult<AgentState> GetState()
     {
@@ -82,6 +91,47 @@ public class AgentController : ControllerBase
                 IsError = false
             }
         });
+    }
+
+    // -----------------------------------------------------------------------
+    // Cycle interval — proxied to AgentRunner
+    // -----------------------------------------------------------------------
+
+    [HttpGet("config/cycle-interval")]
+    public async Task<IActionResult> GetCycleInterval(CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.GetAsync($"{_agentRunnerUrl}/api/config/cycle-interval", ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            return Content(body, "application/json", System.Text.Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
+    [HttpPost("config/cycle-interval")]
+    public async Task<IActionResult> SetCycleInterval([FromBody] CycleIntervalRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(request,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }),
+                System.Text.Encoding.UTF8,
+                "application/json");
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/config/cycle-interval", content, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)response.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
     }
 
     [HttpGet("reasoning")]

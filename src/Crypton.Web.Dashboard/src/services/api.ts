@@ -114,6 +114,18 @@ async function fetchJson<T>(url: string, options: FetchOptions = {}): Promise<T>
   return fetchWithRetry<T>(`${API_BASE}${url}`, options);
 }
 
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new ApiError(`API error: ${response.status} ${response.statusText}`, response.status);
+  }
+  return response.json();
+}
+
 export const api = {
   // Portfolio
   portfolio: {
@@ -145,6 +157,8 @@ export const api = {
     loop: () => fetchJson('/agent/loop'),
     toolCalls: (limit = 20) => fetchJson(`/agent/toolcalls?limit=${limit}`),
     reasoning: () => fetchJson('/agent/reasoning'),
+    getCycleInterval: () => fetchJson('/agent/config/cycle-interval'),
+    setCycleInterval: (minutes: number) => postJson('/agent/config/cycle-interval', { cycleIntervalMinutes: minutes }),
   },
   
   // Performance

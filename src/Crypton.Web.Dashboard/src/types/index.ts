@@ -155,6 +155,12 @@ export interface LoopStatus {
   cycleNumber: number;
 }
 
+export interface CycleIntervalConfig {
+  cycleIntervalMinutes: number;
+  minInterval: number;
+  maxInterval: number;
+}
+
 export interface ToolCall {
   id: string;
   toolName: string;

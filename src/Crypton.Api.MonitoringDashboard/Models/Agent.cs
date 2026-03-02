@@ -87,3 +87,8 @@ public class LifetimePerformance
     public int LongestLosingStreak { get; set; }
     public decimal? SharpeRatio { get; set; }
 }
+
+public class CycleIntervalRequest
+{
+    public int CycleIntervalMinutes { get; set; }
+}
