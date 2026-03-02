@@ -3,6 +3,7 @@ using Crypton.Api.ExecutionService.Exchange;
 using Crypton.Api.ExecutionService.Models;
 using Crypton.Api.ExecutionService.OperationMode;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
@@ -24,7 +25,7 @@ public sealed class PaperTradingAdapterTests
     private static PaperTradingAdapter CreateSut(IMarketDataSource? source = null)
     {
         source ??= new NullMarketDataSource();
-        return new PaperTradingAdapter(Options.Create(DefaultConfig), source);
+        return new PaperTradingAdapter(Options.Create(DefaultConfig), source, NullLogger<PaperTradingAdapter>.Instance);
     }
 
     /// <summary>

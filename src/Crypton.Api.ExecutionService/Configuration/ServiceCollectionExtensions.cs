@@ -44,7 +44,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMarketDataSource>(sp => sp.GetRequiredService<MarketDataServiceClient>());
         services.AddHostedService(sp => sp.GetRequiredService<MarketDataServiceClient>());
 
-        services.AddSingleton<PaperTradingAdapter>();
+        services.AddSingleton<PaperTradingAdapter>(sp =>
+        {
+            var adapter = new PaperTradingAdapter(
+                sp.GetRequiredService<IOptions<ExecutionServiceConfig>>(),
+                sp.GetRequiredService<IMarketDataSource>(),
+                sp.GetRequiredService<ILogger<PaperTradingAdapter>>());
+            adapter.Load();
+            return adapter;
+        });
         services.AddSingleton<DelegatingExchangeAdapter>();
         services.AddSingleton<IExchangeAdapter>(sp =>
             sp.GetRequiredService<DelegatingExchangeAdapter>());

@@ -20,9 +20,9 @@ public class CurrentPositionToolTests
     public async Task ExecuteAsync_WithValidResponse_ReturnsSuccess()
     {
         var response = new { totalValue = 50000m, balances = new[] { new { asset = "BTC", available = 1.5m } } };
-        _mockHandler.SetupResponse("http://localhost:5002/api/portfolio/summary", response);
+        _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
-        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5002", 60);
+        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
 
         var result = await tool.ExecuteAsync(new Dictionary<string, object>());
 
@@ -33,9 +33,9 @@ public class CurrentPositionToolTests
     [Fact]
     public async Task ExecuteAsync_WhenServiceUnavailable_ReturnsError()
     {
-        _mockHandler.SetupError("http://localhost:5002/api/portfolio/summary", HttpStatusCode.ServiceUnavailable);
+        _mockHandler.SetupError("http://localhost:5004/portfolio/summary", HttpStatusCode.ServiceUnavailable);
 
-        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5002", 60);
+        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
 
         var result = await tool.ExecuteAsync(new Dictionary<string, object>());
 
@@ -47,9 +47,9 @@ public class CurrentPositionToolTests
     public async Task ExecuteAsync_WithCaching_ReturnsCachedResult()
     {
         var response = new { totalValue = 50000m };
-        _mockHandler.SetupResponse("http://localhost:5002/api/portfolio/summary", response);
+        _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
-        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5002", 60);
+        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
 
         var result1 = await tool.ExecuteAsync(new Dictionary<string, object>());
         var result2 = await tool.ExecuteAsync(new Dictionary<string, object>());
@@ -62,9 +62,9 @@ public class CurrentPositionToolTests
     public async Task ExecuteAsync_WithUrlTrailingSlash_HandlesCorrectly()
     {
         var response = new { totalValue = 50000m };
-        _mockHandler.SetupResponse("http://localhost:5002/api/portfolio/summary", response);
+        _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
-        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5002/", 60);
+        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004/", 60);
 
         var result = await tool.ExecuteAsync(new Dictionary<string, object>());
 

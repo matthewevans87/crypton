@@ -28,6 +28,9 @@ public sealed class PaperTradingConfig
     public decimal InitialBalanceUsd { get; init; } = 10_000m;
     public decimal SlippagePct { get; init; } = 0.001m;
     public decimal CommissionRate { get; init; } = 0.0026m;
+    /// <summary>Path to the JSON file used to persist paper trading state (orders) across restarts.
+    /// Override via <c>ExecutionService__PaperTrading__StatePath</c> env var for container deployments.</summary>
+    public string StatePath { get; init; } = "artifacts/paper_state.json";
 }
 
 public sealed class StrategyConfig

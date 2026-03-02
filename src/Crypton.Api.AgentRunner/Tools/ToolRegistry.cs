@@ -29,7 +29,7 @@ public class ToolRegistry
         var webFetchTool = new WebFetchTool(httpClient);
         var currentPositionTool = new CurrentPositionTool(
             httpClient,
-            config.Tools.MarketDataService.BaseUrl,
+            config.Tools.ExecutionService.BaseUrl,
             config.Tools.CacheTtlSeconds);
         var technicalIndicatorsTool = new TechnicalIndicatorsTool(
             httpClient,

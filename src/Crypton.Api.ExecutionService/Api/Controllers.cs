@@ -1,4 +1,5 @@
 using Crypton.Api.ExecutionService.Configuration;
+using Crypton.Api.ExecutionService.Exchange;
 using Crypton.Api.ExecutionService.Execution;
 using Crypton.Api.ExecutionService.Logging;
 using Crypton.Api.ExecutionService.Metrics;
@@ -253,6 +254,50 @@ public sealed class OperatorController : ControllerBase
     {
         await _strategy.ForceReloadAsync(ct);
         return NoContent();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio
+// ---------------------------------------------------------------------------
+
+[ApiController]
+public sealed class PortfolioController : ControllerBase
+{
+    private readonly PositionRegistry _registry;
+    private readonly IExchangeAdapter _exchange;
+    private readonly IOperationModeService _mode;
+
+    public PortfolioController(
+        PositionRegistry registry,
+        IExchangeAdapter exchange,
+        IOperationModeService mode)
+    {
+        _registry = registry;
+        _exchange = exchange;
+        _mode = mode;
+    }
+
+    /// <summary>
+    /// Returns a complete portfolio snapshot: open positions, recent closed trades,
+    /// and current account balance. Used by the AgentRunner current_position tool.
+    /// </summary>
+    [HttpGet("/portfolio/summary")]
+    public async Task<IActionResult> GetSummary(CancellationToken ct)
+    {
+        var balance = await _exchange.GetAccountBalanceAsync(ct);
+        return Ok(new
+        {
+            mode = _mode.CurrentMode.ToString().ToLowerInvariant(),
+            balance = new
+            {
+                available_usd = balance.AvailableUsd,
+                asset_balances = balance.AssetBalances,
+                timestamp = balance.Timestamp
+            },
+            open_positions = _registry.OpenPositions,
+            recent_trades = _registry.ClosedTrades.TakeLast(50)
+        });
     }
 }
 

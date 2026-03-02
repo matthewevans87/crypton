@@ -1,6 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Crypton.Api.ExecutionService.Configuration;
 using Crypton.Api.ExecutionService.Exchange;
 using Crypton.Api.ExecutionService.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Crypton.Api.ExecutionService.OperationMode;
@@ -8,11 +11,21 @@ namespace Crypton.Api.ExecutionService.OperationMode;
 /// <summary>
 /// Simulated exchange adapter for paper trading.
 /// Orders are immediately filled at mid ± slippage using the latest received market snapshot.
+/// State (all orders) is persisted to <see cref="PaperTradingConfig.StatePath"/> after every
+/// mutation so balance and fill history survive process restarts.
 /// </summary>
 public sealed class PaperTradingAdapter : IExchangeAdapter
 {
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
+    };
+
     private readonly PaperTradingConfig _config;
     private readonly IMarketDataSource _marketDataSource;
+    private readonly ILogger<PaperTradingAdapter> _logger;
 
     // Keyed by paper order-id
     private readonly Dictionary<string, PaperOrder> _orders = new(StringComparer.Ordinal);
@@ -24,10 +37,80 @@ public sealed class PaperTradingAdapter : IExchangeAdapter
 
     public PaperTradingAdapter(
         IOptions<ExecutionServiceConfig> config,
-        IMarketDataSource marketDataSource)
+        IMarketDataSource marketDataSource,
+        ILogger<PaperTradingAdapter> logger)
     {
         _config = config.Value.PaperTrading;
         _marketDataSource = marketDataSource;
+        _logger = logger;
+    }
+
+    // -------------------------------------------------------------------------
+    // Persistence
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Loads previously persisted paper orders from <see cref="PaperTradingConfig.StatePath"/>.
+    /// Call once at startup (before accepting any orders). Safe to call on a missing file.
+    /// </summary>
+    public void Load()
+    {
+        var path = _config.StatePath;
+        if (!File.Exists(path))
+        {
+            _logger.LogInformation("Paper trading state file not found at {Path}. Starting with empty state.", path);
+            return;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var orders = JsonSerializer.Deserialize<List<PaperOrder>>(json, JsonOpts);
+            if (orders is null)
+            {
+                _logger.LogWarning("Paper trading state at {Path} deserialized to null. Starting with empty state.", path);
+                return;
+            }
+
+            lock (_ordersLock)
+            {
+                _orders.Clear();
+                foreach (var order in orders)
+                    _orders[order.PaperOrderId] = order;
+            }
+
+            _logger.LogInformation("Loaded {Count} paper orders from {Path}.", orders.Count, path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load paper trading state from {Path}. Starting with empty state.", path);
+        }
+    }
+
+    /// <summary>Atomically writes the current order dictionary to <see cref="PaperTradingConfig.StatePath"/>.</summary>
+    private void Persist()
+    {
+        var path = _config.StatePath;
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        var tmp = path + ".tmp";
+        try
+        {
+            List<PaperOrder> snapshot;
+            lock (_ordersLock)
+            {
+                snapshot = _orders.Values.ToList();
+            }
+
+            File.WriteAllText(tmp, JsonSerializer.Serialize(snapshot, JsonOpts));
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist paper trading state to {Path}.", path);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -93,6 +176,7 @@ public sealed class PaperTradingAdapter : IExchangeAdapter
             {
                 _orders[rejected.PaperOrderId] = rejected;
             }
+            Persist();
 
             return Task.FromResult(new OrderAcknowledgement
             {
@@ -130,6 +214,7 @@ public sealed class PaperTradingAdapter : IExchangeAdapter
         {
             _orders[paperId] = filled;
         }
+        Persist();
 
         return Task.FromResult(new OrderAcknowledgement
         {
@@ -158,6 +243,7 @@ public sealed class PaperTradingAdapter : IExchangeAdapter
             if (order.Status is OrderStatus.Open or OrderStatus.PartiallyFilled)
             {
                 order.Status = OrderStatus.Cancelled;
+                Persist();
                 return Task.FromResult(new CancellationResult
                 {
                     ExchangeOrderId = exchangeOrderId,
@@ -266,23 +352,35 @@ public sealed class PaperTradingAdapter : IExchangeAdapter
         }
     }
 
+    /// <summary>Exposes all orders for test assertions.</summary>
+    internal IReadOnlyList<PaperOrder> GetAllOrders()
+    {
+        lock (_ordersLock)
+        {
+            return _orders.Values.ToList();
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // Private order model
+    // Internal order model
     // -------------------------------------------------------------------------
 
-    private sealed class PaperOrder
+    internal sealed class PaperOrder
     {
-        public required string PaperOrderId { get; init; }
-        public required string InternalId { get; init; }
-        public required string Asset { get; init; }
-        public required OrderSide Side { get; init; }
-        public required OrderType Type { get; init; }
-        public required decimal Quantity { get; init; }
+        public required string PaperOrderId { get; set; }
+        public required string InternalId { get; set; }
+        public required string Asset { get; set; }
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public required OrderSide Side { get; set; }
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public required OrderType Type { get; set; }
+        public required decimal Quantity { get; set; }
+        [JsonConverter(typeof(JsonStringEnumConverter))]
         public OrderStatus Status { get; set; }
-        public decimal FilledQuantity { get; init; }
-        public decimal? AverageFillPrice { get; init; }
-        public decimal Commission { get; init; }
-        public string? RejectionReason { get; init; }
-        public required DateTimeOffset CreatedAt { get; init; }
+        public decimal FilledQuantity { get; set; }
+        public decimal? AverageFillPrice { get; set; }
+        public decimal Commission { get; set; }
+        public string? RejectionReason { get; set; }
+        public required DateTimeOffset CreatedAt { get; set; }
     }
 }
