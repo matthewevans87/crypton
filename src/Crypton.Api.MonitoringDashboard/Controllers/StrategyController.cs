@@ -19,12 +19,15 @@ public class StrategyController : ControllerBase
 
     /// <summary>
     /// Returns the active strategy proxied from ExecutionService GET /strategy.
-    /// Returns 404 if no strategy is loaded.
+    /// Returns 200 with null body when no strategy is loaded yet (ExecutionService 404)
+    /// so callers can distinguish "no strategy yet" from a service error.
     /// </summary>
     [HttpGet("current")]
     public async Task<IActionResult> GetCurrent(CancellationToken ct)
     {
         var (statusCode, body) = await _executionServiceClient.GetStrategyAsync(ct);
+        if (statusCode == 404)
+            return Ok((object?)null);
         Response.StatusCode = statusCode;
         return Content(body, "application/json", System.Text.Encoding.UTF8);
     }
@@ -41,8 +44,9 @@ public class StrategyController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id, CancellationToken ct)
     {
-        // There is no per-ID strategy lookup on ExecutionService; proxy the active strategy.
         var (statusCode, body) = await _executionServiceClient.GetStrategyAsync(ct);
+        if (statusCode == 404)
+            return Ok((object?)null);
         Response.StatusCode = statusCode;
         return Content(body, "application/json", System.Text.Encoding.UTF8);
     }
