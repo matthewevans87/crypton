@@ -62,31 +62,62 @@ function App() {
     }, { interval: getSmartInterval('strategy', agentIsRunning) });
   };
 
+  const offlineLoop: LoopStatus = {
+    agentState: { currentState: 'Offline', isRunning: false, stateStartedAt: '', timeInState: 0, progressPercent: 0, tokensUsed: 0 },
+    cycleNumber: 0,
+  };
+
   useEffect(() => {
     const loadData = async () => {
-      try {
-        const summary = await api.portfolio.summary() as PortfolioSummary;
-        const holdings = await api.portfolio.holdings() as Holding[];
-        const positions = await api.portfolio.positions() as Position[];
-        const trades = await api.portfolio.trades() as Trade[];
-        const strategy = await api.strategy.current() as Strategy;
-        const prices = await api.market.prices() as PriceTicker[];
-        const loop = await api.agent.loop() as LoopStatus;
-        const toolCalls = await api.agent.toolCalls() as ToolCall[];
-        const reasoning = await api.agent.reasoning() as ReasoningStep[];
-        const cyclePerformance = await api.performance.currentCycle() as CyclePerformance;
-        const evaluation = await api.performance.latestEvaluation() as EvaluationSummary;
+      const [
+        summaryResult, holdingsResult, positionsResult, tradesResult,
+        strategyResult, pricesResult, loopResult, toolCallsResult,
+        reasoningResult, cyclePerformanceResult, evaluationResult,
+      ] = await Promise.allSettled([
+        api.portfolio.summary(),
+        api.portfolio.holdings(),
+        api.portfolio.positions(),
+        api.portfolio.trades(),
+        api.strategy.current(),
+        api.market.prices(),
+        api.agent.loop(),
+        api.agent.toolCalls(),
+        api.agent.reasoning(),
+        api.performance.currentCycle(),
+        api.performance.latestEvaluation(),
+      ]);
 
-        setPortfolioData({ summary, holdings, positions, trades });
-        setStrategyData({ current: strategy });
-        setMarketData({ prices });
-        setAgentData({ loop, toolCalls, reasoning });
-        setPerformanceData({ currentCycle: cyclePerformance, evaluation });
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        poller.enable();
-        startPolling();
+      function ok<T,>(r: PromiseSettledResult<unknown>): T | null {
+        return r.status === 'fulfilled' ? (r.value as T) : null;
       }
+
+      setPortfolioData({
+        summary: ok<PortfolioSummary>(summaryResult),
+        holdings: ok<Holding[]>(holdingsResult) ?? [],
+        positions: ok<Position[]>(positionsResult) ?? [],
+        trades: ok<Trade[]>(tradesResult) ?? [],
+      });
+      setStrategyData({ current: ok<Strategy>(strategyResult) });
+      setMarketData({ prices: ok<PriceTicker[]>(pricesResult) ?? [] });
+      setAgentData({
+        loop: loopResult.status === 'fulfilled' ? (loopResult.value as LoopStatus) : offlineLoop,
+        toolCalls: ok<ToolCall[]>(toolCallsResult) ?? [],
+        reasoning: ok<ReasoningStep[]>(reasoningResult) ?? [],
+      });
+      setPerformanceData({
+        currentCycle: ok<CyclePerformance>(cyclePerformanceResult),
+        evaluation: ok<EvaluationSummary>(evaluationResult),
+      });
+
+      // Log partial failures for debugging
+      [summaryResult, holdingsResult, positionsResult, tradesResult, strategyResult,
+        pricesResult, loopResult, toolCallsResult, reasoningResult, cyclePerformanceResult, evaluationResult]
+        .filter((r) => r.status === 'rejected')
+        .forEach((r) => console.warn('Initial load partial failure:', (r as PromiseRejectedResult).reason));
+
+      // Register pollers as fallback; SignalR onConnected will disable them when live
+      poller.enable();
+      startPolling();
     };
 
     loadData();
