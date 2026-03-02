@@ -221,3 +221,19 @@ export interface LifetimePerformance {
   longestLosingStreak: number;
   sharpeRatio?: number;
 }
+
+export interface ServiceHealth {
+  /** 'MarketData' | 'ExecutionService' | 'AgentRunner' */
+  name: string;
+  /** 'online' | 'degraded' | 'offline' */
+  status: 'online' | 'degraded' | 'offline';
+  detail: string;
+  checkedAt: string;
+  signalRConnected?: boolean | null;
+  metrics: Record<string, unknown>;
+}
+
+export interface SystemStatus {
+  services: ServiceHealth[];
+  checkedAt: string;
+}

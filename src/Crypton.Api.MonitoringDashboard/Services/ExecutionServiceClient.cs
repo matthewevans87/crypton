@@ -15,6 +15,7 @@ public interface IExecutionServiceClient
     Task<(int StatusCode, string Body)> GetPositionsAsync(CancellationToken ct = default);
     Task<(int StatusCode, string Body)> GetTradesAsync(CancellationToken ct = default);
     Task<(int StatusCode, string Body)> GetStrategyAsync(CancellationToken ct = default);
+    Task<(int StatusCode, string Body)> GetRawStatusAsync(CancellationToken ct = default);
 }
 
 /// <summary>
@@ -161,6 +162,20 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to get strategy from ExecutionService");
+            return (503, """{"error":"ExecutionService unavailable"}""");
+        }
+    }
+
+    public async Task<(int StatusCode, string Body)> GetRawStatusAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"{_baseUrl}/status", ct);
+            return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get status from ExecutionService");
             return (503, """{"error":"ExecutionService unavailable"}""");
         }
     }

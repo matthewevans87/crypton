@@ -168,4 +168,9 @@ export const api = {
     cycleHistory: (limit = 20) => fetchJson(`/performance/cycles?limit=${limit}`),
     latestEvaluation: () => fetchJson('/performance/evaluation'),
   },
+
+  // System diagnostics
+  system: {
+    status: () => fetchJson('/system/status'),
+  },
 };

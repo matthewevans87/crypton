@@ -17,6 +17,7 @@ import type {
   EvaluationSummary,
   CyclePerformance,
   LifetimePerformance,
+  ServiceHealth,
 } from '../types';
 
 export interface Tab {
@@ -65,6 +66,7 @@ export type PanelType =
   | 'evaluation-rating'
   | 'recommendations'
   | 'system-status'
+  | 'system-diagnostics'
   | 'connection-health'
   | 'error-log';
 
@@ -107,6 +109,7 @@ interface DashboardState {
     cycles: CyclePerformance[];
     evaluation: EvaluationSummary | null;
   };
+  systemHealth: ServiceHealth[] | null;
   
   // Actions
   addTab: (title?: string) => void;
@@ -132,6 +135,7 @@ interface DashboardState {
   setMarketData: (data: Partial<DashboardState['market']>) => void;
   setAgentData: (data: Partial<DashboardState['agent']>) => void;
   setPerformanceData: (data: Partial<DashboardState['performance']>) => void;
+  setSystemHealth: (services: ServiceHealth[]) => void;
 }
 
 const defaultTabs: Tab[] = [
@@ -157,6 +161,13 @@ const defaultTabs: Tab[] = [
       { id: 'technical-indicators', type: 'technical-indicators', config: { asset: 'BTC/USD' } },
       { id: 'open-positions', type: 'open-positions' },
       { id: 'holdings', type: 'holdings' },
+    ],
+  },
+  {
+    id: 'diagnostics',
+    title: 'Diagnostics',
+    panels: [
+      { id: 'system-diagnostics', type: 'system-diagnostics' },
     ],
   },
 ];
@@ -202,6 +213,7 @@ export const useDashboardStore = create<DashboardState>()(
         cycles: [],
         evaluation: null,
       },
+      systemHealth: null,
       
       // UI Actions
       addTab: (title = 'New Tab') => {
@@ -374,6 +386,8 @@ export const useDashboardStore = create<DashboardState>()(
       setPerformanceData: (data) => set((state) => ({
         performance: { ...state.performance, ...data },
       })),
+
+      setSystemHealth: (services) => set({ systemHealth: services }),
     }),
     {
       name: 'crypton-dashboard-storage',

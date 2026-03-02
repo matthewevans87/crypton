@@ -8,7 +8,7 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { StatusBar } from './components/layout/StatusBar';
 import { PanelGrid } from './components/panels/PanelGrid';
 import { ErrorToast } from './components/ErrorToast';
-import type { PortfolioSummary, Strategy, PriceTicker, LoopStatus, CyclePerformance, Holding, Position, Trade, ToolCall, ReasoningStep, EvaluationSummary } from './types';
+import type { PortfolioSummary, Strategy, PriceTicker, LoopStatus, CyclePerformance, Holding, Position, Trade, ToolCall, ReasoningStep, EvaluationSummary, SystemStatus } from './types';
 
 function App() {
   const {
@@ -19,6 +19,7 @@ function App() {
     setMarketData,
     setAgentData,
     setPerformanceData,
+    setSystemHealth,
     commandPaletteOpen,
     toggleCommandPalette,
     setActiveTab,
@@ -60,6 +61,15 @@ function App() {
         console.error('Polling error (strategy):', error);
       }
     }, { interval: getSmartInterval('strategy', agentIsRunning) });
+
+    poller.start('systemHealth', async () => {
+      try {
+        const result = await api.system.status() as SystemStatus;
+        if (result?.services) setSystemHealth(result.services);
+      } catch (error) {
+        console.warn('Polling error (systemHealth):', error);
+      }
+    }, { interval: 15_000 });
   };
 
   const offlineLoop: LoopStatus = {
@@ -73,6 +83,7 @@ function App() {
         summaryResult, holdingsResult, positionsResult, tradesResult,
         strategyResult, pricesResult, loopResult, toolCallsResult,
         reasoningResult, cyclePerformanceResult, evaluationResult,
+        systemStatusResult,
       ] = await Promise.allSettled([
         api.portfolio.summary(),
         api.portfolio.holdings(),
@@ -85,6 +96,7 @@ function App() {
         api.agent.reasoning(),
         api.performance.currentCycle(),
         api.performance.latestEvaluation(),
+        api.system.status(),
       ]);
 
       function ok<T,>(r: PromiseSettledResult<unknown>): T | null {
@@ -108,10 +120,13 @@ function App() {
         currentCycle: ok<CyclePerformance>(cyclePerformanceResult),
         evaluation: ok<EvaluationSummary>(evaluationResult),
       });
+      const systemStatus = ok<SystemStatus>(systemStatusResult);
+      if (systemStatus?.services) setSystemHealth(systemStatus.services);
 
       // Log partial failures for debugging
       [summaryResult, holdingsResult, positionsResult, tradesResult, strategyResult,
-        pricesResult, loopResult, toolCallsResult, reasoningResult, cyclePerformanceResult, evaluationResult]
+        pricesResult, loopResult, toolCallsResult, reasoningResult, cyclePerformanceResult,
+        evaluationResult, systemStatusResult]
         .filter((r) => r.status === 'rejected')
         .forEach((r) => console.warn('Initial load partial failure:', (r as PromiseRejectedResult).reason));
 

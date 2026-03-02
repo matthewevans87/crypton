@@ -19,6 +19,7 @@ public interface IMarketDataServiceClient
     Task<List<Ohlcv>> GetOhlcvAsync(string symbol, string timeframe, int limit = 100);
     Task<TechnicalIndicator?> GetIndicatorsAsync(string symbol, string timeframe);
     Task<MacroSignals?> GetMacroSignalsAsync();
+    Task<(int StatusCode, string Body)> GetRawMetricsAsync(CancellationToken ct = default);
 }
 
 public class PriceTicker
@@ -328,6 +329,20 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
         {
             _logger.LogError(ex, "Failed to get indicators from Market Data Service");
             return null;
+        }
+    }
+
+    public async Task<(int StatusCode, string Body)> GetRawMetricsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await _httpClient.GetAsync($"{_marketDataServiceUrl}/api/metrics", ct);
+            return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get metrics from MarketData service");
+            return (503, """{"error":"MarketData unavailable"}""");
         }
     }
 
