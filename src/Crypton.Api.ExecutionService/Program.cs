@@ -37,10 +37,10 @@ else
 // ── Environment variable aliases ─────────────────────────────────────────────
 // Allow short, conventional names (e.g. KRAKEN_API_KEY) to flow into the
 // strongly-typed ExecutionServiceConfig without the full config-key prefix.
-ApplyEnvAlias("KRAKEN_API_KEY",    "EXECUTION_SERVICE__KRAKEN__ApiKey");
+ApplyEnvAlias("KRAKEN_API_KEY", "EXECUTION_SERVICE__KRAKEN__ApiKey");
 ApplyEnvAlias("KRAKEN_API_SECRET", "EXECUTION_SERVICE__KRAKEN__ApiSecret");
 ApplyEnvAlias("KRAKEN_SECRET_KEY", "EXECUTION_SERVICE__KRAKEN__ApiSecret");
-ApplyEnvAlias("MARKET_DATA_URL",   "EXECUTION_SERVICE__MarketDataServiceUrl");
+ApplyEnvAlias("MARKET_DATA_URL", "EXECUTION_SERVICE__MarketDataServiceUrl");
 
 static void ApplyEnvAlias(string source, string target)
 {

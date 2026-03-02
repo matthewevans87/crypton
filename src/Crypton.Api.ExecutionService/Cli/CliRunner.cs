@@ -55,15 +55,15 @@ public static class CliRunner
         {
             return verb switch
             {
-                "status"          => await StatusAsync(sp),
-                "safe-mode"       => await SafeModeAsync(normalized, sp),
-                "set-mode"        => await SetModeAsync(normalized, sp),
+                "status" => await StatusAsync(sp),
+                "safe-mode" => await SafeModeAsync(normalized, sp),
+                "set-mode" => await SetModeAsync(normalized, sp),
                 "promote-to-live" => await SetModeAsync(["set-mode", "live"], sp),
                 "demote-to-paper" => await SetModeAsync(["set-mode", "paper"], sp),
-                "run-order"       => await RunOrderAsync(normalized, sp, verbose),
-                "reconcile"       => await ReconcileAsync(sp),
-                null or ""        => PrintHelp("No verb provided."),
-                _                 => PrintHelp($"Unknown verb: {verb}")
+                "run-order" => await RunOrderAsync(normalized, sp, verbose),
+                "reconcile" => await ReconcileAsync(sp),
+                null or "" => PrintHelp("No verb provided."),
+                _ => PrintHelp($"Unknown verb: {verb}")
             };
         }
         catch (Exception ex)
@@ -80,10 +80,10 @@ public static class CliRunner
 
     private static Task<int> StatusAsync(IServiceProvider sp)
     {
-        var modeService  = sp.GetRequiredService<IOperationModeService>();
-        var safeMode     = sp.GetRequiredService<ISafeModeController>();
+        var modeService = sp.GetRequiredService<IOperationModeService>();
+        var safeMode = sp.GetRequiredService<ISafeModeController>();
         var stratService = sp.GetRequiredService<IStrategyService>();
-        var registry     = sp.GetRequiredService<PositionRegistry>();
+        var registry = sp.GetRequiredService<PositionRegistry>();
 
         Console.WriteLine("══════════════════════════════════════════════");
         Console.WriteLine(" Execution Service — Status");
@@ -187,11 +187,11 @@ public static class CliRunner
         string[] args, IServiceProvider sp, bool verbose)
     {
         // Argument parsing
-        string? symbol    = ArgValue(args, "--symbol");
-        string? sideStr   = ArgValue(args, "--side");
-        string? typeStr   = ArgValue(args, "--type");
-        string? qtyStr    = ArgValue(args, "--quantity");
-        string? priceStr  = ArgValue(args, "--price");
+        string? symbol = ArgValue(args, "--symbol");
+        string? sideStr = ArgValue(args, "--side");
+        string? typeStr = ArgValue(args, "--type");
+        string? qtyStr = ArgValue(args, "--quantity");
+        string? priceStr = ArgValue(args, "--price");
 
         if (symbol is null || sideStr is null || typeStr is null)
             return PrintHelp("Usage: run-order --symbol <pair> --side buy|sell --type market|limit [--quantity <qty>] [--price <px>]");

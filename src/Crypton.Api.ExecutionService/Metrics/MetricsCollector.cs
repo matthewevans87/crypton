@@ -37,20 +37,20 @@ public sealed class MetricsCollector : IMetricsCollector
     private int _positionsOpened;
     private int _positionsClosed;
 
-    public void RecordOrderPlaced()   => Interlocked.Increment(ref _totalOrders);
-    public void RecordOrderOpened()   => Interlocked.Increment(ref _openOrders);
-    public void RecordOrderFilled()   { Interlocked.Increment(ref _filledOrders);  Interlocked.Decrement(ref _openOrders); }
+    public void RecordOrderPlaced() => Interlocked.Increment(ref _totalOrders);
+    public void RecordOrderOpened() => Interlocked.Increment(ref _openOrders);
+    public void RecordOrderFilled() { Interlocked.Increment(ref _filledOrders); Interlocked.Decrement(ref _openOrders); }
     public void RecordOrderRejected() { Interlocked.Increment(ref _rejectedOrders); Interlocked.Decrement(ref _openOrders); }
-    public void RecordOrderClosed()   => Interlocked.Decrement(ref _openOrders);
+    public void RecordOrderClosed() => Interlocked.Decrement(ref _openOrders);
     public void RecordPositionOpened() => Interlocked.Increment(ref _positionsOpened);
     public void RecordPositionClosed() { Interlocked.Increment(ref _positionsClosed); Interlocked.Decrement(ref _positionsOpened); }
 
     public MetricsSnapshot GetSnapshot() => new()
     {
-        TotalOrders       = Volatile.Read(ref _totalOrders),
-        FilledOrders      = Volatile.Read(ref _filledOrders),
-        RejectedOrders    = Volatile.Read(ref _rejectedOrders),
-        OpenOrders        = Volatile.Read(ref _openOrders),
+        TotalOrders = Volatile.Read(ref _totalOrders),
+        FilledOrders = Volatile.Read(ref _filledOrders),
+        RejectedOrders = Volatile.Read(ref _rejectedOrders),
+        OpenOrders = Volatile.Read(ref _openOrders),
         TotalPositionsOpened = Volatile.Read(ref _positionsOpened),
         TotalPositionsClosed = Volatile.Read(ref _positionsClosed),
     };

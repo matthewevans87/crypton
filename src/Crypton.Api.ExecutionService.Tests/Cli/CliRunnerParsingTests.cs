@@ -132,12 +132,12 @@ public sealed class CliRunnerParsingTests
         // Simulates the alias mapping from Program.cs.
         // KRAKEN_API_KEY → EXECUTION_SERVICE__KRAKEN__ApiKey
         const string shortKey = "KRAKEN_API_KEY";
-        const string longKey  = "EXECUTION_SERVICE__KRAKEN__ApiKey";
+        const string longKey = "EXECUTION_SERVICE__KRAKEN__ApiKey";
         const string testValue = "test-key-123";
 
         // Save original values.
         var originalShort = Environment.GetEnvironmentVariable(shortKey);
-        var originalLong  = Environment.GetEnvironmentVariable(longKey);
+        var originalLong = Environment.GetEnvironmentVariable(longKey);
 
         try
         {

@@ -71,15 +71,15 @@ public sealed class KrakenRestAdapter : IExchangeAdapter
     {
         var orderType = request.Type switch
         {
-            OrderType.Market           => "market",
-            OrderType.Limit            => "limit",
-            OrderType.StopLoss         => "stop-loss",
-            OrderType.StopLossLimit    => "stop-loss-limit",
-            OrderType.TakeProfit       => "take-profit",
-            OrderType.TakeProfitLimit  => "take-profit-limit",
-            OrderType.TrailingStop     => "trailing-stop",
+            OrderType.Market => "market",
+            OrderType.Limit => "limit",
+            OrderType.StopLoss => "stop-loss",
+            OrderType.StopLossLimit => "stop-loss-limit",
+            OrderType.TakeProfit => "take-profit",
+            OrderType.TakeProfitLimit => "take-profit-limit",
+            OrderType.TrailingStop => "trailing-stop",
             OrderType.TrailingStopLimit => "trailing-stop-limit",
-            _                          => "market"
+            _ => "market"
         };
         var side = request.Side == OrderSide.Buy ? "buy" : "sell";
 

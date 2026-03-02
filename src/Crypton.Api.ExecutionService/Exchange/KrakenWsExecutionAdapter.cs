@@ -255,19 +255,19 @@ public sealed class KrakenWsExecutionAdapter : IHostedService, IAsyncDisposable
             {
                 if (item is null) continue;
 
-                var execType    = item["exec_type"]?.GetValue<string>();
+                var execType = item["exec_type"]?.GetValue<string>();
                 var orderStatus = item["order_status"]?.GetValue<string>();
 
                 // Only process actual trade executions; skip "new", "canceled", etc.
                 if (execType != "trade" && execType != "filled") continue;
 
-                var orderId    = item["order_id"]?.GetValue<string>();
-                var lastQty    = item["last_qty"]?.GetValue<decimal>() ?? 0m;
-                var lastPrice  = item["last_price"]?.GetValue<decimal>() ?? 0m;
-                var avgPrice   = item["avg_price"]?.GetValue<decimal>() ?? lastPrice;
+                var orderId = item["order_id"]?.GetValue<string>();
+                var lastQty = item["last_qty"]?.GetValue<decimal>() ?? 0m;
+                var lastPrice = item["last_price"]?.GetValue<decimal>() ?? 0m;
+                var avgPrice = item["avg_price"]?.GetValue<decimal>() ?? lastPrice;
                 var timestampStr = item["timestamp"]?.GetValue<string>();
                 var isFullFill = orderStatus == "filled" || execType == "filled";
-                var ts         = timestampStr is not null
+                var ts = timestampStr is not null
                     ? DateTimeOffset.Parse(timestampStr, null,
                         System.Globalization.DateTimeStyles.RoundtripKind)
                     : DateTimeOffset.UtcNow;
@@ -279,10 +279,10 @@ public sealed class KrakenWsExecutionAdapter : IHostedService, IAsyncDisposable
                 }
 
                 var capturedOrderId = orderId;
-                var capturedQty     = lastQty;
-                var capturedPrice   = avgPrice;  // Use avg_price for position cost basis accuracy.
-                var capturedFull    = isFullFill;
-                var capturedTs      = ts;
+                var capturedQty = lastQty;
+                var capturedPrice = avgPrice;  // Use avg_price for position cost basis accuracy.
+                var capturedFull = isFullFill;
+                var capturedTs = ts;
 
                 _ = Task.Run(async () =>
                 {
