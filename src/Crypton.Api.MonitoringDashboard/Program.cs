@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.SignalR;
 using Scalar.AspNetCore;
 using Serilog;
 using DashboardPriceTicker = MonitoringDashboard.Models.PriceTicker;
+using DashboardOrderBook = MonitoringDashboard.Models.OrderBook;
+using DashboardOrderBookEntry = MonitoringDashboard.Models.OrderBookEntry;
+using DashboardMarketTrade = MonitoringDashboard.Models.MarketTrade;
 
 // Load .env file before the host builder so values flow into IConfiguration.
 DotEnvLoader.Load();
@@ -65,6 +68,32 @@ marketDataClient.OnPriceUpdate += (sender, ticker) =>
 marketDataClient.OnConnectionStatus += (sender, isConnected) =>
 {
     logger.LogInformation("Market Data Service connection status changed: {IsConnected}", isConnected);
+};
+
+marketDataClient.OnOrderBookUpdate += (sender, orderBook) =>
+{
+    var dashboardOrderBook = new DashboardOrderBook
+    {
+        Symbol = orderBook.Symbol,
+        Bids = orderBook.Bids.Select(e => new DashboardOrderBookEntry { Price = e.Price, Quantity = e.Quantity, Count = e.Count }).ToList(),
+        Asks = orderBook.Asks.Select(e => new DashboardOrderBookEntry { Price = e.Price, Quantity = e.Quantity, Count = e.Count }).ToList(),
+        LastUpdated = orderBook.LastUpdated
+    };
+    _ = dashboardHubContext.Clients.All.OrderBookUpdated(dashboardOrderBook);
+};
+
+marketDataClient.OnTrade += (sender, trade) =>
+{
+    var dashboardTrade = new DashboardMarketTrade
+    {
+        Id = trade.Id,
+        Symbol = trade.Symbol,
+        Price = trade.Price,
+        Quantity = trade.Quantity,
+        Side = trade.Side,
+        Timestamp = trade.Timestamp
+    };
+    _ = dashboardHubContext.Clients.All.TradeOccurred(dashboardTrade);
 };
 
 _ = Task.Run(async () =>

@@ -36,6 +36,10 @@ public sealed class StrategyConfig
     public int ReloadLatencyMs { get; init; } = 5000;
     public int ValidityCheckIntervalMs { get; init; } = 5000;
     public string OnLoadTriggerMode { get; init; } = "fresh_crossing";
+    /// <summary>When true, a FileSystemWatcher hot-reloads strategy.json from <see cref="WatchPath"/>.</summary>
+    public bool EnableFileWatcher { get; init; } = true;
+    /// <summary>When true, the POST /strategy/push REST endpoint accepts strategy documents directly.</summary>
+    public bool EnableRestEndpoint { get; init; } = true;
 }
 
 public sealed class SafetyConfig

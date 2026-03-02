@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using MonitoringDashboard.Models;
-using MonitoringDashboard.Services;
 using MdsPriceTicker = MonitoringDashboard.Services.PriceTicker;
 using MdsOhlcv = MonitoringDashboard.Services.Ohlcv;
 using MdsTechnicalIndicator = MonitoringDashboard.Services.TechnicalIndicator;
+using MdsMacroSignals = MonitoringDashboard.Services.MacroSignals;
+using IMarketDataServiceClient = MonitoringDashboard.Services.IMarketDataServiceClient;
 
 namespace MonitoringDashboard.Controllers;
 
@@ -60,18 +61,30 @@ public class MarketController : ControllerBase
     }
 
     [HttpGet("macro")]
-    public ActionResult<MacroSignals> GetMacroSignals()
+    public async Task<ActionResult<MacroSignals>> GetMacroSignals()
     {
-        return Ok(new MacroSignals
+        try
         {
-            Trend = "bullish",
-            VolatilityRegime = "normal",
-            FearGreedIndex = 65,
-            Sentiment = "greed",
-            BtcDominance = 52.3m,
-            TotalMarketCap = 1.72m,
-            LastUpdated = DateTime.UtcNow
-        });
+            var result = await _marketDataClient.GetMacroSignalsAsync();
+            if (result is null)
+                return StatusCode(503, new { error = "Market Data Service unavailable or Kraken data not yet ready." });
+
+            return Ok(new MacroSignals
+            {
+                Trend            = result.Trend,
+                VolatilityRegime = result.VolatilityRegime,
+                FearGreedIndex   = result.FearGreedIndex,
+                Sentiment        = result.Sentiment,
+                BtcDominance     = result.BtcDominance,
+                TotalMarketCap   = result.TotalMarketCap,
+                LastUpdated      = result.LastUpdated
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get macro signals from Market Data Service");
+            return StatusCode(503, new { error = "Market Data Service unavailable" });
+        }
     }
 
     [HttpGet("ohlcv")]

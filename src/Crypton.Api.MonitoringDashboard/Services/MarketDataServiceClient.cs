@@ -6,6 +6,7 @@ public interface IMarketDataServiceClient
 {
     event EventHandler<PriceTicker>? OnPriceUpdate;
     event EventHandler<OrderBook>? OnOrderBookUpdate;
+    event EventHandler<MarketTrade>? OnTrade;
     event EventHandler<bool>? OnConnectionStatus;
     
     Task ConnectAsync(CancellationToken cancellationToken = default);
@@ -17,6 +18,7 @@ public interface IMarketDataServiceClient
     Task<PortfolioSummary> GetPortfolioSummaryAsync();
     Task<List<Ohlcv>> GetOhlcvAsync(string symbol, string timeframe, int limit = 100);
     Task<TechnicalIndicator?> GetIndicatorsAsync(string symbol, string timeframe);
+    Task<MacroSignals?> GetMacroSignalsAsync();
 }
 
 public class PriceTicker
@@ -104,6 +106,28 @@ public class TechnicalIndicator
     public DateTime LastUpdated { get; set; }
 }
 
+// Represents a live market-tape trade event from the exchange feed hub.
+public class MarketTrade
+{
+    public string Id { get; set; } = string.Empty;
+    public string Symbol { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal Quantity { get; set; }
+    public string Side { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+}
+
+public class MacroSignals
+{
+    public string Trend { get; set; } = "neutral";
+    public string VolatilityRegime { get; set; } = "normal";
+    public decimal? FearGreedIndex { get; set; }
+    public string? Sentiment { get; set; }
+    public decimal? BtcDominance { get; set; }
+    public decimal? TotalMarketCap { get; set; }
+    public DateTime LastUpdated { get; set; }
+}
+
 public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposable
 {
     private HubConnection? _connection;
@@ -114,6 +138,7 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
 
     public event EventHandler<PriceTicker>? OnPriceUpdate;
     public event EventHandler<OrderBook>? OnOrderBookUpdate;
+    public event EventHandler<MarketTrade>? OnTrade;
     public event EventHandler<bool>? OnConnectionStatus;
     
     public bool IsConnected => _isConnected;
@@ -144,6 +169,12 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
             {
                 _logger.LogDebug("Received order book update for {Symbol}", orderBook.Symbol);
                 OnOrderBookUpdate?.Invoke(this, orderBook);
+            });
+
+            _connection.On<MarketTrade>("OnTrade", trade =>
+            {
+                _logger.LogDebug("Received trade for {Symbol}: {Side} {Quantity} @ {Price}", trade.Symbol, trade.Side, trade.Quantity, trade.Price);
+                OnTrade?.Invoke(this, trade);
             });
 
             _connection.On<bool>("OnConnectionStatus", isConnected =>
@@ -303,5 +334,21 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
     public async ValueTask DisposeAsync()
     {
         await DisconnectAsync();
+    }
+
+    public async Task<MacroSignals?> GetMacroSignalsAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync($"{_marketDataServiceUrl}/api/macro");
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadFromJsonAsync<MacroSignals>();
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get macro signals from Market Data Service");
+            return null;
+        }
     }
 }

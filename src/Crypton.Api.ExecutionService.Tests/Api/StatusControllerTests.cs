@@ -106,7 +106,8 @@ public sealed class StatusControllerTests : IDisposable
     public void GetStrategy_ReturnsNotFound_WhenNoStrategy()
     {
         _strategy.ActiveStrategy.Returns((StrategyDocument?)null);
-        var controller = new StrategyController(_strategy);
+        var config = Options.Create(new Crypton.Api.ExecutionService.Configuration.ExecutionServiceConfig());
+        var controller = new StrategyController(_strategy, config);
 
         var result = controller.GetStrategy();
 
@@ -132,7 +133,8 @@ public sealed class StatusControllerTests : IDisposable
         };
         _strategy.ActiveStrategy.Returns(doc);
 
-        var controller = new StrategyController(_strategy);
+        var config = Options.Create(new Crypton.Api.ExecutionService.Configuration.ExecutionServiceConfig());
+        var controller = new StrategyController(_strategy, config);
         var result = controller.GetStrategy() as OkObjectResult;
 
         result.Should().NotBeNull();

@@ -31,6 +31,8 @@ public interface IDashboardClient
     Task PortfolioUpdated(PortfolioSummary summary);
     Task PositionUpdated(Position position);
     Task PriceUpdated(PriceTicker ticker);
+    Task OrderBookUpdated(OrderBook orderBook);
+    Task TradeOccurred(MarketTrade trade);
     Task AgentStateChanged(AgentState state);
     Task ToolCallStarted(ToolCall toolCall);
     Task ToolCallCompleted(ToolCall toolCall);

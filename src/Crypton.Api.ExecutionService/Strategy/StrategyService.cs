@@ -68,23 +68,31 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        // Try to load the strategy file on startup
         var path = _config.WatchPath;
-        if (File.Exists(path))
-            _ = Task.Run(() => TryLoadStrategyAsync(path, _cts.Token), _cts.Token);
 
-        // Set up FileSystemWatcher
-        var dir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
-        var file = Path.GetFileName(path);
-
-        _watcher = new FileSystemWatcher(dir, file)
+        if (_config.EnableFileWatcher)
         {
-            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
-            EnableRaisingEvents = true
-        };
+            // Try to load the strategy file on startup
+            if (File.Exists(path))
+                _ = Task.Run(() => TryLoadStrategyAsync(path, _cts.Token), _cts.Token);
 
-        _watcher.Changed += (_, e) => OnFileChanged(e.FullPath);
-        _watcher.Created += (_, e) => OnFileChanged(e.FullPath);
+            // Set up FileSystemWatcher
+            var dir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+            var file = Path.GetFileName(path);
+
+            _watcher = new FileSystemWatcher(dir, file)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
+                EnableRaisingEvents = true
+            };
+
+            _watcher.Changed += (_, e) => OnFileChanged(e.FullPath);
+            _watcher.Created += (_, e) => OnFileChanged(e.FullPath);
+        }
+        else
+        {
+            _logger.LogInformation("FileSystemWatcher disabled; strategy must be pushed via REST.");
+        }
 
         // Validity window monitor
         _validityMonitorTask = Task.Run(() => MonitorValidityWindowAsync(_cts.Token), _cts.Token);
@@ -148,6 +156,15 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
             return;
         }
 
+        await ApplyStrategyDocumentAsync(raw, path, token);
+    }
+
+    /// <summary>
+    /// Core strategy activation pipeline: parse → validate → pre-compile → swap.
+    /// Returns null on success, or a human-readable error string on failure.
+    /// </summary>
+    private async Task<string?> ApplyStrategyDocumentAsync(string raw, string source, CancellationToken token)
+    {
         StrategyDocument strategy;
         try
         {
@@ -157,16 +174,17 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
         }
         catch (Exception ex)
         {
-            await LogRejectionAsync(path, $"JSON parse error: {ex.Message}", token);
-            return;
+            var parseError = $"JSON parse error: {ex.Message}";
+            await LogRejectionAsync(source, parseError, token);
+            return parseError;
         }
 
         var errors = _validator.Validate(strategy);
         if (errors.Count > 0)
         {
             var errorSummary = string.Join("; ", errors.Select(e => $"{e.Field}: {e.Message}"));
-            await LogRejectionAsync(path, errorSummary, token);
-            return;
+            await LogRejectionAsync(source, errorSummary, token);
+            return errorSummary;
         }
 
         // Pre-compile all conditions
@@ -177,8 +195,9 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
                 try { _conditionParser.Parse(pos.EntryCondition); }
                 catch (ConditionParseException ex)
                 {
-                    await LogRejectionAsync(path, $"Position '{pos.Id}' entry_condition parse error: {ex.Message}", token);
-                    return;
+                    var condErr = $"Position '{pos.Id}' entry_condition parse error: {ex.Message}";
+                    await LogRejectionAsync(source, condErr, token);
+                    return condErr;
                 }
             }
             if (!string.IsNullOrWhiteSpace(pos.InvalidationCondition))
@@ -186,8 +205,9 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
                 try { _conditionParser.Parse(pos.InvalidationCondition); }
                 catch (ConditionParseException ex)
                 {
-                    await LogRejectionAsync(path, $"Position '{pos.Id}' invalidation_condition parse error: {ex.Message}", token);
-                    return;
+                    var condErr = $"Position '{pos.Id}' invalidation_condition parse error: {ex.Message}";
+                    await LogRejectionAsync(source, condErr, token);
+                    return condErr;
                 }
             }
         }
@@ -216,14 +236,15 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
         }, token);
 
         if (OnStrategyLoaded is not null) await OnStrategyLoaded(strategy);
+        return null;
     }
 
-    private async Task LogRejectionAsync(string path, string reason, CancellationToken token)
+    private async Task LogRejectionAsync(string source, string reason, CancellationToken token)
     {
-        _logger.LogWarning("Strategy file at {Path} rejected: {Reason}", path, reason);
+        _logger.LogWarning("Strategy from {Source} rejected: {Reason}", source, reason);
         await _eventLogger.LogAsync(EventTypes.StrategyRejected, CurrentModeString(), new Dictionary<string, object?>
         {
-            ["path"] = path,
+            ["source"] = source,
             ["reason"] = reason
         }, token);
     }
@@ -289,6 +310,13 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
         var path = _config.WatchPath;
         return File.Exists(path) ? TryLoadStrategyAsync(path, ct) : Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Parses, validates, and activates a strategy document from raw JSON.
+    /// Returns null on success, or a human-readable error string on failure.
+    /// </summary>
+    public Task<string?> LoadFromJsonAsync(string json, CancellationToken ct = default)
+        => ApplyStrategyDocumentAsync(json, "rest_push", ct);
 
     public void Dispose()
     {

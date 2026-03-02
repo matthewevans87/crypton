@@ -103,3 +103,14 @@ public class ExchangeStatus
     public int ReconnectCount { get; set; }
     public string? Error { get; set; }
 }
+
+public class MacroSignals
+{
+    public string Trend { get; set; } = "neutral";          // "bullish" | "bearish" | "neutral"
+    public string VolatilityRegime { get; set; } = "normal"; // "low" | "normal" | "high"
+    public decimal? FearGreedIndex { get; set; }            // 0–100 proxy derived from BTC momentum
+    public string? Sentiment { get; set; }                  // "extreme fear" | "fear" | "neutral" | "greed" | "extreme greed"
+    public decimal? BtcDominance { get; set; }              // Approximate market-cap-weighted BTC dominance %
+    public decimal? TotalMarketCap { get; set; }            // Approximate total cap in trillions USD (BTC+ETH+SOL)
+    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+}

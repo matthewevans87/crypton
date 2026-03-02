@@ -1,3 +1,4 @@
+using Crypton.Api.ExecutionService.Configuration;
 using Crypton.Api.ExecutionService.Execution;
 using Crypton.Api.ExecutionService.Logging;
 using Crypton.Api.ExecutionService.Metrics;
@@ -7,6 +8,7 @@ using Crypton.Api.ExecutionService.Positions;
 using Crypton.Api.ExecutionService.Resilience;
 using Crypton.Api.ExecutionService.Strategy;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Crypton.Api.ExecutionService.Api;
 
@@ -60,14 +62,44 @@ public sealed class StatusController : ControllerBase
 public sealed class StrategyController : ControllerBase
 {
     private readonly IStrategyService _strategy;
+    private readonly StrategyConfig _config;
 
-    public StrategyController(IStrategyService strategy) => _strategy = strategy;
+    public StrategyController(IStrategyService strategy, IOptions<ExecutionServiceConfig> config)
+    {
+        _strategy = strategy;
+        _config = config.Value.Strategy;
+    }
 
     [HttpGet("/strategy")]
     public IActionResult GetStrategy()
     {
         var s = _strategy.ActiveStrategy;
         return s is null ? NotFound(new { error = "No active strategy." }) : Ok(s);
+    }
+
+    /// <summary>
+    /// Push a new strategy document directly as raw JSON.
+    /// Requires <c>Strategy.EnableRestEndpoint: true</c> in config.
+    /// </summary>
+    [HttpPost("/strategy/push")]
+    [Consumes("application/json", "text/plain")]
+    public async Task<IActionResult> PushStrategy(CancellationToken ct)
+    {
+        if (!_config.EnableRestEndpoint)
+            return StatusCode(409, new { error = "REST strategy push is disabled in config (Strategy.EnableRestEndpoint = false)." });
+
+        string json;
+        using var reader = new System.IO.StreamReader(Request.Body);
+        json = await reader.ReadToEndAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(json))
+            return BadRequest(new { error = "Request body must contain a JSON strategy document." });
+
+        var error = await _strategy.LoadFromJsonAsync(json, ct);
+        if (error is not null)
+            return UnprocessableEntity(new { error });
+
+        return Ok(new { strategy_id = _strategy.ActiveStrategyId });
     }
 }
 

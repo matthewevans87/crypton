@@ -13,6 +13,7 @@ services:
       - Tools__BraveSearch__ApiKey=${BRAVE_SEARCH_API_KEY}
       - Api__ApiKey=${AGENT_RUNNER_API_KEY}
       - Tools__MarketDataService__BaseUrl=http://market-data-service:5002
+      - Tools__ExecutionService__BaseUrl=http://execution-service:5004
       - Ollama__BaseUrl=http://host-gateway:11434
     extra_hosts:
       - "host-gateway:host-gateway"

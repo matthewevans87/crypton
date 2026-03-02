@@ -49,3 +49,29 @@ public class Ohlcv
     public decimal Close { get; set; }
     public decimal Volume { get; set; }
 }
+
+public class OrderBookEntry
+{
+    public decimal Price { get; set; }
+    public decimal Quantity { get; set; }
+    public int Count { get; set; }
+}
+
+public class OrderBook
+{
+    public string Symbol { get; set; } = string.Empty;
+    public List<OrderBookEntry> Bids { get; set; } = new();
+    public List<OrderBookEntry> Asks { get; set; } = new();
+    public DateTime LastUpdated { get; set; }
+}
+
+/// <summary>A live market-tape trade event from the exchange feed (distinct from a closed portfolio trade).</summary>
+public class MarketTrade
+{
+    public string Id { get; set; } = string.Empty;
+    public string Symbol { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal Quantity { get; set; }
+    public string Side { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+}

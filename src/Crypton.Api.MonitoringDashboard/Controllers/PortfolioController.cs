@@ -3,6 +3,7 @@ using MonitoringDashboard.Models;
 using MonitoringDashboard.Services;
 using MdsPortfolioSummary = MonitoringDashboard.Services.PortfolioSummary;
 using MdsPosition = MonitoringDashboard.Services.Position;
+using PortfolioTrade = MonitoringDashboard.Models.Trade;
 
 namespace MonitoringDashboard.Controllers;
 
@@ -82,8 +83,8 @@ public class PortfolioController : ControllerBase
     }
 
     [HttpGet("trades")]
-    public ActionResult<List<Trade>> GetTrades([FromQuery] int limit = 50, [FromQuery] int offset = 0)
+    public ActionResult<List<PortfolioTrade>> GetTrades([FromQuery] int limit = 50, [FromQuery] int offset = 0)
     {
-        return Ok(new List<Trade>());
+        return Ok(new List<PortfolioTrade>());
     }
 }
