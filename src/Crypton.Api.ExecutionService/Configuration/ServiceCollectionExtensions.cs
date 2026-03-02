@@ -1,4 +1,5 @@
 using Crypton.Api.ExecutionService.Api;
+using Crypton.Api.ExecutionService.Exchange;
 using Crypton.Api.ExecutionService.Execution;
 using Crypton.Api.ExecutionService.Hubs;
 using Crypton.Api.ExecutionService.Logging;
@@ -30,19 +31,63 @@ public static class ServiceCollectionExtensions
         // Operation mode
         services.AddSingleton<OperationModeService>();
         services.AddSingleton<IOperationModeService>(sp => sp.GetRequiredService<OperationModeService>());
-        services.AddSingleton<IMarketDataSource, NullMarketDataSource>();
+
+        // Market data source: connects to the MarketData SignalR hub and fans out snapshots.
+        // Registered as both IMarketDataSource (for PaperTradingAdapter) and IHostedService
+        // (so the hub connection is maintained for the lifetime of the process).
+        services.AddSingleton<MarketDataServiceClient>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<ExecutionServiceConfig>>().Value;
+            var logger = sp.GetRequiredService<ILogger<MarketDataServiceClient>>();
+            return new MarketDataServiceClient(cfg.MarketDataServiceUrl, logger);
+        });
+        services.AddSingleton<IMarketDataSource>(sp => sp.GetRequiredService<MarketDataServiceClient>());
+        services.AddHostedService(sp => sp.GetRequiredService<MarketDataServiceClient>());
+
         services.AddSingleton<PaperTradingAdapter>();
         services.AddSingleton<DelegatingExchangeAdapter>();
-        services.AddSingleton<Exchange.IExchangeAdapter>(sp =>
+        services.AddSingleton<IExchangeAdapter>(sp =>
             sp.GetRequiredService<DelegatingExchangeAdapter>());
 
-        // Strategy validation
+        // ── Kraken live adapters ──────────────────────────────────────────────
+        // Always registered so they are available the moment mode is switched to live.
+        // DelegatingExchangeAdapter checks CurrentMode at call time and routes accordingly.
+
+        services.AddSingleton<KrakenRestAdapter>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<ExecutionServiceConfig>>().Value.Kraken;
+            var http = new HttpClient { BaseAddress = new Uri(cfg.RestBaseUrl) };
+            var logger = sp.GetRequiredService<ILogger<KrakenRestAdapter>>();
+            return new KrakenRestAdapter(cfg.ApiKey, cfg.ApiSecret, http, logger);
+        });
+
+        services.AddSingleton<KrakenWebSocketAdapter>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<ExecutionServiceConfig>>().Value.Kraken;
+            var logger = sp.GetRequiredService<ILogger<KrakenWebSocketAdapter>>();
+            return new KrakenWebSocketAdapter(
+                cfg.WsBaseUrl,
+                cfg.MaxReconnectAttempts,
+                cfg.ReconnectDelaySeconds,
+                logger);
+        });
+
+        // Wire live adapters into DelegatingExchangeAdapter on first start.
+        services.AddHostedService(sp => new LiveAdapterWiring(
+            sp.GetRequiredService<DelegatingExchangeAdapter>(),
+            sp.GetRequiredService<KrakenWebSocketAdapter>(),
+            sp.GetRequiredService<KrakenRestAdapter>()));
+
+        // Authenticated Kraken WS for execution fills (only active in live mode).
+        services.AddHostedService(sp => new KrakenWsExecutionAdapter(
+            sp.GetRequiredService<KrakenRestAdapter>(),
+            sp.GetRequiredService<OrderRouter>(),
+            sp.GetRequiredService<IOperationModeService>(),
+            sp.GetRequiredService<ILogger<KrakenWsExecutionAdapter>>()));
+
+        // ── Strategy ──────────────────────────────────────────────────────────
         services.AddSingleton<StrategyValidator>();
-
-        // Condition parser
         services.AddSingleton<ConditionParser>();
-
-        // Strategy service (hot-reload + validity window monitor)
         services.AddSingleton<StrategyService>();
         services.AddSingleton<IStrategyService>(sp => sp.GetRequiredService<StrategyService>());
         services.AddHostedService(sp => sp.GetRequiredService<StrategyService>());
@@ -50,10 +95,9 @@ public static class ServiceCollectionExtensions
         // Portfolio risk enforcement
         services.AddSingleton<PortfolioRiskEnforcer>();
 
-        // PositionRegistry requires file paths from config — register as factory.
+        // PositionRegistry — file paths resolved from config.
         services.AddSingleton(sp =>
         {
-            var cfg = sp.GetRequiredService<IOptions<ExecutionServiceConfig>>().Value;
             var eventLogger = sp.GetRequiredService<IEventLogger>();
             var logger = sp.GetRequiredService<ILogger<PositionRegistry>>();
             var registry = new PositionRegistry(
@@ -65,29 +109,21 @@ public static class ServiceCollectionExtensions
             return registry;
         });
 
-        // NOTE: PositionSizingCalculator and OrderRouter depend on IExchangeAdapter.
-        // IExchangeAdapter registration happens in the operation mode setup (paper/live).
-        // Register these after IExchangeAdapter is available in that setup.
         services.AddSingleton<PositionSizingCalculator>();
         services.AddSingleton<OrderRouter>();
 
-        // Resilience: FailureTracker and SafeModeController.
-        // FailureTracker is registered first (no deps on OrderRouter/SafeModeController).
+        // ── Resilience ────────────────────────────────────────────────────────
         services.AddSingleton<FailureTracker>();
         services.AddSingleton<SafeModeController>();
         services.AddSingleton<ISafeModeController>(sp => sp.GetRequiredService<SafeModeController>());
-
-        // Wire FailureTracker.OnSafeModeTriggered -> SafeModeController.ActivateAsync after DI resolves.
         services.AddSingleton<ResilienceWiring>();
         services.AddHostedService(sp => sp.GetRequiredService<ResilienceWiring>());
 
-        // Reconciliation runs once on startup.
+        // Reconciliation — runs once on startup.
         services.AddSingleton<ReconciliationService>();
         services.AddHostedService(sp => sp.GetRequiredService<ReconciliationService>());
 
-        // Condition Evaluation Engine — depends on IExchangeAdapter, so registered alongside
-        // OrderRouter/PositionSizingCalculator. Hosted services are started after all adapters
-        // are wired.
+        // ── Execution engine ──────────────────────────────────────────────────
         services.AddSingleton<MarketDataHub>();
         services.AddHostedService(sp => sp.GetRequiredService<MarketDataHub>());
         services.AddSingleton<EntryEvaluator>();
@@ -95,7 +131,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ExecutionEngine>();
         services.AddHostedService(sp => sp.GetRequiredService<ExecutionEngine>());
 
-        // API
+        // ── API ───────────────────────────────────────────────────────────────
         services.AddScoped<ApiKeyAuthFilter>();
         services.AddSingleton<MetricsCollector>();
         services.AddSingleton<IMetricsCollector>(sp => sp.GetRequiredService<MetricsCollector>());
@@ -106,4 +142,22 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+}
+
+/// <summary>
+/// One-shot hosted service that calls <see cref="DelegatingExchangeAdapter.SetLiveAdapters"/>
+/// at startup so the Kraken live adapters are available when the mode is later switched to live.
+/// </summary>
+internal sealed class LiveAdapterWiring(
+    DelegatingExchangeAdapter delegating,
+    KrakenWebSocketAdapter ws,
+    KrakenRestAdapter rest) : IHostedService
+{
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        delegating.SetLiveAdapters(ws, rest);
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

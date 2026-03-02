@@ -41,6 +41,9 @@ public sealed class OrderRecord
     [JsonPropertyName("strategy_position_id")]
     public string? StrategyPositionId { get; init; }
 
+    [JsonPropertyName("strategy_id")]
+    public string? StrategyId { get; init; }
+
     [JsonPropertyName("position_id")]
     public string? PositionId { get; set; }
 

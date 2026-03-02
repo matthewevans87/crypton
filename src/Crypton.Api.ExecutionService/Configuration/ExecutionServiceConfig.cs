@@ -9,6 +9,8 @@ public sealed class ExecutionServiceConfig
     public ApiConfig Api { get; init; } = new();
     public StreamingConfig Streaming { get; init; } = new();
     public KrakenAdapterConfig Kraken { get; init; } = new();
+    /// <summary>Base URL of the MarketData SignalR hub, e.g. http://market-data-service:5002</summary>
+    public string MarketDataServiceUrl { get; init; } = "http://localhost:5002";
 }
 
 public sealed class KrakenAdapterConfig

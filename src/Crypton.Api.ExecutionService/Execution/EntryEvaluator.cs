@@ -182,7 +182,9 @@ public sealed class EntryEvaluator
 
         await _orderRouter.PlaceEntryOrderAsync(
             pos.Asset, side, orderType, quantity.Value,
-            pos.EntryLimitPrice, pos.Id, mode, token);
+            pos.EntryLimitPrice, pos.Id, mode,
+            strategyId: strategy.Id ?? "",
+            token: token);
     }
 
     private async Task<decimal> GetEquityAsync(CancellationToken token)

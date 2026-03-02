@@ -188,7 +188,9 @@ public sealed class ExitEvaluator
             var side = pos.Direction == "long" ? OrderSide.Sell : OrderSide.Buy;
             await _orderRouter.PlaceEntryOrderAsync(
                 pos.Asset, side, OrderType.Market, closeQty,
-                null, $"{pos.StrategyPositionId}_tp_{i}", mode, token);
+                null, $"{pos.StrategyPositionId}_tp_{i}", mode,
+                strategyId: pos.StrategyId,
+                token: token);
 
             // If this is the last target (cumulative close_pct ≥ 1.0), mark full close.
             var totalClosed = stratPos.TakeProfitTargets.Take(i + 1).Sum(t => t.ClosePct);
@@ -251,6 +253,8 @@ public sealed class ExitEvaluator
         var side = pos.Direction == "long" ? OrderSide.Sell : OrderSide.Buy;
         await _orderRouter.PlaceEntryOrderAsync(
             pos.Asset, side, OrderType.Market, pos.Quantity,
-            null, $"{pos.StrategyPositionId}_exit_{reason}", mode, token);
+            null, $"{pos.StrategyPositionId}_exit_{reason}", mode,
+            strategyId: pos.StrategyId,
+            token: token);
     }
 }

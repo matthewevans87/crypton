@@ -116,7 +116,7 @@ public sealed class SafeModeController : ISafeModeController
                 var side = pos.Direction == "long" ? OrderSide.Sell : OrderSide.Buy;
                 await _orderRouter.PlaceEntryOrderAsync(
                     pos.Asset, side, OrderType.Market, pos.Quantity,
-                    null, $"safe_mode_close_{pos.Id}", "safe", ct);
+                    null, $"safe_mode_close_{pos.Id}", "safe", token: ct);
             }
             catch (Exception ex)
             {

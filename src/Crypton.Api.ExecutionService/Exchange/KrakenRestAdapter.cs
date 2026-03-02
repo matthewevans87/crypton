@@ -71,11 +71,15 @@ public sealed class KrakenRestAdapter : IExchangeAdapter
     {
         var orderType = request.Type switch
         {
-            OrderType.Market => "market",
-            OrderType.Limit => "limit",
-            OrderType.StopLoss => "stop-loss",
-            OrderType.StopLossLimit => "stop-loss-limit",
-            _ => "market"
+            OrderType.Market           => "market",
+            OrderType.Limit            => "limit",
+            OrderType.StopLoss         => "stop-loss",
+            OrderType.StopLossLimit    => "stop-loss-limit",
+            OrderType.TakeProfit       => "take-profit",
+            OrderType.TakeProfitLimit  => "take-profit-limit",
+            OrderType.TrailingStop     => "trailing-stop",
+            OrderType.TrailingStopLimit => "trailing-stop-limit",
+            _                          => "market"
         };
         var side = request.Side == OrderSide.Buy ? "buy" : "sell";
 
@@ -87,8 +91,33 @@ public sealed class KrakenRestAdapter : IExchangeAdapter
             ["pair"] = request.Asset,
         };
 
-        if (request.LimitPrice.HasValue)
-            fields["price"] = request.LimitPrice.Value.ToString("G");
+        // price = limit price for limit orders; trigger/stop price for stop/take-profit/trailing orders.
+        // price2 = limit price for the limit-variant of stop/take-profit/trailing orders.
+        switch (request.Type)
+        {
+            case OrderType.Limit:
+                if (request.LimitPrice.HasValue)
+                    fields["price"] = request.LimitPrice.Value.ToString("G");
+                break;
+
+            case OrderType.StopLoss:
+            case OrderType.TakeProfit:
+            case OrderType.TrailingStop:
+                // price = the trigger / trail amount
+                if (request.StopPrice.HasValue)
+                    fields["price"] = request.StopPrice.Value.ToString("G");
+                break;
+
+            case OrderType.StopLossLimit:
+            case OrderType.TakeProfitLimit:
+            case OrderType.TrailingStopLimit:
+                // price = trigger/trail, price2 = limit
+                if (request.StopPrice.HasValue)
+                    fields["price"] = request.StopPrice.Value.ToString("G");
+                if (request.LimitPrice.HasValue)
+                    fields["price2"] = request.LimitPrice.Value.ToString("G");
+                break;
+        }
 
         var response = await PostPrivateAsync("/0/private/AddOrder", fields, cancellationToken);
 
@@ -319,8 +348,9 @@ public sealed class KrakenRestAdapter : IExchangeAdapter
             var qty = t.TryGetProperty("vol", out var volEl) && decimal.TryParse(volEl.GetString(), out var v) ? v : 0m;
             var price = t.TryGetProperty("price", out var priceEl) && decimal.TryParse(priceEl.GetString(), out var p) ? p : 0m;
             var fee = t.TryGetProperty("fee", out var feeEl) && decimal.TryParse(feeEl.GetString(), out var f) ? f : 0m;
+            // Kraken returns "time" as a Unix timestamp in SECONDS (float with sub-second precision).
             var tsUnix = t.TryGetProperty("time", out var timeEl) ? timeEl.GetDouble() : 0;
-            var ts = DateTimeOffset.FromUnixTimeMilliseconds((long)(tsUnix * 1000));
+            var ts = DateTimeOffset.FromUnixTimeSeconds((long)tsUnix);
 
             trades.Add(new Trade
             {
@@ -335,6 +365,34 @@ public sealed class KrakenRestAdapter : IExchangeAdapter
         }
 
         return trades;
+    }
+
+    // -----------------------------------------------------------------------
+    // GetWebSocketsTokenAsync
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Fetches a short-lived WebSocket authentication token from the Kraken REST API.
+    /// The token is valid for 15 minutes (or indefinitely while the WS subscription is active).
+    /// Must be renewed on each new WebSocket connection and proactively before expiry.
+    /// </summary>
+    public async Task<string> GetWebSocketsTokenAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await PostPrivateAsync("/0/private/GetWebSocketsToken", new Dictionary<string, string>(), cancellationToken);
+
+        var errors = response.RootElement.GetProperty("error").EnumerateArray().ToList();
+        if (errors.Count > 0)
+        {
+            var errMsg = errors[0].GetString() ?? "Unknown error";
+            HandleKrakenError(errMsg);
+        }
+
+        var result = response.RootElement.GetProperty("result");
+        if (!result.TryGetProperty("token", out var tokenEl))
+            throw new ExchangeAdapterException("Kraken GetWebSocketsToken response missing 'token' field.");
+
+        return tokenEl.GetString()
+               ?? throw new ExchangeAdapterException("Kraken GetWebSocketsToken returned a null token.");
     }
 
     // -----------------------------------------------------------------------

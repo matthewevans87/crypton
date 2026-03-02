@@ -1,5 +1,6 @@
 using Crypton.Api.ExecutionService.Logging;
 using Crypton.Api.ExecutionService.Models;
+using Crypton.Api.ExecutionService.OperationMode;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -14,21 +15,25 @@ public sealed class ExecutionEngine : IHostedService, IDisposable
     private readonly MarketDataHub _marketDataHub;
     private readonly EntryEvaluator _entryEvaluator;
     private readonly ExitEvaluator _exitEvaluator;
+    private readonly IOperationModeService _modeService;
     private readonly IEventLogger _eventLogger;
     private readonly ILogger<ExecutionEngine> _logger;
 
-    public string CurrentMode { get; private set; } = "paper";
+    /// <summary>Reflects the live operation mode from <see cref="IOperationModeService"/>.</summary>
+    public string CurrentMode => _modeService.CurrentMode;
 
     public ExecutionEngine(
         MarketDataHub marketDataHub,
         EntryEvaluator entryEvaluator,
         ExitEvaluator exitEvaluator,
+        IOperationModeService modeService,
         IEventLogger eventLogger,
         ILogger<ExecutionEngine> logger)
     {
         _marketDataHub = marketDataHub;
         _entryEvaluator = entryEvaluator;
         _exitEvaluator = exitEvaluator;
+        _modeService = modeService;
         _eventLogger = eventLogger;
         _logger = logger;
 

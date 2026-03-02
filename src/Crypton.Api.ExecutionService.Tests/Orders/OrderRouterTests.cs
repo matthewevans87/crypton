@@ -1,5 +1,6 @@
 using Crypton.Api.ExecutionService.Exchange;
 using Crypton.Api.ExecutionService.Logging;
+using Crypton.Api.ExecutionService.Metrics;
 using Crypton.Api.ExecutionService.Models;
 using Crypton.Api.ExecutionService.Orders;
 using Crypton.Api.ExecutionService.Positions;
@@ -244,5 +245,286 @@ public sealed class OrderRouterTests : IDisposable
         // Should not throw
         await sut.Invoking(s => s.ApplyFillAsync(fill, "strat1", "paper")).Should().NotThrowAsync();
         _registry.OpenPositions.Should().BeEmpty();
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // StrategyId propagation
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task PlaceEntryOrder_StrategyId_StoredOnOrderRecord()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-sid",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-sid", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-sid", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        var record = await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp1", "paper",
+            strategyId: "strat-42");
+
+        record.Should().NotBeNull();
+        record!.StrategyId.Should().Be("strat-42");
+    }
+
+    [Fact]
+    public async Task ApplyFill_StrategyId_FlowsFromOrderRecord_WhenNotOverridden()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-strat",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-strat", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-strat", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        var record = await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-strat", "paper",
+            strategyId: "my-strat");
+
+        await sut.ApplyFillAsync(new OrderFillEvent
+        {
+            ExchangeOrderId = "ex-strat",
+            InternalOrderId = record!.InternalId,
+            FilledQuantity = 0.01m,
+            FillPrice = 50_000m,
+            Timestamp = DateTimeOffset.UtcNow,
+            IsFullFill = true
+        }, strategyId: string.Empty, mode: "paper");
+
+        var pos = _registry.OpenPositions.Single();
+        pos.StrategyId.Should().Be("my-strat");
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Short-sell position opening
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApplyFill_SellOrder_OpensShortPosition()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-short",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-short", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-short", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        var record = await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Sell, OrderType.Market, 0.01m, null, "sp-short", "paper");
+
+        await sut.ApplyFillAsync(new OrderFillEvent
+        {
+            ExchangeOrderId = "ex-short",
+            InternalOrderId = record!.InternalId,
+            FilledQuantity = 0.01m,
+            FillPrice = 48_000m,
+            Timestamp = DateTimeOffset.UtcNow,
+            IsFullFill = true
+        }, string.Empty, "paper");
+
+        _registry.OpenPositions.Should().ContainSingle();
+        var pos = _registry.OpenPositions[0];
+        pos.Direction.Should().Be("short");
+        pos.Quantity.Should().Be(0.01m);
+        pos.AverageEntryPrice.Should().Be(48_000m);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Metrics recording
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Metrics_AreRecorded_OnPlaceAndFill()
+    {
+        var metrics = Substitute.For<IMetricsCollector>();
+        var sut = new OrderRouter(
+            _exchange, _registry, _eventLogger,
+            NullLogger<OrderRouter>.Instance,
+            metrics: metrics);
+
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-metrics",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-metrics", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-metrics", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        var record = await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-m", "paper");
+
+        await sut.ApplyFillAsync(new OrderFillEvent
+        {
+            ExchangeOrderId = "ex-metrics",
+            InternalOrderId = record!.InternalId,
+            FilledQuantity = 0.01m,
+            FillPrice = 50_000m,
+            Timestamp = DateTimeOffset.UtcNow,
+            IsFullFill = true
+        }, string.Empty, "paper");
+
+        metrics.Received(1).RecordOrderPlaced();
+        metrics.Received(1).RecordOrderOpened();
+        metrics.Received(1).RecordOrderFilled();
+        metrics.Received(1).RecordPositionOpened();
+    }
+
+    [Fact]
+    public async Task Metrics_RecordOrderRejected_OnExchangeError()
+    {
+        var metrics = Substitute.For<IMetricsCollector>();
+        var sut = new OrderRouter(
+            _exchange, _registry, _eventLogger,
+            NullLogger<OrderRouter>.Instance,
+            metrics: metrics);
+
+        _exchange.PlaceOrderAsync(Arg.Any<PlaceOrderRequest>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("Insufficient funds"));
+
+        var record = await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-rej", "paper");
+
+        record!.Status.Should().Be(OrderStatus.Rejected);
+        metrics.Received(1).RecordOrderPlaced();
+        metrics.Received(1).RecordOrderRejected();
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // ApplyFillByExchangeOrderIdAsync — reverse lookup
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ApplyFillByExchangeOrderId_CorrelatesAndOpensPosition()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-rev",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-rev", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-rev", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-rev", "live");
+
+        await sut.ApplyFillByExchangeOrderIdAsync(
+            "ex-rev", filledQty: 0.01m, fillPrice: 50_000m, isFullFill: true,
+            timestamp: DateTimeOffset.UtcNow, mode: "live");
+
+        _registry.OpenPositions.Should().ContainSingle(p => p.Asset == "BTC/USD");
+    }
+
+    [Fact]
+    public async Task ApplyFillByExchangeOrderId_UnknownId_DoesNotThrow()
+    {
+        var sut = CreateSut();
+
+        await sut.Awaiting(s => s.ApplyFillByExchangeOrderIdAsync(
+                "UNKNOWN-EX-ID", 0.01m, 50_000m, true,
+                DateTimeOffset.UtcNow, "live"))
+            .Should().NotThrowAsync();
+
+        _registry.OpenPositions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ApplyFillByExchangeOrderId_Idempotent_WhenCalledTwice()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-idem",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        _exchange.GetOrderStatusAsync("ex-idem", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult { ExchangeOrderId = "ex-idem", Status = OrderStatus.Open, FilledQuantity = 0m });
+
+        await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-idem", "live");
+
+        // Apply the same fill twice.
+        await sut.ApplyFillByExchangeOrderIdAsync(
+            "ex-idem", 0.01m, 50_000m, true, DateTimeOffset.UtcNow, "live");
+        await sut.ApplyFillByExchangeOrderIdAsync(
+            "ex-idem", 0.01m, 50_000m, true, DateTimeOffset.UtcNow, "live");
+
+        // Only one position should be opened.
+        _registry.OpenPositions.Should().HaveCount(1);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // TryApplyImmediateFillAsync — paper-mode immediate fill
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task PlaceEntryOrder_WhenExchangeFillsImmediately_PositionIsOpenedInSameCall()
+    {
+        var sut = CreateSut();
+        PlaceOrderRequest? captured = null;
+        _exchange.PlaceOrderAsync(
+            Arg.Do<PlaceOrderRequest>(r => captured = r),
+            Arg.Any<CancellationToken>())
+            .Returns(_ => new OrderAcknowledgement
+            {
+                InternalId = captured!.InternalId,
+                ExchangeOrderId = "ex-instant",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+
+        // Exchange reports immediate fill on status poll.
+        _exchange.GetOrderStatusAsync("ex-instant", Arg.Any<CancellationToken>())
+            .Returns(new OrderStatusResult
+            {
+                ExchangeOrderId = "ex-instant",
+                Status = OrderStatus.Filled,
+                FilledQuantity = 0.01m,
+                AverageFillPrice = 50_000m
+            });
+
+        await sut.PlaceEntryOrderAsync(
+            "BTC/USD", OrderSide.Buy, OrderType.Market, 0.01m, null, "sp-instant", "paper");
+
+        // Position should be open thanks to TryApplyImmediateFillAsync.
+        _registry.OpenPositions.Should().ContainSingle(p =>
+            p.AverageEntryPrice == 50_000m && p.Quantity == 0.01m);
     }
 }

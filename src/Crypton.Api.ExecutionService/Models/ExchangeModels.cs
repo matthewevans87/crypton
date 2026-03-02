@@ -1,7 +1,7 @@
 namespace Crypton.Api.ExecutionService.Models;
 
 public enum OrderSide { Buy, Sell }
-public enum OrderType { Market, Limit, StopLoss, StopLossLimit }
+public enum OrderType { Market, Limit, StopLoss, StopLossLimit, TakeProfit, TakeProfitLimit, TrailingStop, TrailingStopLimit }
 public enum OrderStatus { Pending, Open, PartiallyFilled, Filled, Cancelled, Rejected }
 
 public sealed class PlaceOrderRequest

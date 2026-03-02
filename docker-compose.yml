@@ -17,7 +17,7 @@ services:
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:
-      - /home/matthew-evans/.config/crypton/artifacts:/app/artifacts
+      - crypton_artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/logs:/app/logs
     restart: unless-stopped
     logging:
@@ -71,8 +71,10 @@ services:
       - EXECUTION_SERVICE__KRAKEN__ApiKey=${KRAKEN_API_KEY}
       - EXECUTION_SERVICE__KRAKEN__ApiSecret=${KRAKEN_SECRET_KEY}
       - EXECUTION_SERVICE__API__ApiKey=${EXECUTION_SERVICE_API_KEY}
+      # MarketDataServiceUrl tells MarketDataServiceClient where to connect for price ticks.
+      - EXECUTION_SERVICE__MarketDataServiceUrl=http://market-data-service:5002
     volumes:
-      - /home/matthew-evans/.config/crypton/execution/artifacts:/app/artifacts
+      - crypton_artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/execution/logs:/app/logs
     depends_on:
       market-data-service:
@@ -132,3 +134,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
+# Named volume shared between agent-runner and execution-service so strategy files
+# written by the agent are immediately visible to the execution engine.
+volumes:
+  crypton_artifacts:
