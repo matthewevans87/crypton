@@ -8,7 +8,7 @@ public interface IMarketDataServiceClient
     event EventHandler<OrderBook>? OnOrderBookUpdate;
     event EventHandler<MarketTrade>? OnTrade;
     event EventHandler<bool>? OnConnectionStatus;
-    
+
     Task ConnectAsync(CancellationToken cancellationToken = default);
     Task DisconnectAsync();
     bool IsConnected { get; }
@@ -140,7 +140,7 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
     public event EventHandler<OrderBook>? OnOrderBookUpdate;
     public event EventHandler<MarketTrade>? OnTrade;
     public event EventHandler<bool>? OnConnectionStatus;
-    
+
     public bool IsConnected => _isConnected;
 
     public MarketDataServiceClient(string marketDataServiceUrl, HttpClient httpClient, ILogger<MarketDataServiceClient> logger)
@@ -238,7 +238,7 @@ public class MarketDataServiceClient : IMarketDataServiceClient, IAsyncDisposabl
                 var symbolList = string.Join(",", symbols);
                 url += $"?symbols={symbolList}";
             }
-            
+
             var response = await _httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<List<PriceTicker>>() ?? new List<PriceTicker>();

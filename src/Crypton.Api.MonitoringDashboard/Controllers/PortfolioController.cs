@@ -42,22 +42,22 @@ public class PortfolioController : ControllerBase
         {
             var balances = await _marketDataClient.GetBalanceAsync();
             var prices = await _marketDataClient.GetPricesAsync();
-            
+
             var holdings = new List<Holding>();
             decimal totalValue = 0;
-            
+
             foreach (var balance in balances)
             {
                 var price = prices.FirstOrDefault(p => p.Asset.StartsWith(balance.Asset));
                 var value = balance.Total * (price?.Price ?? 1);
                 totalValue += value;
             }
-            
+
             foreach (var balance in balances)
             {
                 var price = prices.FirstOrDefault(p => p.Asset.StartsWith(balance.Asset));
                 var value = balance.Total * (price?.Price ?? 1);
-                
+
                 holdings.Add(new Holding
                 {
                     Asset = balance.Asset,
@@ -66,7 +66,7 @@ public class PortfolioController : ControllerBase
                     AllocationPercent = totalValue > 0 ? (value / totalValue) * 100 : 0
                 });
             }
-            
+
             return Ok(holdings);
         }
         catch (Exception ex)

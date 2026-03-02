@@ -23,7 +23,7 @@ public class PricesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<PriceTicker>>> GetPrices([FromQuery] string? symbols = null)
     {
-        var symbolList = string.IsNullOrEmpty(symbols) 
+        var symbolList = string.IsNullOrEmpty(symbols)
             ? new[] { "BTC/USD", "ETH/USD", "SOL/USD" }
             : symbols.Split(',');
 
@@ -383,9 +383,9 @@ public class MacroController : ControllerBase
         // --- Trend ---
         var trend = btc.ChangePercent24h switch
         {
-            > 2m  => "bullish",
+            > 2m => "bullish",
             < -2m => "bearish",
-            _     => "neutral"
+            _ => "neutral"
         };
 
         // --- Volatility regime ---
@@ -394,24 +394,24 @@ public class MacroController : ControllerBase
         {
             > 8m => "high",
             < 3m => "low",
-            _    => "normal"
+            _ => "normal"
         };
 
         // --- Fear & Greed proxy (0–100) ---
         // Momentum contribution: 50 neutral, +5 per 1% 24h gain, clamped to [0, 100].
         var rawFgi = 50m + btc.ChangePercent24h * 5m;
         // Volatility drag: high volatility implies increased fear.
-        if (volatilityRegime == "high")  rawFgi -= 10m;
-        if (volatilityRegime == "low")   rawFgi += 5m;
+        if (volatilityRegime == "high") rawFgi -= 10m;
+        if (volatilityRegime == "low") rawFgi += 5m;
         var fgi = Math.Clamp(rawFgi, 0m, 100m);
 
         var sentiment = fgi switch
         {
-            < 25m  => "extreme fear",
-            < 45m  => "fear",
-            < 55m  => "neutral",
-            < 75m  => "greed",
-            _      => "extreme greed"
+            < 25m => "extreme fear",
+            < 45m => "fear",
+            < 55m => "neutral",
+            < 75m => "greed",
+            _ => "extreme greed"
         };
 
         // --- BTC dominance (cap-weighted, BTC+ETH+SOL only) ---
@@ -434,19 +434,19 @@ public class MacroController : ControllerBase
             const decimal trackedFraction = 0.72m;
             var estimatedTotal = trackedCap / trackedFraction;
 
-            btcDominance  = Math.Round(btcCap / estimatedTotal * 100m, 1);
+            btcDominance = Math.Round(btcCap / estimatedTotal * 100m, 1);
             totalMarketCap = Math.Round(estimatedTotal / 1_000_000m, 3); // Trillions USD
         }
 
         return Ok(new MacroSignals
         {
-            Trend            = trend,
+            Trend = trend,
             VolatilityRegime = volatilityRegime,
-            FearGreedIndex   = Math.Round(fgi, 1),
-            Sentiment        = sentiment,
-            BtcDominance     = btcDominance,
-            TotalMarketCap   = totalMarketCap,
-            LastUpdated      = DateTime.UtcNow
+            FearGreedIndex = Math.Round(fgi, 1),
+            Sentiment = sentiment,
+            BtcDominance = btcDominance,
+            TotalMarketCap = totalMarketCap,
+            LastUpdated = DateTime.UtcNow
         });
     }
 }

@@ -26,10 +26,10 @@ public class MarketController : ControllerBase
     {
         try
         {
-            var symbols = string.IsNullOrEmpty(assets) 
+            var symbols = string.IsNullOrEmpty(assets)
                 ? new[] { "BTC/USD", "ETH/USD", "SOL/USD" }
                 : assets.Split(',');
-            
+
             var tickers = await _marketDataClient.GetPricesAsync(symbols);
             return Ok(tickers);
         }
@@ -71,13 +71,13 @@ public class MarketController : ControllerBase
 
             return Ok(new MacroSignals
             {
-                Trend            = result.Trend,
+                Trend = result.Trend,
                 VolatilityRegime = result.VolatilityRegime,
-                FearGreedIndex   = result.FearGreedIndex,
-                Sentiment        = result.Sentiment,
-                BtcDominance     = result.BtcDominance,
-                TotalMarketCap   = result.TotalMarketCap,
-                LastUpdated      = result.LastUpdated
+                FearGreedIndex = result.FearGreedIndex,
+                Sentiment = result.Sentiment,
+                BtcDominance = result.BtcDominance,
+                TotalMarketCap = result.TotalMarketCap,
+                LastUpdated = result.LastUpdated
             });
         }
         catch (Exception ex)

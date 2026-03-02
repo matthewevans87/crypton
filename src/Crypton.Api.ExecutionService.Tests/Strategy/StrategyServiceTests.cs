@@ -32,7 +32,9 @@ public sealed class StrategyServiceTests : IDisposable
     private (StrategyService service, InMemoryEventLogger eventLogger) CreateService(
         int reloadLatencyMs = 0,
         int validityCheckIntervalMs = 100,
-        string? watchFileName = "strategy.json")
+        string? watchFileName = "strategy.json",
+        bool enableFileWatcher = true,
+        bool enableRestEndpoint = true)
     {
         var watchPath = Path.Combine(_tempDir, watchFileName!);
 
@@ -42,7 +44,9 @@ public sealed class StrategyServiceTests : IDisposable
             {
                 WatchPath = watchPath,
                 ReloadLatencyMs = reloadLatencyMs,
-                ValidityCheckIntervalMs = validityCheckIntervalMs
+                ValidityCheckIntervalMs = validityCheckIntervalMs,
+                EnableFileWatcher = enableFileWatcher,
+                EnableRestEndpoint = enableRestEndpoint
             }
         });
 
@@ -327,6 +331,115 @@ public sealed class StrategyServiceTests : IDisposable
         id1!.Length.Should().Be(16); // first 16 hex chars of SHA256
 
         await svc.StopAsync(CancellationToken.None);
+        svc.Dispose();
+    }
+
+    // ── LoadFromJsonAsync (REST push path) ────────────────────────────────────
+
+    [Fact]
+    public async Task LoadFromJsonAsync_ValidJson_ReturnsNull_AndActivatesStrategy()
+    {
+        var (svc, _) = CreateService();
+        var json = ValidStrategyJson();
+
+        var error = await svc.LoadFromJsonAsync(json);
+
+        error.Should().BeNull();
+        svc.ActiveStrategy.Should().NotBeNull();
+        svc.State.Should().Be(StrategyState.Active);
+
+        svc.Dispose();
+    }
+
+    [Fact]
+    public async Task LoadFromJsonAsync_InvalidJson_ReturnsErrorString()
+    {
+        var (svc, _) = CreateService();
+
+        var error = await svc.LoadFromJsonAsync("{ not valid json @@@ }");
+
+        error.Should().NotBeNullOrEmpty();
+        error.Should().Contain("JSON parse error");
+        svc.State.Should().Be(StrategyState.None);
+
+        svc.Dispose();
+    }
+
+    [Fact]
+    public async Task LoadFromJsonAsync_ExpiredValidityWindow_ReturnsErrorWithExpiredMessage()
+    {
+        var (svc, _) = CreateService();
+        var json = ValidStrategyJson(validityWindow: DateTimeOffset.UtcNow.AddHours(-1));
+
+        var error = await svc.LoadFromJsonAsync(json);
+
+        error.Should().NotBeNullOrEmpty();
+        error.Should().Contain("already expired");
+        svc.State.Should().Be(StrategyState.None);
+
+        svc.Dispose();
+    }
+
+    [Fact]
+    public async Task LoadFromJsonAsync_LogsStrategyRejected_WithRestPushSource()
+    {
+        var (svc, eventLogger) = CreateService();
+
+        await svc.LoadFromJsonAsync("not json at all");
+
+        eventLogger.Events.Should().Contain(e => e.EventType == EventTypes.StrategyRejected);
+
+        svc.Dispose();
+    }
+
+    [Fact]
+    public async Task LoadFromJsonAsync_CalledTwice_SecondStrategyReplacesPrior()
+    {
+        var (svc, eventLogger) = CreateService();
+
+        var error1 = await svc.LoadFromJsonAsync(ValidStrategyJson(posture: "moderate"));
+        var error2 = await svc.LoadFromJsonAsync(ValidStrategyJson(posture: "aggressive"));
+
+        error1.Should().BeNull();
+        error2.Should().BeNull();
+        svc.ActiveStrategy!.Posture.Should().Be("aggressive");
+
+        eventLogger.Events.Should().Contain(e => e.EventType == EventTypes.StrategySwapped);
+
+        svc.Dispose();
+    }
+
+    // ── EnableFileWatcher = false ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task FileWatcherDisabled_StartAsync_CompletesWithoutError()
+    {
+        // With EnableFileWatcher=false, StartAsync must not throw even when the
+        // watch path does not exist — no FileSystemWatcher is created.
+        var (svc, _) = CreateService(enableFileWatcher: false, watchFileName: "no_such_file.json");
+
+        await svc.StartAsync(CancellationToken.None);
+        await Task.Delay(100);
+
+        svc.State.Should().Be(StrategyState.None);
+        svc.ActiveStrategy.Should().BeNull();
+
+        await svc.StopAsync(CancellationToken.None);
+        svc.Dispose();
+    }
+
+    [Fact]
+    public async Task FileWatcherDisabled_LoadFromJsonAsync_StillLoadsStrategy()
+    {
+        // REST push path is independent of the file watcher config.
+        var (svc, _) = CreateService(enableFileWatcher: false, watchFileName: "no_such_file.json");
+
+        var error = await svc.LoadFromJsonAsync(ValidStrategyJson());
+
+        error.Should().BeNull();
+        svc.ActiveStrategy.Should().NotBeNull();
+        svc.State.Should().Be(StrategyState.Active);
+
         svc.Dispose();
     }
 }
