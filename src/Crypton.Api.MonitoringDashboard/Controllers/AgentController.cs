@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MonitoringDashboard.Models;
+using MonitoringDashboard.Services;
+using System.Text.Json;
 
 namespace MonitoringDashboard.Controllers;
 
@@ -7,90 +9,110 @@ namespace MonitoringDashboard.Controllers;
 [Route("api/[controller]")]
 public class AgentController : ControllerBase
 {
+    private readonly IAgentRunnerClient _agentRunnerClient;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _agentRunnerUrl;
 
-    public AgentController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public AgentController(
+        IAgentRunnerClient agentRunnerClient,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
+        _agentRunnerClient = agentRunnerClient;
         _httpClientFactory = httpClientFactory;
         _agentRunnerUrl = (configuration["AgentRunner:Url"] ?? "http://localhost:5003").TrimEnd('/');
     }
 
+    /// <summary>
+    /// Returns the current agent state from AgentRunner GET /api/status.
+    /// </summary>
     [HttpGet("state")]
-    public ActionResult<AgentState> GetState()
+    public async Task<ActionResult<AgentState>> GetState(CancellationToken ct)
     {
+        var status = await _agentRunnerClient.GetStatusAsync(ct);
+        if (status is null)
+            return StatusCode(502, new { error = "AgentRunner unavailable" });
+
+        var currentState = status.Value.TryGetProperty("currentState", out var cs) ? cs.GetString() : "Unknown";
+        var isRunning = currentState is not (null or "WaitingForNextCycle" or "Idle");
+
         return Ok(new AgentState
         {
-            CurrentState = "Analyze",
-            ActiveAgent = "Analysis Agent",
-            StateStartedAt = DateTime.UtcNow.AddMinutes(-12),
-            IsRunning = true,
-            ProgressPercent = 45.0,
-            CurrentTool = "technical_indicators",
-            TokensUsed = 2341,
-            LastLatencyMs = 1.2
+            CurrentState = currentState ?? "Unknown",
+            IsRunning = isRunning,
+            StateStartedAt = DateTime.UtcNow,   // not available from REST
+            ProgressPercent = 0
         });
     }
 
+    /// <summary>
+    /// Returns loop status derived from AgentRunner GET /api/status and GET /api/cycles.
+    /// </summary>
     [HttpGet("loop")]
-    public ActionResult<LoopStatus> GetLoopStatus()
+    public async Task<ActionResult<LoopStatus>> GetLoopStatus(CancellationToken ct)
     {
+        var statusTask = _agentRunnerClient.GetStatusAsync(ct);
+        var cyclesTask = _agentRunnerClient.GetCyclesAsync(20, ct);
+        await Task.WhenAll(statusTask, cyclesTask);
+
+        var status = statusTask.Result;
+        if (status is null)
+            return StatusCode(502, new { error = "AgentRunner unavailable" });
+
+        var currentState = status.Value.TryGetProperty("currentState", out var cs) ? cs.GetString() : "Unknown";
+        var isRunning = currentState is not (null or "WaitingForNextCycle" or "Idle");
+
+        DateTime? nextScheduled = null;
+        if (status.Value.TryGetProperty("nextScheduledTime", out var ns) && ns.ValueKind != JsonValueKind.Null)
+            nextScheduled = ns.GetDateTimeOffset().UtcDateTime;
+
+        var cycleNumber = cyclesTask.Result?.ValueKind == JsonValueKind.Array
+            ? cyclesTask.Result.Value.GetArrayLength() : 0;
+
+        var lastStep = status.Value.TryGetProperty("lastCompletedStep", out var lcs) && lcs.ValueKind != JsonValueKind.Null
+            ? lcs.GetString() : null;
+
+        var currentArtifact = lastStep switch
+        {
+            "Plan" => "plan.md",
+            "Research" => "research.md",
+            "Analyze" => "analysis.md",
+            "Synthesize" => "strategy.json",
+            "Evaluate" => "evaluation.md",
+            _ => null
+        };
+
         return Ok(new LoopStatus
         {
             AgentState = new AgentState
             {
-                CurrentState = "Analyze",
-                ActiveAgent = "Analysis Agent",
-                StateStartedAt = DateTime.UtcNow.AddMinutes(-12),
-                IsRunning = true,
-                ProgressPercent = 45.0
+                CurrentState = currentState ?? "Unknown",
+                IsRunning = isRunning,
+                StateStartedAt = DateTime.UtcNow,
+                ProgressPercent = 0
             },
-            LastCycleCompletedAt = DateTime.UtcNow.AddHours(-6),
-            NextCycleExpectedAt = DateTime.UtcNow.AddHours(18),
-            CurrentArtifact = "analysis.md",
-            CycleNumber = 7
+            NextCycleExpectedAt = nextScheduled,
+            CurrentArtifact = currentArtifact,
+            CycleNumber = cycleNumber
         });
     }
 
+    /// <summary>
+    /// Tool call traces are not persisted as structured data by AgentRunner; returns empty list.
+    /// </summary>
     [HttpGet("toolcalls")]
     public ActionResult<List<ToolCall>> GetToolCalls([FromQuery] int limit = 20)
     {
-        return Ok(new List<ToolCall>
-        {
-            new()
-            {
-                Id = "tool-001",
-                ToolName = "web_search",
-                Input = "{\"query\": \"Bitcoin ETF approval news February 2026\"}",
-                Output = "{\"results\": [{\"title\": \"SEC Updates\", \"url\": \"...\"}]}",
-                CalledAt = DateTime.UtcNow.AddMinutes(-15),
-                DurationMs = 1250,
-                IsCompleted = true,
-                IsError = false
-            },
-            new()
-            {
-                Id = "tool-002",
-                ToolName = "technical_indicators",
-                Input = "{\"asset\": \"BTC\", \"timeframe\": \"4h\"}",
-                Output = "{\"rsi\": 62, \"macd\": 125, \"bb_upper\": 46200}",
-                CalledAt = DateTime.UtcNow.AddMinutes(-10),
-                DurationMs = 45,
-                IsCompleted = true,
-                IsError = false
-            },
-            new()
-            {
-                Id = "tool-003",
-                ToolName = "web_fetch",
-                Input = "{\"url\": \"https://coindesk.com/market-analysis\"}",
-                Output = "...",
-                CalledAt = DateTime.UtcNow.AddMinutes(-8),
-                DurationMs = 2340,
-                IsCompleted = true,
-                IsError = false
-            }
-        });
+        return Ok(new List<ToolCall>());
+    }
+
+    /// <summary>
+    /// Reasoning steps are not persisted as structured data by AgentRunner; returns empty list.
+    /// </summary>
+    [HttpGet("reasoning")]
+    public ActionResult<List<ReasoningStep>> GetReasoning()
+    {
+        return Ok(new List<ReasoningStep>());
     }
 
     // -----------------------------------------------------------------------
@@ -132,20 +154,5 @@ public class AgentController : ControllerBase
         {
             return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
         }
-    }
-
-    [HttpGet("reasoning")]
-    public ActionResult<List<ReasoningStep>> GetReasoning()
-    {
-        return Ok(new List<ReasoningStep>
-        {
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-12), Content = "Analyzing BTC price action on the 4h timeframe..." },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-11), Content = "RSI showing 62 - neutral, neither overbought nor oversold" },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-10), Content = "MACD histogram turning positive, suggesting bullish momentum building" },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-9), Content = "Price respecting the 20-period moving average as support" },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-8), Content = "Volume picking up on the recent move up - confirming the breakout" },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-7), Content = "Looking at ETH correlation - strong positive correlation with BTC" },
-            new() { Timestamp = DateTime.UtcNow.AddMinutes(-6), Content = "Current position: long BTC from 44k, unrealized P&L +2.7%" }
-        });
     }
 }

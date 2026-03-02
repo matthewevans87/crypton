@@ -2,8 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using MonitoringDashboard.Models;
 using MonitoringDashboard.Services;
 using MdsPortfolioSummary = MonitoringDashboard.Services.PortfolioSummary;
-using MdsPosition = MonitoringDashboard.Services.Position;
-using PortfolioTrade = MonitoringDashboard.Models.Trade;
 
 namespace MonitoringDashboard.Controllers;
 
@@ -12,11 +10,16 @@ namespace MonitoringDashboard.Controllers;
 public class PortfolioController : ControllerBase
 {
     private readonly IMarketDataServiceClient _marketDataClient;
+    private readonly IExecutionServiceClient _executionServiceClient;
     private readonly ILogger<PortfolioController> _logger;
 
-    public PortfolioController(IMarketDataServiceClient marketDataClient, ILogger<PortfolioController> logger)
+    public PortfolioController(
+        IMarketDataServiceClient marketDataClient,
+        IExecutionServiceClient executionServiceClient,
+        ILogger<PortfolioController> logger)
     {
         _marketDataClient = marketDataClient;
+        _executionServiceClient = executionServiceClient;
         _logger = logger;
     }
 
@@ -76,15 +79,25 @@ public class PortfolioController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Returns open positions proxied from ExecutionService GET /positions.
+    /// JSON shape: ExecutionService.Positions.OpenPosition (snake_case).
+    /// </summary>
     [HttpGet("positions")]
-    public ActionResult<List<MdsPosition>> GetPositions()
+    public async Task<IActionResult> GetPositions(CancellationToken ct)
     {
-        return Ok(new List<MdsPosition>());
+        var (_, body) = await _executionServiceClient.GetPositionsAsync(ct);
+        return Content(body, "application/json", System.Text.Encoding.UTF8);
     }
 
+    /// <summary>
+    /// Returns closed trades proxied from ExecutionService GET /trades.
+    /// JSON shape: ExecutionService.Positions.ClosedTrade (snake_case).
+    /// </summary>
     [HttpGet("trades")]
-    public ActionResult<List<PortfolioTrade>> GetTrades([FromQuery] int limit = 50, [FromQuery] int offset = 0)
+    public async Task<IActionResult> GetTrades(CancellationToken ct)
     {
-        return Ok(new List<PortfolioTrade>());
+        var (_, body) = await _executionServiceClient.GetTradesAsync(ct);
+        return Content(body, "application/json", System.Text.Encoding.UTF8);
     }
 }

@@ -105,9 +105,15 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5001
       - MarketDataService__Url=http://market-data-service:5002
+      - ExecutionService__Url=http://execution-service:5004
+      - AgentRunner__Url=http://agent-runner:5003
     depends_on:
       market-data-service:
         condition: service_healthy
+      execution-service:
+        condition: service_healthy
+      agent-runner:
+        condition: service_started
     restart: unless-stopped
     logging:
       driver: "json-file"

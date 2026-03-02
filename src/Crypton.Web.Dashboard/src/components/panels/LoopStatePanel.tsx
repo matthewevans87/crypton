@@ -73,7 +73,7 @@ export function LoopStatePanel() {
         {steps.map((step, idx) => {
           const isCompleted = idx < currentStepIndex;
           const isCurrent = idx === currentStepIndex;
-          
+
           return (
             <div
               key={step}
