@@ -37,6 +37,9 @@ const PANEL_COMMANDS: { type: PanelType; label: string; description: string }[] 
   { type: 'evaluation-rating', label: 'Evaluation Rating', description: 'A-F rating with trend' },
   { type: 'recommendations', label: 'Recommendations', description: 'Key points from evaluation' },
   { type: 'system-diagnostics', label: 'System Diagnostics', description: 'Live health of all services' },
+  { type: 'system-status', label: 'System Status', description: 'At-a-glance status for all services' },
+  { type: 'connection-health', label: 'Connection Health', description: 'HTTP and SignalR connectivity per service' },
+  { type: 'error-log', label: 'Error Log', description: 'Aggregated errors and warnings from all services' },
 ];
 
 export function CommandPalette() {

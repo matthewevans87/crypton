@@ -384,6 +384,48 @@ A manual `↻ Refresh` button triggers an immediate re-poll without waiting for 
 
 ---
 
+### System Status
+
+**Purpose:** Compact at-a-glance status summary for all back-end services.
+
+**Shows:**
+- An overall banner: `All Systems Operational` (green), `Degraded` (amber), or `Service Outage` (red)
+- One row per service showing a coloured status dot, service name, status label (`Online` / `Degraded` / `Offline`), and last-checked timestamp
+
+Use this panel when you want a minimal health indicator that doesn't take much space. For full detail including metrics and alerts, use **System Diagnostics**.
+
+**Data source:** `systemHealth` store state, sourced from `GET /api/system/status`.
+
+---
+
+### Connection Health
+
+**Purpose:** Per-service matrix of HTTP reachability and SignalR WebSocket connectivity.
+
+**Shows:** A three-column table (Service / HTTP / WS) with a row for the dashboard itself and one row per back-end service:
+- **HTTP** — green `Up` if the service responded to its last health check, red `Down` if offline
+- **WS** — green `Connected` if SignalR is currently subscribed, red `Disconnected` if not, `N/A` if SignalR is not applicable for that service
+
+Useful for quickly diagnosing whether a data-feed problem is an HTTP issue (service down) or purely a WebSocket drop.
+
+**Data source:** `systemHealth` store state + `connectionStatus` (dashboard's own SignalR state).
+
+---
+
+### Error Log
+
+**Purpose:** Aggregated view of all active errors and warnings across the system.
+
+**Shows:** A scrollable list of entries, each tagged with the source service:
+- Red `✗` entries for service outages and failed agent tool calls
+- Amber `⚠` entries for degraded-service alerts and warnings from service metrics
+
+Shows a green `✓ No errors or warnings` message when everything is clean.
+
+**Data source:** Derived from `systemHealth` service alerts + failed tool calls in `agent.toolCalls`.
+
+---
+
 ### Price Ticker
 
 **Purpose:** Live price display for a single asset.
@@ -542,14 +584,6 @@ Several panel types are defined in the `PanelType` union and listed in the comma
 | **Macro Signals**        | Trend, volatility, sentiment     | `GET /api/market/macro` endpoint exists; component not yet written                         |
 | **Lifetime Performance** | Total P&L and statistics         | `GET /api/performance/lifetime` endpoint exists; component not yet written                 |
 | **Recommendations**      | Key points from evaluation       | Evaluation response likely contains a `recommendations[]` field; component not yet written |
-
-### Panels in `PanelType` but not even listed in the command palette
-
-| Panel                 | Likely purpose                                              |
-| --------------------- | ----------------------------------------------------------- |
-| **System Status**     | Simpler version of System Diagnostics (overall status only) |
-| **Connection Health** | Per-service SignalR + REST connectivity matrix              |
-| **Error Log**         | Aggregated error/warning log from all services              |
 
 ### Panels registered in components but not in the command palette
 

@@ -130,7 +130,7 @@ public class AgentController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/force-cycle", null, ct);
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/force-cycle", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
         }
@@ -152,7 +152,7 @@ public class AgentController : ControllerBase
                 : new StringContent(
                     System.Text.Json.JsonSerializer.Serialize(body),
                     System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/pause", content, ct);
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/pause", content, ct);
             var responseBody = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, responseBody);
         }
@@ -169,7 +169,7 @@ public class AgentController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/resume", null, ct);
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/resume", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
         }
@@ -186,7 +186,7 @@ public class AgentController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/abort", null, ct);
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/abort", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
         }

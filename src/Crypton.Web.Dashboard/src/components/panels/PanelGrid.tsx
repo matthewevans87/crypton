@@ -20,6 +20,9 @@ import { ToolCallDetailPanel } from '../panels/ToolCallDetailPanel';
 import { LastCycleSummaryPanel } from '../panels/LastCycleSummaryPanel';
 import { CycleDetailPanel } from '../panels/CycleDetailPanel';
 import { SystemDiagnosticsPanel } from '../panels/SystemDiagnosticsPanel';
+import { SystemStatusPanel } from '../panels/SystemStatusPanel';
+import { ConnectionHealthPanel } from '../panels/ConnectionHealthPanel';
+import { ErrorLogPanel } from '../panels/ErrorLogPanel';
 
 const GRID_SIZE = 8;
 const MIN_PANEL_WIDTH = 200;
@@ -54,6 +57,9 @@ const PANEL_COMPONENTS: Record<string, React.FC<{ config?: Record<string, unknow
   'last-cycle-summary': LastCycleSummaryPanel,
   'cycle-detail': CycleDetailPanel,
   'system-diagnostics': SystemDiagnosticsPanel,
+  'system-status': SystemStatusPanel,
+  'connection-health': ConnectionHealthPanel,
+  'error-log': ErrorLogPanel,
 };
 
 function snapToGrid(value: number): number {
