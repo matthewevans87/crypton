@@ -12,6 +12,8 @@ using DashboardOrderBookEntry = MonitoringDashboard.Models.OrderBookEntry;
 using DashboardMarketTrade = MonitoringDashboard.Models.MarketTrade;
 using DashboardPosition = MonitoringDashboard.Models.Position;
 using DashboardAgentState = MonitoringDashboard.Models.AgentState;
+using DashboardReasoningStep = MonitoringDashboard.Models.ReasoningStep;
+using DashboardToolCall = MonitoringDashboard.Models.ToolCall;
 
 // Load .env file before the host builder so values flow into IConfiguration.
 DotEnvLoader.Load();
@@ -183,38 +185,115 @@ _ = Task.Run(async () =>
     }
 });
 
-// Poll AgentRunner every 5 s; push AgentStateChanged when the loop state transitions.
+// AgentRunner: wire SignalR events → forward to DashboardHub, then connect with retry.
+agentRunnerClient.OnStatusUpdate += (sender, payload) =>
+{
+    try
+    {
+        string? stateName = null;
+        if (payload.TryGetProperty("current_state", out var cs)) stateName = cs.GetString();
+        else if (payload.TryGetProperty("state", out var s)) stateName = s.GetString();
+
+        if (stateName is null) return;
+
+        _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
+        {
+            CurrentState = stateName,
+            IsRunning = stateName is not ("WaitingForNextCycle" or "Idle" or "Paused"),
+            StateStartedAt = DateTime.UtcNow,
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner StatusUpdate mapping error"); }
+};
+
+agentRunnerClient.OnStepStarted += (sender, payload) =>
+{
+    try
+    {
+        var stepName = payload.TryGetProperty("step_name", out var sn) ? sn.GetString() : null;
+        if (stepName is null) return;
+
+        _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
+        {
+            CurrentState = stepName,
+            ActiveAgent = stepName,
+            IsRunning = true,
+            StateStartedAt = DateTime.UtcNow,
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner StepStarted mapping error"); }
+};
+
+agentRunnerClient.OnTokenReceived += (sender, payload) =>
+{
+    try
+    {
+        var token = payload.TryGetProperty("token", out var t) ? t.GetString() ?? "" : "";
+        _ = dashboardHubContext.Clients.All.ReasoningUpdated(new DashboardReasoningStep
+        {
+            Timestamp = DateTime.UtcNow,
+            Content   = token,
+            Token     = token
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner TokenReceived mapping error"); }
+};
+
+agentRunnerClient.OnToolCallStarted += (sender, payload) =>
+{
+    try
+    {
+        _ = dashboardHubContext.Clients.All.ToolCallStarted(new DashboardToolCall
+        {
+            Id          = payload.TryGetProperty("id",        out var id)  ? id.GetString()  ?? "" : "",
+            ToolName    = payload.TryGetProperty("tool_name", out var tn)  ? tn.GetString()  ?? "" : "",
+            Input       = payload.TryGetProperty("input",     out var inp) ? inp.GetString() ?? "" : "",
+            CalledAt    = payload.TryGetProperty("called_at", out var ca)  ? ca.GetDateTime()     : DateTime.UtcNow,
+            IsCompleted = false
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner ToolCallStarted mapping error"); }
+};
+
+agentRunnerClient.OnToolCallCompleted += (sender, payload) =>
+{
+    try
+    {
+        var success = !payload.TryGetProperty("success", out var succ) || succ.GetBoolean();
+        _ = dashboardHubContext.Clients.All.ToolCallCompleted(new DashboardToolCall
+        {
+            Id           = payload.TryGetProperty("id",            out var id)  ? id.GetString()   ?? "" : "",
+            ToolName     = payload.TryGetProperty("tool_name",     out var tn)  ? tn.GetString()   ?? "" : "",
+            Input        = "",
+            Output       = payload.TryGetProperty("output",        out var o)   ? o.GetString()         : null,
+            CalledAt     = payload.TryGetProperty("called_at",     out var ca)  ? ca.GetDateTime()      : DateTime.UtcNow,
+            DurationMs   = payload.TryGetProperty("duration_ms",   out var dur) ? dur.GetInt64()        : 0,
+            IsCompleted  = true,
+            IsError      = !success,
+            ErrorMessage = payload.TryGetProperty("error_message", out var em)  ? em.GetString()        : null,
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner ToolCallCompleted mapping error"); }
+};
+
 _ = Task.Run(async () =>
 {
-    string? lastState = null;
-    using var cts = new CancellationTokenSource();
     while (true)
     {
         try
         {
-            var status = await agentRunnerClient.GetStatusAsync(cts.Token);
-            if (status is not null)
+            if (!agentRunnerClient.IsConnected)
             {
-                var currentState = status.Value.TryGetProperty("currentState", out var cs)
-                    ? cs.GetString() : null;
-                if (currentState != null && currentState != lastState)
-                {
-                    lastState = currentState;
-                    var agentState = new DashboardAgentState
-                    {
-                        CurrentState = currentState,
-                        IsRunning = currentState is not ("WaitingForNextCycle" or "Idle"),
-                        StateStartedAt = DateTime.UtcNow,
-                    };
-                    _ = dashboardHubContext.Clients.All.AgentStateChanged(agentState);
-                }
+                await agentRunnerClient.ConnectAsync();
+                logger.LogInformation("Connected to AgentRunner SignalR hub");
             }
+            break;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "AgentRunner polling error");
+            logger.LogError(ex, "Failed to connect to AgentRunner, retrying in 5s...");
+            await Task.Delay(TimeSpan.FromSeconds(5));
         }
-        await Task.Delay(TimeSpan.FromSeconds(5));
     }
 });
 

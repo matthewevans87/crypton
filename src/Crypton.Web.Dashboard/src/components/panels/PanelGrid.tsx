@@ -61,9 +61,9 @@ function snapToGrid(value: number): number {
 }
 
 export function PanelGrid({ panels }: { panels: PanelConfig[] }) {
-  const { 
-    maximizedPanelId, 
-    setMaximizedPanel, 
+  const {
+    maximizedPanelId,
+    setMaximizedPanel,
     activeTabId,
     removePanel,
     updatePanelPosition,
@@ -186,7 +186,7 @@ export function PanelGrid({ panels }: { panels: PanelConfig[] }) {
       {panels.map((panel) => {
         const PanelComponent = PANEL_COMPONENTS[panel.type];
         const glow = panelGlows[panel.id];
-        
+
         return (
           <DraggablePanel
             key={panel.id}
@@ -246,7 +246,7 @@ function DraggablePanel({
   onToggleCollapse,
 }: DraggablePanelProps) {
   const [isHovered, setIsHovered] = useState(false);
-  
+
   const glowColor = glowType ? GLOW_COLORS[glowType] : undefined;
   const hasGlow = !!glowType;
 

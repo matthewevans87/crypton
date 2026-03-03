@@ -195,7 +195,7 @@ public class SystemController : ControllerBase
             var status = await _agentRunner.GetStatusAsync(ct);
 
             if (status is null)
-                return Offline("AgentRunner", null);
+                return Offline("AgentRunner", _agentRunner.IsConnected);
 
             var root = status.Value;
 
@@ -252,7 +252,7 @@ public class SystemController : ControllerBase
                 Status = serviceStatus,
                 Detail = detail,
                 CheckedAt = DateTime.UtcNow,
-                SignalRConnected = null,  // AgentRunner has no SignalR hub
+                SignalRConnected = _agentRunner.IsConnected,
                 Metrics = new Dictionary<string, object?>
                 {
                     ["currentState"] = currentState,

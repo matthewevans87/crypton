@@ -35,6 +35,10 @@ public class AgentRunnerService
     public event EventHandler<Exception>? ErrorOccurred;
     public event EventHandler<LoopHealthEventArgs>? HealthWarning;
     public event EventHandler<LoopHealthEventArgs>? HealthCritical;
+    public event EventHandler<StepStartedEventArgs>? StepStarted;
+    public event EventHandler<StepCompletedEventArgs>? StepCompleted;
+    public event EventHandler<TokenEventArgs>? TokenReceived;
+    public event EventHandler<AgentEventArgs>? AgentEventReceived;
 
     public LoopState CurrentState => _stateMachine.CurrentState;
     public CycleContext? CurrentCycle => _currentCycle;
@@ -342,6 +346,13 @@ public class AgentRunnerService
             StartTime = DateTime.UtcNow
         };
 
+        StepStarted?.Invoke(this, new StepStartedEventArgs
+        {
+            StepName  = state.ToString(),
+            CycleId   = _currentCycle?.CycleId,
+            StartedAt = stepRecord.StartTime
+        });
+
         try
         {
             var result = await ExecuteAgentAsync(state, cancellationToken);
@@ -392,6 +403,16 @@ public class AgentRunnerService
         }
 
         await HandleStepCompletionAsync(state, stepRecord.Outcome, cancellationToken);
+
+        StepCompleted?.Invoke(this, new StepCompletedEventArgs
+        {
+            StepName     = state.ToString(),
+            CycleId      = _currentCycle?.CycleId,
+            Success      = stepRecord.Outcome == StepOutcome.Success,
+            ErrorMessage = stepRecord.ErrorMessage,
+            Duration     = stepRecord.Duration,
+            CompletedAt  = stepRecord.EndTime ?? DateTime.UtcNow
+        });
     }
 
     private async Task<AgentInvocationResult> ExecuteAgentAsync(LoopState state, CancellationToken cancellationToken)
@@ -418,7 +439,19 @@ public class AgentRunnerService
             _ => throw new InvalidOperationException($"No agent context for state: {state}")
         };
 
-        var result = await _agentInvoker.InvokeAsync(context, cancellationToken);
+        var result = await _agentInvoker.InvokeAsync(
+            context,
+            cancellationToken,
+            onToken: token => TokenReceived?.Invoke(this, new TokenEventArgs
+            {
+                Token    = token,
+                StepName = state.ToString()
+            }),
+            onEvent: evt => AgentEventReceived?.Invoke(this, new AgentEventArgs
+            {
+                EventMessage = evt,
+                StepName     = state.ToString()
+            }));
 
         if (!result.Success)
         {

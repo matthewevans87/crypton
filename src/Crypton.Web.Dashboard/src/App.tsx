@@ -153,7 +153,31 @@ function App() {
         setPortfolioData({ summary });
       },
       onAgentStateChanged: (state) => {
-        setAgentData({ state });
+        const prevState = useDashboardStore.getState().agent.state;
+        if (state.isRunning && prevState?.currentState !== state.currentState) {
+          // New step started — clear per-step streaming buffers
+          setAgentData({ state, reasoning: [], toolCalls: [] });
+        } else {
+          setAgentData({ state });
+        }
+      },
+      onToolCallUpdated: (toolCall: ToolCall) => {
+        const currentCalls = useDashboardStore.getState().agent.toolCalls || [];
+        const idx = currentCalls.findIndex((c) => c.id === toolCall.id);
+        let updated: ToolCall[];
+        if (idx >= 0) {
+          updated = [...currentCalls];
+          updated[idx] = toolCall;
+        } else {
+          updated = [...currentCalls, toolCall];
+        }
+        if (updated.length > 50) updated = updated.slice(-50);
+        setAgentData({ toolCalls: updated });
+      },
+      onReasoningUpdated: (step: ReasoningStep) => {
+        const current = useDashboardStore.getState().agent.reasoning || [];
+        const updated = [...current, step];
+        setAgentData({ reasoning: updated.length > 200 ? updated.slice(-200) : updated });
       },
       onStrategyUpdated: (strategy) => {
         setStrategyData({ current: strategy });

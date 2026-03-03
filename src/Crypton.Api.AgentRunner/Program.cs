@@ -3,6 +3,7 @@ using AgentRunner.Api;
 using AgentRunner.Artifacts;
 using AgentRunner.Cli;
 using AgentRunner.Configuration;
+using AgentRunner.Hubs;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
 using AgentRunner.Telemetry;
@@ -123,6 +124,8 @@ builder.Services.AddSingleton(metricsCollector);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<AgentRunnerHubBroadcaster>();
 
 var app = builder.Build();
 
@@ -133,6 +136,7 @@ app.UseRouting();
 app.MapMetrics();
 
 app.MapControllers();
+app.MapHub<AgentRunnerHub>("/hubs/agent-runner");
 
 _ = Task.Run(async () =>
 {
