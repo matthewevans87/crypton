@@ -52,8 +52,18 @@ export function LoopStatePanel() {
   }
 
   const state = loop.agentState;
-  const steps = ['Plan', 'Research', 'Analyze', 'Synthesize', 'Execute', 'Evaluate'];
-  const currentStepIndex = steps.indexOf(state.currentState);
+  // Loop order: Evaluate (step 0, skipped on first cycle) → Plan → Research → Analyze → Synthesize
+  const steps: { name: string; abbr: string; conditional?: boolean }[] = [
+    { name: 'Evaluate', abbr: 'EVA', conditional: true },
+    { name: 'Plan', abbr: 'PLN' },
+    { name: 'Research', abbr: 'RES' },
+    { name: 'Analyze', abbr: 'ANA' },
+    { name: 'Synthesize', abbr: 'SYN' },
+  ];
+  const isWaiting = state.currentState === 'WaitingForNextCycle';
+  const currentStepIndex = steps.findIndex((s) => s.name === state.currentState);
+  // Between cycles all steps are considered complete
+  const effectiveIndex = isWaiting ? steps.length : currentStepIndex;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -71,12 +81,12 @@ export function LoopStatePanel() {
           }}
         />
         {steps.map((step, idx) => {
-          const isCompleted = idx < currentStepIndex;
-          const isCurrent = idx === currentStepIndex;
+          const isCompleted = idx < effectiveIndex;
+          const isCurrent = !isWaiting && idx === currentStepIndex;
 
           return (
             <div
-              key={step}
+              key={step.name}
               style={{
                 position: 'relative',
                 zIndex: 1,
@@ -90,10 +100,11 @@ export function LoopStatePanel() {
                 style={{
                   width: '12px',
                   height: '12px',
-                  borderRadius: '50%',
+                  borderRadius: step.conditional ? '2px' : '50%',
                   backgroundColor: isCompleted ? 'var(--color-profit)' : isCurrent ? 'var(--color-active)' : 'var(--border-default)',
                   border: isCurrent ? '2px solid var(--color-active)' : 'none',
                   transition: 'all 0.3s ease',
+                  opacity: step.conditional && !isCurrent && !isCompleted ? 0.5 : 1,
                 }}
               />
               <span
@@ -101,9 +112,10 @@ export function LoopStatePanel() {
                   fontSize: '9px',
                   color: isCurrent ? 'var(--text-primary)' : isCompleted ? 'var(--text-secondary)' : 'var(--text-tertiary)',
                   textTransform: 'uppercase',
+                  opacity: step.conditional && !isCurrent && !isCompleted ? 0.5 : 1,
                 }}
               >
-                {step.substring(0, 3)}
+                {step.abbr}
               </span>
             </div>
           );
@@ -114,8 +126,18 @@ export function LoopStatePanel() {
       <div style={{ marginTop: 'var(--space-2)' }}>
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Current Step</div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>
-          {state.currentState}
+          {isWaiting ? 'Waiting' : state.currentState}
         </div>
+        {state.currentState === 'Evaluate' && (
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+            Step 0 — skipped on first cycle
+          </div>
+        )}
+        {isWaiting && loop.nextCycleExpectedAt && (
+          <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+            Next: {new Date(loop.nextCycleExpectedAt).toLocaleTimeString()}
+          </div>
+        )}
       </div>
 
       {/* Cycle Info */}
@@ -136,7 +158,7 @@ export function LoopStatePanel() {
           Last cycle: {new Date(loop.lastCycleCompletedAt).toLocaleString()}
         </div>
       )}
-      {loop.nextCycleExpectedAt && (
+      {!isWaiting && loop.nextCycleExpectedAt && (
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
           Next cycle: {new Date(loop.nextCycleExpectedAt).toLocaleString()}
         </div>

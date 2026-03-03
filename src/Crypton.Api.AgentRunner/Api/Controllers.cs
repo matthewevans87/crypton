@@ -16,20 +16,16 @@ public class ApiKeyAttribute : Attribute, IAsyncAuthorizationFilter
 
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
-        if (!context.HttpContext.Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKey))
-        {
-            context.Result = new UnauthorizedResult();
-            return;
-        }
-
         var config = context.HttpContext.RequestServices.GetRequiredService<AgentRunnerConfig>();
 
+        // If no API key is configured, auth is disabled — allow all requests.
         if (string.IsNullOrEmpty(config.Api.ApiKey))
         {
             return;
         }
 
-        if (apiKey != config.Api.ApiKey)
+        if (!context.HttpContext.Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKey)
+            || apiKey != config.Api.ApiKey)
         {
             context.Result = new UnauthorizedResult();
         }

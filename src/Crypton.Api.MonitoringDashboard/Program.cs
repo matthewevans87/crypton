@@ -16,7 +16,27 @@ using DashboardReasoningStep = MonitoringDashboard.Models.ReasoningStep;
 using DashboardToolCall = MonitoringDashboard.Models.ToolCall;
 
 // Load .env file before the host builder so values flow into IConfiguration.
-DotEnvLoader.Load();
+// Prefer ~/.config/crypton/.env (user-level secrets, never committed), then
+// fall back to a .env found by walking up from cwd.
+var userEnvFile = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+    ".config", "crypton", ".env");
+if (File.Exists(userEnvFile))
+    DotEnvLoader.Load(new FileInfo(userEnvFile));
+else
+    DotEnvLoader.Load();
+
+// Map short-form env var names to ASP.NET Core's double-underscore hierarchy.
+var envAliases = new Dictionary<string, string>
+{
+    ["AGENT_RUNNER_API_KEY"] = "AgentRunner__ApiKey",
+};
+foreach (var (shortKey, fullKey) in envAliases)
+{
+    var val = Environment.GetEnvironmentVariable(shortKey);
+    if (val is not null && Environment.GetEnvironmentVariable(fullKey) is null)
+        Environment.SetEnvironmentVariable(fullKey, val);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

@@ -13,6 +13,8 @@ public class AgentController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _agentRunnerUrl;
 
+    private readonly string _agentRunnerApiKey;
+
     public AgentController(
         IAgentRunnerClient agentRunnerClient,
         IHttpClientFactory httpClientFactory,
@@ -20,7 +22,19 @@ public class AgentController : ControllerBase
     {
         _agentRunnerClient = agentRunnerClient;
         _httpClientFactory = httpClientFactory;
-        _agentRunnerUrl = (configuration["AgentRunner:Url"] ?? "http://localhost:5003").TrimEnd('/');
+        _agentRunnerUrl = configuration["AgentRunner:Url"]?.TrimEnd('/')
+            ?? throw new InvalidOperationException("AgentRunner:Url is not configured.");
+        var apiKey = configuration["AgentRunner:ApiKey"];
+        _agentRunnerApiKey = !string.IsNullOrEmpty(apiKey)
+            ? apiKey
+            : throw new InvalidOperationException("AgentRunner:ApiKey is not configured. Set AGENT_RUNNER_API_KEY in ~/.config/crypton/.env");
+    }
+
+    private HttpClient CreateAgentRunnerClient()
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", _agentRunnerApiKey);
+        return client;
     }
 
     /// <summary>
@@ -129,7 +143,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/force-cycle", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
@@ -146,7 +160,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var content = body is null
                 ? null
                 : new StringContent(
@@ -168,7 +182,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/resume", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
@@ -185,7 +199,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/abort", null, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return StatusCode((int)response.StatusCode, body);
@@ -203,7 +217,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var response = await client.GetAsync($"{_agentRunnerUrl}/api/config/cycle-interval", ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             return Content(body, "application/json", System.Text.Encoding.UTF8);
@@ -219,7 +233,7 @@ public class AgentController : ControllerBase
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = CreateAgentRunnerClient();
             var content = new StringContent(
                 System.Text.Json.JsonSerializer.Serialize(request,
                     new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }),
