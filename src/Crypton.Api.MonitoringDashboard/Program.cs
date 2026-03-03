@@ -232,8 +232,8 @@ agentRunnerClient.OnTokenReceived += (sender, payload) =>
         _ = dashboardHubContext.Clients.All.ReasoningUpdated(new DashboardReasoningStep
         {
             Timestamp = DateTime.UtcNow,
-            Content   = token,
-            Token     = token
+            Content = token,
+            Token = token
         });
     }
     catch (Exception ex) { logger.LogWarning(ex, "AgentRunner TokenReceived mapping error"); }
@@ -245,10 +245,10 @@ agentRunnerClient.OnToolCallStarted += (sender, payload) =>
     {
         _ = dashboardHubContext.Clients.All.ToolCallStarted(new DashboardToolCall
         {
-            Id          = payload.TryGetProperty("id",        out var id)  ? id.GetString()  ?? "" : "",
-            ToolName    = payload.TryGetProperty("tool_name", out var tn)  ? tn.GetString()  ?? "" : "",
-            Input       = payload.TryGetProperty("input",     out var inp) ? inp.GetString() ?? "" : "",
-            CalledAt    = payload.TryGetProperty("called_at", out var ca)  ? ca.GetDateTime()     : DateTime.UtcNow,
+            Id = payload.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+            ToolName = payload.TryGetProperty("tool_name", out var tn) ? tn.GetString() ?? "" : "",
+            Input = payload.TryGetProperty("input", out var inp) ? inp.GetString() ?? "" : "",
+            CalledAt = payload.TryGetProperty("called_at", out var ca) ? ca.GetDateTime() : DateTime.UtcNow,
             IsCompleted = false
         });
     }
@@ -262,15 +262,15 @@ agentRunnerClient.OnToolCallCompleted += (sender, payload) =>
         var success = !payload.TryGetProperty("success", out var succ) || succ.GetBoolean();
         _ = dashboardHubContext.Clients.All.ToolCallCompleted(new DashboardToolCall
         {
-            Id           = payload.TryGetProperty("id",            out var id)  ? id.GetString()   ?? "" : "",
-            ToolName     = payload.TryGetProperty("tool_name",     out var tn)  ? tn.GetString()   ?? "" : "",
-            Input        = "",
-            Output       = payload.TryGetProperty("output",        out var o)   ? o.GetString()         : null,
-            CalledAt     = payload.TryGetProperty("called_at",     out var ca)  ? ca.GetDateTime()      : DateTime.UtcNow,
-            DurationMs   = payload.TryGetProperty("duration_ms",   out var dur) ? dur.GetInt64()        : 0,
-            IsCompleted  = true,
-            IsError      = !success,
-            ErrorMessage = payload.TryGetProperty("error_message", out var em)  ? em.GetString()        : null,
+            Id = payload.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+            ToolName = payload.TryGetProperty("tool_name", out var tn) ? tn.GetString() ?? "" : "",
+            Input = "",
+            Output = payload.TryGetProperty("output", out var o) ? o.GetString() : null,
+            CalledAt = payload.TryGetProperty("called_at", out var ca) ? ca.GetDateTime() : DateTime.UtcNow,
+            DurationMs = payload.TryGetProperty("duration_ms", out var dur) ? dur.GetInt64() : 0,
+            IsCompleted = true,
+            IsError = !success,
+            ErrorMessage = payload.TryGetProperty("error_message", out var em) ? em.GetString() : null,
         });
     }
     catch (Exception ex) { logger.LogWarning(ex, "AgentRunner ToolCallCompleted mapping error"); }

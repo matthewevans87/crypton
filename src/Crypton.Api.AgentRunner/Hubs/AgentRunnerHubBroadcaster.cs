@@ -51,15 +51,15 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _statusLoop  = RunStatusLoopAsync(_cts.Token);
+        _statusLoop = RunStatusLoopAsync(_cts.Token);
         _metricsLoop = RunMetricsLoopAsync(_cts.Token);
 
-        _agentRunnerService.StateChanged       += OnStateChanged;
-        _agentRunnerService.CycleCompleted     += OnCycleCompleted;
-        _agentRunnerService.ErrorOccurred      += OnErrorOccurred;
-        _agentRunnerService.StepStarted        += OnStepStarted;
-        _agentRunnerService.StepCompleted      += OnStepCompleted;
-        _agentRunnerService.TokenReceived      += OnTokenReceived;
+        _agentRunnerService.StateChanged += OnStateChanged;
+        _agentRunnerService.CycleCompleted += OnCycleCompleted;
+        _agentRunnerService.ErrorOccurred += OnErrorOccurred;
+        _agentRunnerService.StepStarted += OnStepStarted;
+        _agentRunnerService.StepCompleted += OnStepCompleted;
+        _agentRunnerService.TokenReceived += OnTokenReceived;
         _agentRunnerService.AgentEventReceived += OnAgentEventReceived;
 
         return Task.CompletedTask;
@@ -67,17 +67,17 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _agentRunnerService.StateChanged       -= OnStateChanged;
-        _agentRunnerService.CycleCompleted     -= OnCycleCompleted;
-        _agentRunnerService.ErrorOccurred      -= OnErrorOccurred;
-        _agentRunnerService.StepStarted        -= OnStepStarted;
-        _agentRunnerService.StepCompleted      -= OnStepCompleted;
-        _agentRunnerService.TokenReceived      -= OnTokenReceived;
+        _agentRunnerService.StateChanged -= OnStateChanged;
+        _agentRunnerService.CycleCompleted -= OnCycleCompleted;
+        _agentRunnerService.ErrorOccurred -= OnErrorOccurred;
+        _agentRunnerService.StepStarted -= OnStepStarted;
+        _agentRunnerService.StepCompleted -= OnStepCompleted;
+        _agentRunnerService.TokenReceived -= OnTokenReceived;
         _agentRunnerService.AgentEventReceived -= OnAgentEventReceived;
 
         _cts?.Cancel();
 
-        if (_statusLoop  is not null) await _statusLoop.ConfigureAwait(false);
+        if (_statusLoop is not null) await _statusLoop.ConfigureAwait(false);
         if (_metricsLoop is not null) await _metricsLoop.ConfigureAwait(false);
     }
 
@@ -110,11 +110,11 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
                 await timer.WaitForNextTickAsync(ct);
                 var payload = new
                 {
-                    cycle_count    = _metrics.GetCycleCount(),
-                    step_success   = _metrics.GetStepSuccess(),
-                    step_failure   = _metrics.GetStepFailure(),
+                    cycle_count = _metrics.GetCycleCount(),
+                    step_success = _metrics.GetStepSuccess(),
+                    step_failure = _metrics.GetStepFailure(),
                     tool_execution = _metrics.GetToolExecution(),
-                    timestamp      = DateTimeOffset.UtcNow
+                    timestamp = DateTimeOffset.UtcNow
                 };
                 await _hub.Clients.Group(AgentRunnerHub.MetricsGroup)
                     .SendAsync("MetricsUpdate", payload, ct);
@@ -128,12 +128,12 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
     {
         var payload = new
         {
-            current_state     = _agentRunnerService.CurrentState.ToString(),
-            is_paused         = _agentRunnerService.CurrentState == LoopState.Paused,
-            cycle_id          = _agentRunnerService.CurrentCycle?.CycleId,
-            restart_count     = _agentRunnerService.RestartCount,
+            current_state = _agentRunnerService.CurrentState.ToString(),
+            is_paused = _agentRunnerService.CurrentState == LoopState.Paused,
+            cycle_id = _agentRunnerService.CurrentCycle?.CycleId,
+            restart_count = _agentRunnerService.RestartCount,
             next_scheduled_at = _agentRunnerService.NextScheduledRunTime,
-            timestamp         = DateTimeOffset.UtcNow
+            timestamp = DateTimeOffset.UtcNow
         };
         await _hub.Clients.Group(AgentRunnerHub.StatusGroup)
             .SendAsync("StatusUpdate", payload, ct);
@@ -146,8 +146,8 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.StatusGroup)
             .SendAsync("StateChanged", new
             {
-                state     = state.ToString(),
-                cycle_id  = _agentRunnerService.CurrentCycle?.CycleId,
+                state = state.ToString(),
+                cycle_id = _agentRunnerService.CurrentCycle?.CycleId,
                 timestamp = DateTimeOffset.UtcNow
             });
     }
@@ -157,7 +157,7 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.StatusGroup)
             .SendAsync("CycleCompleted", new
             {
-                cycle_id  = cycleId,
+                cycle_id = cycleId,
                 timestamp = DateTimeOffset.UtcNow
             });
     }
@@ -167,7 +167,7 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.StatusGroup)
             .SendAsync("ErrorOccurred", new
             {
-                message   = ex.Message,
+                message = ex.Message,
                 timestamp = DateTimeOffset.UtcNow
             });
     }
@@ -180,10 +180,10 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.StepsGroup)
             .SendAsync("StepStarted", new
             {
-                step_name  = e.StepName,
-                cycle_id   = e.CycleId,
+                step_name = e.StepName,
+                cycle_id = e.CycleId,
                 started_at = e.StartedAt,
-                timestamp  = DateTimeOffset.UtcNow
+                timestamp = DateTimeOffset.UtcNow
             });
     }
 
@@ -192,13 +192,13 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.StepsGroup)
             .SendAsync("StepCompleted", new
             {
-                step_name     = e.StepName,
-                cycle_id      = e.CycleId,
-                success       = e.Success,
+                step_name = e.StepName,
+                cycle_id = e.CycleId,
+                success = e.Success,
                 error_message = e.ErrorMessage,
-                duration_ms   = (long)e.Duration.TotalMilliseconds,
-                completed_at  = e.CompletedAt,
-                timestamp     = DateTimeOffset.UtcNow
+                duration_ms = (long)e.Duration.TotalMilliseconds,
+                completed_at = e.CompletedAt,
+                timestamp = DateTimeOffset.UtcNow
             });
     }
 
@@ -207,7 +207,7 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _ = _hub.Clients.Group(AgentRunnerHub.TokensGroup)
             .SendAsync("TokenReceived", new
             {
-                token     = e.Token,
+                token = e.Token,
                 step_name = e.StepName,
                 timestamp = DateTimeOffset.UtcNow
             });
@@ -221,13 +221,13 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         {
             // "[tool] → toolName(params)"
             var afterArrow = msg["[tool] \u2192 ".Length..];
-            var parenIdx   = afterArrow.IndexOf('(');
-            var toolName   = parenIdx >= 0 ? afterArrow[..parenIdx].Trim() : afterArrow.Trim();
-            var input      = parenIdx >= 0 && afterArrow.EndsWith(')')
+            var parenIdx = afterArrow.IndexOf('(');
+            var toolName = parenIdx >= 0 ? afterArrow[..parenIdx].Trim() : afterArrow.Trim();
+            var input = parenIdx >= 0 && afterArrow.EndsWith(')')
                 ? afterArrow[(parenIdx + 1)..^1].Trim()
                 : parenIdx >= 0 ? afterArrow[(parenIdx + 1)..].Trim() : string.Empty;
 
-            var id       = Guid.NewGuid().ToString("N");
+            var id = Guid.NewGuid().ToString("N");
             var calledAt = DateTime.UtcNow;
 
             lock (_toolCallLock) { _activeToolCalls[toolName] = (id, calledAt); }
@@ -235,9 +235,9 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
             _ = _hub.Clients.Group(AgentRunnerHub.ToolCallsGroup)
                 .SendAsync("ToolCallStarted", new
                 {
-                    id        = id,
+                    id = id,
                     tool_name = toolName,
-                    input     = input,
+                    input = input,
                     step_name = e.StepName,
                     called_at = calledAt,
                     timestamp = DateTimeOffset.UtcNow
@@ -248,12 +248,12 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
             // "[tool] ← toolName OK (1.2s): result"
             // "[tool] ← toolName FAILED (1.2s): error"
             var afterArrow = msg["[tool] \u2190 ".Length..];
-            var spaceIdx   = afterArrow.IndexOf(' ');
-            var toolName   = spaceIdx >= 0 ? afterArrow[..spaceIdx].Trim() : afterArrow.Trim();
-            var success    = afterArrow.Contains(" OK ");
+            var spaceIdx = afterArrow.IndexOf(' ');
+            var toolName = spaceIdx >= 0 ? afterArrow[..spaceIdx].Trim() : afterArrow.Trim();
+            var success = afterArrow.Contains(" OK ");
             var durationMs = ParseDurationMs(afterArrow);
-            var colonIdx   = afterArrow.IndexOf(": ");
-            var detail     = colonIdx >= 0 ? afterArrow[(colonIdx + 2)..].Trim() : null;
+            var colonIdx = afterArrow.IndexOf(": ");
+            var detail = colonIdx >= 0 ? afterArrow[(colonIdx + 2)..].Trim() : null;
 
             string callId;
             DateTime calledAt;
@@ -261,13 +261,13 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
             {
                 if (_activeToolCalls.TryGetValue(toolName, out var active))
                 {
-                    callId   = active.Id;
+                    callId = active.Id;
                     calledAt = active.StartedAt;
                     _activeToolCalls.Remove(toolName);
                 }
                 else
                 {
-                    callId   = Guid.NewGuid().ToString("N");
+                    callId = Guid.NewGuid().ToString("N");
                     calledAt = DateTime.UtcNow;
                 }
             }
@@ -275,15 +275,15 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
             _ = _hub.Clients.Group(AgentRunnerHub.ToolCallsGroup)
                 .SendAsync("ToolCallCompleted", new
                 {
-                    id            = callId,
-                    tool_name     = toolName,
-                    success       = success,
-                    output        = success ? detail : null,
+                    id = callId,
+                    tool_name = toolName,
+                    success = success,
+                    output = success ? detail : null,
                     error_message = success ? null : detail,
-                    duration_ms   = durationMs,
-                    called_at     = calledAt,
-                    step_name     = e.StepName,
-                    timestamp     = DateTimeOffset.UtcNow
+                    duration_ms = durationMs,
+                    called_at = calledAt,
+                    step_name = e.StepName,
+                    timestamp = DateTimeOffset.UtcNow
                 });
         }
         // [iter N/M] and [LLM] markers are not forwarded to clients.
@@ -294,7 +294,7 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
     /// <summary>Parses "(1.2s)" or "(450ms)" from a tool event message.</summary>
     private static long ParseDurationMs(string text)
     {
-        var openIdx  = text.IndexOf('(');
+        var openIdx = text.IndexOf('(');
         var closeIdx = text.IndexOf(')');
         if (openIdx < 0 || closeIdx <= openIdx) return 0;
 

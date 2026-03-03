@@ -348,8 +348,8 @@ public class AgentRunnerService
 
         StepStarted?.Invoke(this, new StepStartedEventArgs
         {
-            StepName  = state.ToString(),
-            CycleId   = _currentCycle?.CycleId,
+            StepName = state.ToString(),
+            CycleId = _currentCycle?.CycleId,
             StartedAt = stepRecord.StartTime
         });
 
@@ -406,12 +406,12 @@ public class AgentRunnerService
 
         StepCompleted?.Invoke(this, new StepCompletedEventArgs
         {
-            StepName     = state.ToString(),
-            CycleId      = _currentCycle?.CycleId,
-            Success      = stepRecord.Outcome == StepOutcome.Success,
+            StepName = state.ToString(),
+            CycleId = _currentCycle?.CycleId,
+            Success = stepRecord.Outcome == StepOutcome.Success,
             ErrorMessage = stepRecord.ErrorMessage,
-            Duration     = stepRecord.Duration,
-            CompletedAt  = stepRecord.EndTime ?? DateTime.UtcNow
+            Duration = stepRecord.Duration,
+            CompletedAt = stepRecord.EndTime ?? DateTime.UtcNow
         });
     }
 
@@ -444,13 +444,13 @@ public class AgentRunnerService
             cancellationToken,
             onToken: token => TokenReceived?.Invoke(this, new TokenEventArgs
             {
-                Token    = token,
+                Token = token,
                 StepName = state.ToString()
             }),
             onEvent: evt => AgentEventReceived?.Invoke(this, new AgentEventArgs
             {
                 EventMessage = evt,
-                StepName     = state.ToString()
+                StepName = state.ToString()
             }));
 
         if (!result.Success)

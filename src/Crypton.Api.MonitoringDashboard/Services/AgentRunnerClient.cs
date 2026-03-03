@@ -76,20 +76,20 @@ public class AgentRunnerClient : IAgentRunnerClient, IAsyncDisposable
                 .Build();
 
             // Status group messages
-            _connection.On<JsonElement>("StatusUpdate",   payload => OnStatusUpdate?.Invoke(this, payload));
-            _connection.On<JsonElement>("StateChanged",   payload => OnStatusUpdate?.Invoke(this, payload));
+            _connection.On<JsonElement>("StatusUpdate", payload => OnStatusUpdate?.Invoke(this, payload));
+            _connection.On<JsonElement>("StateChanged", payload => OnStatusUpdate?.Invoke(this, payload));
             _connection.On<JsonElement>("CycleCompleted", payload => OnStatusUpdate?.Invoke(this, payload));
-            _connection.On<JsonElement>("ErrorOccurred",  payload => OnStatusUpdate?.Invoke(this, payload));
+            _connection.On<JsonElement>("ErrorOccurred", payload => OnStatusUpdate?.Invoke(this, payload));
 
             // Steps group messages
-            _connection.On<JsonElement>("StepStarted",   payload => OnStepStarted?.Invoke(this, payload));
+            _connection.On<JsonElement>("StepStarted", payload => OnStepStarted?.Invoke(this, payload));
             _connection.On<JsonElement>("StepCompleted", payload => OnStepCompleted?.Invoke(this, payload));
 
             // Tokens group messages
             _connection.On<JsonElement>("TokenReceived", payload => OnTokenReceived?.Invoke(this, payload));
 
             // ToolCalls group messages
-            _connection.On<JsonElement>("ToolCallStarted",   payload => OnToolCallStarted?.Invoke(this, payload));
+            _connection.On<JsonElement>("ToolCallStarted", payload => OnToolCallStarted?.Invoke(this, payload));
             _connection.On<JsonElement>("ToolCallCompleted", payload => OnToolCallCompleted?.Invoke(this, payload));
 
             _connection.Closed += async error =>
