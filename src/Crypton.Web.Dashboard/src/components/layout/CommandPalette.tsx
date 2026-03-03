@@ -5,7 +5,7 @@ import { api } from '../../services/api';
 interface Command {
   id: string;
   label: string;
-  category: 'recent' | 'panel' | 'navigation' | 'action';
+  category: 'recent' | 'panel' | 'navigation' | 'action' | 'agent';
   shortcut?: string;
   action: () => void;
 }
@@ -47,6 +47,46 @@ export function CommandPalette() {
 
   const commands: Command[] = useMemo(() => {
     return [
+      {
+        id: 'agent-force-cycle',
+        label: 'Agent: Force New Cycle',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-force-cycle');
+          toggleCommandPalette();
+          api.agent.forceCycle().catch((e) => console.error('Force cycle failed:', e));
+        },
+      },
+      {
+        id: 'agent-pause',
+        label: 'Agent: Pause Loop',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-pause');
+          toggleCommandPalette();
+          api.agent.pause().catch((e) => console.error('Pause failed:', e));
+        },
+      },
+      {
+        id: 'agent-resume',
+        label: 'Agent: Resume Loop',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-resume');
+          toggleCommandPalette();
+          api.agent.resume().catch((e) => console.error('Resume failed:', e));
+        },
+      },
+      {
+        id: 'agent-abort',
+        label: 'Agent: Abort Current Cycle',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-abort');
+          toggleCommandPalette();
+          api.agent.abort().catch((e) => console.error('Abort failed:', e));
+        },
+      },
       ...PANEL_COMMANDS.map((pc) => ({
         id: `add-${pc.type}`,
         label: pc.label,
@@ -89,46 +129,6 @@ export function CommandPalette() {
         action: () => {
           addRecentCommand('action-refresh');
           window.location.reload();
-        },
-      },
-      {
-        id: 'agent-force-cycle',
-        label: 'Agent: Force New Cycle',
-        category: 'action',
-        action: () => {
-          addRecentCommand('agent-force-cycle');
-          toggleCommandPalette();
-          api.agent.forceCycle().catch((e) => console.error('Force cycle failed:', e));
-        },
-      },
-      {
-        id: 'agent-pause',
-        label: 'Agent: Pause Loop',
-        category: 'action',
-        action: () => {
-          addRecentCommand('agent-pause');
-          toggleCommandPalette();
-          api.agent.pause().catch((e) => console.error('Pause failed:', e));
-        },
-      },
-      {
-        id: 'agent-resume',
-        label: 'Agent: Resume Loop',
-        category: 'action',
-        action: () => {
-          addRecentCommand('agent-resume');
-          toggleCommandPalette();
-          api.agent.resume().catch((e) => console.error('Resume failed:', e));
-        },
-      },
-      {
-        id: 'agent-abort',
-        label: 'Agent: Abort Current Cycle',
-        category: 'action',
-        action: () => {
-          addRecentCommand('agent-abort');
-          toggleCommandPalette();
-          api.agent.abort().catch((e) => console.error('Abort failed:', e));
         },
       },
     ];
@@ -248,7 +248,7 @@ export function CommandPalette() {
                   backgroundColor: 'var(--bg-panel-header)',
                 }}
               >
-                {category === 'recent' ? 'Recent' : category}
+                {({ recent: 'Recent', agent: 'Agent Controls', action: 'Actions', panel: 'Panels', navigation: 'Navigation' } as Record<string, string>)[category] ?? category}
               </div>
               {cmds.map((cmd) => {
                 const index = displayCommands.indexOf(cmd);
