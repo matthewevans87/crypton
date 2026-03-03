@@ -101,18 +101,18 @@ export function CommandPalette() {
 
   const filteredCommands = query
     ? commands.filter(
-        (c) =>
-          c.label.toLowerCase().includes(query.toLowerCase()) ||
-          c.category.toLowerCase().includes(query.toLowerCase())
-      )
+      (c) =>
+        c.label.toLowerCase().includes(query.toLowerCase()) ||
+        c.category.toLowerCase().includes(query.toLowerCase())
+    )
     : commands;
 
   const displayCommands = query
     ? filteredCommands
     : [
-        ...recentCommandItems.map(cmd => ({ ...cmd, category: 'recent' as const })),
-        ...filteredCommands.filter(cmd => !recentCommands.includes(cmd.id)),
-      ];
+      ...recentCommandItems.map(cmd => ({ ...cmd, category: 'recent' as const })),
+      ...filteredCommands.filter(cmd => !recentCommands.includes(cmd.id)),
+    ];
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -193,7 +193,7 @@ export function CommandPalette() {
             }}
           />
         </div>
-        
+
         <div style={{ overflow: 'auto', flex: 1 }}>
           {Object.entries(groupedCommands).map(([category, cmds]) => (
             <div key={category}>
@@ -237,7 +237,7 @@ export function CommandPalette() {
               })}
             </div>
           ))}
-          
+
           {displayCommands.length === 0 && (
             <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-secondary)' }}>
               No commands found
