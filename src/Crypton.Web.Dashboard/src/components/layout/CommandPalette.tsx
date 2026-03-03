@@ -35,6 +35,7 @@ const PANEL_COMMANDS: { type: PanelType; label: string; description: string }[] 
   { type: 'loop-timeline', label: 'Loop Timeline', description: 'Visual timeline of cycle' },
   { type: 'evaluation-rating', label: 'Evaluation Rating', description: 'A-F rating with trend' },
   { type: 'recommendations', label: 'Recommendations', description: 'Key points from evaluation' },
+  { type: 'system-diagnostics', label: 'System Diagnostics', description: 'Live health of all services' },
 ];
 
 export function CommandPalette() {
