@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDashboardStore, type PanelType, type PanelConfig } from '../../store/dashboard';
+import { api } from '../../services/api';
 
 interface Command {
   id: string;
@@ -88,6 +89,46 @@ export function CommandPalette() {
         action: () => {
           addRecentCommand('action-refresh');
           window.location.reload();
+        },
+      },
+      {
+        id: 'agent-force-cycle',
+        label: 'Agent: Force New Cycle',
+        category: 'action',
+        action: () => {
+          addRecentCommand('agent-force-cycle');
+          toggleCommandPalette();
+          api.agent.forceCycle().catch((e) => console.error('Force cycle failed:', e));
+        },
+      },
+      {
+        id: 'agent-pause',
+        label: 'Agent: Pause Loop',
+        category: 'action',
+        action: () => {
+          addRecentCommand('agent-pause');
+          toggleCommandPalette();
+          api.agent.pause().catch((e) => console.error('Pause failed:', e));
+        },
+      },
+      {
+        id: 'agent-resume',
+        label: 'Agent: Resume Loop',
+        category: 'action',
+        action: () => {
+          addRecentCommand('agent-resume');
+          toggleCommandPalette();
+          api.agent.resume().catch((e) => console.error('Resume failed:', e));
+        },
+      },
+      {
+        id: 'agent-abort',
+        label: 'Agent: Abort Current Cycle',
+        category: 'action',
+        action: () => {
+          addRecentCommand('agent-abort');
+          toggleCommandPalette();
+          api.agent.abort().catch((e) => console.error('Abort failed:', e));
         },
       },
     ];

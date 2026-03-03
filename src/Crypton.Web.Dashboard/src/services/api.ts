@@ -159,6 +159,10 @@ export const api = {
     reasoning: () => fetchJson('/agent/reasoning'),
     getCycleInterval: () => fetchJson('/agent/config/cycle-interval'),
     setCycleInterval: (minutes: number) => postJson('/agent/config/cycle-interval', { cycleIntervalMinutes: minutes }),
+    forceCycle: () => postJson('/agent/force-cycle', {}),
+    pause: (reason?: string) => postJson('/agent/pause', reason ? { reason } : {}),
+    resume: () => postJson('/agent/resume', {}),
+    abort: () => postJson('/agent/abort', {}),
   },
   
   // Performance

@@ -119,6 +119,85 @@ public class AgentController : ControllerBase
     // Cycle interval — proxied to AgentRunner
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // Loop controls — proxied to AgentRunner
+    // -----------------------------------------------------------------------
+
+    /// <summary>Force a new cycle immediately (POST /api/agent/force-cycle).</summary>
+    [HttpPost("force-cycle")]
+    public async Task<IActionResult> ForceCycle(CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/force-cycle", null, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)response.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Pause the loop (POST /api/agent/pause).</summary>
+    [HttpPost("pause")]
+    public async Task<IActionResult> Pause([FromBody] object? body, CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var content = body is null
+                ? null
+                : new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(body),
+                    System.Text.Encoding.UTF8, "application/json");
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/pause", content, ct);
+            var responseBody = await response.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)response.StatusCode, responseBody);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Resume a paused loop (POST /api/agent/resume).</summary>
+    [HttpPost("resume")]
+    public async Task<IActionResult> Resume(CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/resume", null, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)response.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Abort the current cycle (POST /api/agent/abort).</summary>
+    [HttpPost("abort")]
+    public async Task<IActionResult> Abort(CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_agentRunnerUrl}/api/abort", null, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            return StatusCode((int)response.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
+    // -----------------------------------------------------------------------
+
     [HttpGet("config/cycle-interval")]
     public async Task<IActionResult> GetCycleInterval(CancellationToken ct)
     {
