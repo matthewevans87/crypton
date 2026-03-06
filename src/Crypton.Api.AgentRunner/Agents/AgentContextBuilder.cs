@@ -368,10 +368,9 @@ public class AgentContext
         sb.AppendLine("**BEGIN your work now.**");
         sb.AppendLine();
         sb.AppendLine("Important reminders:");
-        sb.AppendLine("- `<tool_call>` tags are parsed and executed by the host system. They return REAL data. Do NOT write pseudocode or Python.");
+        sb.AppendLine("- Tool calls are executed by the host system and return REAL data. Do NOT invent results or write pseudocode.");
         sb.AppendLine("- You MUST call tools BEFORE writing your output document. Do not assume or invent data.");
-        sb.AppendLine("- Write each tool call on its own line, and ALWAYS include the closing tag: `<tool_call>toolname {...}</tool_call>`");
-        sb.AppendLine("- Wait for each tool result before proceeding to the next step.");
+        sb.AppendLine("- Call each tool, wait for its result, then proceed to the next step.");
         sb.AppendLine("- Follow the procedure in your identity instructions step by step.");
         sb.AppendLine("- **IMPORTANT — No preamble or postamble.** When writing your output document, start the document IMMEDIATELY on the first line. Do NOT include sentences like 'Based on the data gathered...' or 'Here is the draft of...' before the document. Your entire response should be the document itself.");
         sb.AppendLine("- **Replace all template placeholders.** The Output Template contains example placeholder text like `[Signal name]`, `[Headline / Event]`, `<!-- date -->`, etc. Replace every placeholder with real content from your research. If there is nothing to report for a section, write 'None identified this cycle.' Do NOT copy placeholder brackets literally into your output.");

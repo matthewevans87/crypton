@@ -71,6 +71,17 @@ public class OllamaConfig
 
     /// <summary>Request timeout in seconds when calling the Ollama API.</summary>
     public int TimeoutSeconds { get; set; } = 300;
+
+    /// <summary>
+    /// Context window size (num_ctx) passed to Ollama. Must be large enough to hold
+    /// the full prompt + thinking tokens + response. The qwen3.5:35b KV cache uses
+    /// q4_0 quantisation, costing ~1.6 GiB per 16k tokens on an RTX 5090 (32.6 GiB):
+    ///   16k → ~24.6 GiB total  ✓
+    ///   64k → ~29.4 GiB total  ✓  ← default
+    ///  128k → ~35.8 GiB total  ✗  OOM
+    /// Override via env var: Ollama__NumCtx
+    /// </summary>
+    public int NumCtx { get; set; } = 65536;
 }
 
 public class BraveSearchConfig

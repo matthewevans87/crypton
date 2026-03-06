@@ -1,24 +1,8 @@
 # Crypton — Agent Tool Reference
 
-This document is the authoritative specification for all agent-callable tools. Read it once when starting a new session; refer back when you need to confirm parameter names, return shapes, or calling conventions.
+This document is the authoritative specification for all agent-callable tools. Read it once when starting a new session; refer back when you need to confirm parameter names, return shapes, or error behaviour.
 
----
-
-## Calling Convention
-
-Tools are invoked using XML tags with a JSON argument object. Use the following syntax on its own line:
-
-```
-<tool_call>tool_name {"param": "value", "param2": value}</tool_call>
-```
-
-Rules:
-- The tag must be `<tool_call>` (lowercase, no namespace).
-- The tool name immediately follows the opening tag, separated by a space from the JSON object.
-- The JSON object must be valid JSON (`"key": "value"` — always double-quoted keys).
-- Omit optional parameters to use their defaults.
-- Do not invent parameter names — only those listed here are valid.
-- If a tool call fails, the error message will describe the cause. Do not retry indefinitely; log the failure and proceed with the information you have, noting the gap in your output.
+Tools are called using function calling. Use only parameter names listed here; omit optional parameters to accept their defaults. If a tool call fails, document the failure in your output and proceed with the information you have.
 
 ---
 
@@ -45,8 +29,8 @@ A list of up to `count` results, each containing:
 
 ### Example
 
-```
-<tool_call>web_search {"query": "Kraken exchange withdrawal issues February 2026", "count": 5, "recency": "week"}</tool_call>
+```json
+{"query": "Kraken exchange withdrawal issues February 2026", "count": 5, "recency": "week"}
 ```
 
 ### Notes
@@ -74,8 +58,8 @@ A single string containing the cleaned, readable content of the page. If extract
 
 ### Example
 
-```
-<tool_call>web_fetch {"url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260129.htm"}</tool_call>
+```json
+{"url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260129.htm"}
 ```
 
 ### Notes
@@ -109,9 +93,9 @@ A list of posts, each containing:
 
 ### Example
 
-```
-<tool_call>bird {"query": "@unusualwhales", "mode": "timeline", "count": 10, "recency": "day"}</tool_call>
-<tool_call>bird {"query": "bitcoin ETF inflows -filter:retweets", "count": 20, "recency": "day"}</tool_call>
+```json
+{"query": "@unusualwhales", "mode": "timeline", "count": 10, "recency": "day"}
+{"query": "bitcoin ETF inflows -filter:retweets", "count": 20, "recency": "day"}
 ```
 
 ### Notes
@@ -154,9 +138,9 @@ A structured object containing:
 
 ### Example
 
-```
-<tool_call>current_position {}</tool_call>
-<tool_call>current_position {"include_history": true}</tool_call>
+```json
+{}
+{"include_history": true}
 ```
 
 ### Notes
@@ -192,9 +176,9 @@ A structured object containing:
 
 ### Example
 
-```
-<tool_call>technical_indicators {"asset": "BTC", "timeframe": "1d"}</tool_call>
-<tool_call>technical_indicators {"asset": "ETH", "timeframe": "4h"}</tool_call>
+```json
+{"asset": "BTC", "timeframe": "1d"}
+{"asset": "ETH", "timeframe": "4h"}
 ```
 
 ### Notes

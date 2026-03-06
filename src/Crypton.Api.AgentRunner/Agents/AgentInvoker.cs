@@ -52,21 +52,33 @@ public class AgentInvoker
             var allToolCalls = new List<ToolCall>();
             var allToolResults = new List<ToolResult>();
 
+            // Build the Ollama-format tool definitions for this agent's allowed tools.
+            var tools = _toolExecutor.GetAllTools().Values
+                .Where(t => context.AvailableTools.Contains(t.Name))
+                .Select(t => (object)new { type = "function", function = t.ToOpenAIFunction() })
+                .ToArray();
+
             var maxIterations = GetMaxIterationsForAgent(context.AgentName);
             for (int iteration = 0; iteration < maxIterations; iteration++)
             {
                 onEvent?.Invoke($"[iter {iteration + 1}/{maxIterations}] Calling LLM...");
 
-                var output = await CallLlmAsync(
+                var llmResult = await CallLlmAsync(
                     conversationHistory,
                     context.AgentName,
+                    tools,
                     cts.Token,
                     onToken,
                     onEvent);
 
-                conversationHistory.Add(new ConversationMessage { Role = "assistant", Content = output });
+                // Add the assistant turn; include tool_calls when present so that
+                // the follow-up conversation is well-formed for Ollama.
+                var assistantMsg = new ConversationMessage { Role = "assistant", Content = llmResult.Content };
+                if (llmResult.ToolCalls.Count > 0)
+                    assistantMsg.ToolCalls = llmResult.ToolCalls;
+                conversationHistory.Add(assistantMsg);
 
-                var toolCalls = ParseToolCalls(output);
+                var toolCalls = ConvertNativeToolCalls(llmResult.ToolCalls);
 
                 if (!toolCalls.Any())
                 {
@@ -74,7 +86,7 @@ public class AgentInvoker
                     return new AgentInvocationResult
                     {
                         Success = true,
-                        Output = output,
+                        Output = llmResult.Content,
                         ToolCalls = allToolCalls,
                         ToolResults = allToolResults,
                         Iterations = iteration + 1
@@ -94,10 +106,11 @@ public class AgentInvoker
                         ? JsonSerializer.Serialize(result.Data)
                         : $"Error: {result.Error}";
 
+                    // role=tool is the correct Ollama format for returning function results.
                     conversationHistory.Add(new ConversationMessage
                     {
-                        Role = "user",
-                        Content = $"Tool '{call.ToolName}' result: {resultContent}"
+                        Role = "tool",
+                        Content = resultContent
                     });
                 }
             }
@@ -165,9 +178,10 @@ public class AgentInvoker
         return TimeSpan.FromMinutes(settings.TimeoutMinutes);
     }
 
-    private async Task<string> CallLlmAsync(
+    private async Task<LlmCallResult> CallLlmAsync(
         List<ConversationMessage> conversation,
         string agentName,
+        object[] tools,
         CancellationToken cancellationToken,
         Action<string>? onToken = null,
         Action<string>? onEvent = null)
@@ -182,16 +196,39 @@ public class AgentInvoker
             _ => _config.Agents.Plan
         };
 
-        var messages = conversation.Select(m => new { role = m.Role, content = m.Content }).ToArray();
+        // Serialize conversation; assistant messages may carry tool_calls from a previous turn.
+        var messages = conversation.Select<ConversationMessage, object>(m =>
+        {
+            if (m.ToolCalls is { Count: > 0 })
+            {
+                return new
+                {
+                    role = m.Role,
+                    content = m.Content,
+                    tool_calls = m.ToolCalls.Select(tc => new
+                    {
+                        function = new { name = tc.Name, arguments = tc.Arguments }
+                    }).ToArray()
+                };
+            }
+            return new { role = m.Role, content = m.Content, tool_calls = (object?)null };
+        }).ToArray();
+
         bool streaming = onToken != null;
 
         var requestBody = new
         {
             model = settings.Model,
             messages,
-            temperature = settings.Temperature,
-            max_tokens = settings.MaxTokens,
-            stream = streaming
+            stream = streaming,
+            tools,
+            options = new
+            {
+                num_ctx = _config.Ollama.NumCtx,
+                temperature = settings.Temperature,
+                // num_predict is intentionally omitted — Ollama defaults to "fill context"
+                // (-2), allowing the model to generate its full response without truncation.
+            }
         };
 
         var json = JsonSerializer.Serialize(requestBody);
@@ -210,10 +247,13 @@ public class AgentInvoker
                 throw new Exception("Ollama returned empty response");
 
             var obj = JsonSerializer.Deserialize<JsonElement>(responseJson);
-            return obj.GetProperty("message").GetProperty("content").GetString() ?? "";
+            var messageEl = obj.GetProperty("message");
+            var content = messageEl.TryGetProperty("content", out var ct) ? ct.GetString() ?? "" : "";
+            var nativeToolCalls = ParseNativeToolCalls(messageEl);
+            return new LlmCallResult(content, nativeToolCalls);
         }
 
-        // Streaming mode: read NDJSON, call onToken per chunk
+        // Streaming mode: read NDJSON, call onToken per chunk, accumulate tool_calls.
         using var request = new HttpRequestMessage(HttpMethod.Post, ollamaUrl)
         {
             Content = httpContent
@@ -233,32 +273,32 @@ public class AgentInvoker
         using var reader = new StreamReader(stream);
 
         var fullResponse = new StringBuilder();
+        var streamedToolCalls = new List<OllamaNativeToolCall>();
 
         while (!cancellationToken.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(cancellationToken);
-            if (line == null) break; // end of stream
+            if (line == null) break;
             if (string.IsNullOrWhiteSpace(line)) continue;
 
             JsonElement chunk;
-            try
-            {
-                chunk = JsonSerializer.Deserialize<JsonElement>(line);
-            }
-            catch
-            {
-                continue;
-            }
+            try { chunk = JsonSerializer.Deserialize<JsonElement>(line); }
+            catch { continue; }
 
-            if (chunk.TryGetProperty("message", out var msg) &&
-                msg.TryGetProperty("content", out var contentToken))
+            if (chunk.TryGetProperty("message", out var msg))
             {
-                var token = contentToken.GetString() ?? "";
-                if (!string.IsNullOrEmpty(token))
+                if (msg.TryGetProperty("content", out var contentToken))
                 {
-                    fullResponse.Append(token);
-                    onToken?.Invoke(token);
+                    var token = contentToken.GetString() ?? "";
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        fullResponse.Append(token);
+                        onToken?.Invoke(token);
+                    }
                 }
+
+                // Tool calls arrive in the final chunk for thinking models.
+                streamedToolCalls.AddRange(ParseNativeToolCalls(msg));
             }
 
             if (chunk.TryGetProperty("done", out var done) && done.GetBoolean())
@@ -273,60 +313,57 @@ public class AgentInvoker
             }
         }
 
-        return fullResponse.ToString();
+        return new LlmCallResult(fullResponse.ToString(), streamedToolCalls);
     }
 
-    private List<ToolCall> ParseToolCalls(string output)
+    /// <summary>Parses tool_calls from an Ollama message JSON element.</summary>
+    private static List<OllamaNativeToolCall> ParseNativeToolCalls(JsonElement messageEl)
     {
-        var calls = new List<ToolCall>();
-        var seen = new HashSet<int>(); // track match start positions to avoid duplicates
+        var result = new List<OllamaNativeToolCall>();
 
-        // Primary: strict pattern with closing tag
-        var strictPattern = new System.Text.RegularExpressions.Regex(
-            @"<tool_call>\s*(\w+)\s*(.*?)</tool_call>",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (!messageEl.TryGetProperty("tool_calls", out var tcEl) ||
+            tcEl.ValueKind != JsonValueKind.Array)
+            return result;
 
-        foreach (System.Text.RegularExpressions.Match match in strictPattern.Matches(output))
+        foreach (var tc in tcEl.EnumerateArray())
         {
-            if (seen.Add(match.Index))
-                TryAddToolCall(calls, match.Groups[1].Value, match.Groups[2].Value.Trim());
+            if (!tc.TryGetProperty("function", out var fn)) continue;
+
+            var name = fn.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            if (string.IsNullOrEmpty(name)) continue;
+
+            var args = new Dictionary<string, JsonElement>();
+            if (fn.TryGetProperty("arguments", out var argsEl))
+            {
+                if (argsEl.ValueKind == JsonValueKind.Object)
+                {
+                    args = argsEl.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+                }
+                else if (argsEl.ValueKind == JsonValueKind.String)
+                {
+                    // Some model/Ollama versions serialise arguments as a JSON string.
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(argsEl.GetString() ?? "{}");
+                        args = doc.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+                    }
+                    catch { /* fall through with empty args */ }
+                }
+            }
+
+            result.Add(new OllamaNativeToolCall(name, args));
         }
 
-        // Fallback: unclosed tag — look for <tool_call>toolname {...} without </tool_call>
-        // Handles the common case where the model omits the closing tag.
-        var openPattern = new System.Text.RegularExpressions.Regex(
-            @"<tool_call>\s*(\w+)\s*(\{[^}]*\})",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
-
-        foreach (System.Text.RegularExpressions.Match match in openPattern.Matches(output))
-        {
-            // Only count this if the strict pattern didn't already capture it
-            if (seen.Add(match.Index))
-                TryAddToolCall(calls, match.Groups[1].Value, match.Groups[2].Value.Trim());
-        }
-
-        return calls;
+        return result;
     }
 
-    private static void TryAddToolCall(List<ToolCall> calls, string toolName, string paramsJson)
-    {
-        Dictionary<string, object> parameters;
-        try
+    /// <summary>Converts Ollama native tool calls to the internal ToolCall model.</summary>
+    private static List<ToolCall> ConvertNativeToolCalls(List<OllamaNativeToolCall> nativeCalls) =>
+        nativeCalls.Select(tc => new ToolCall
         {
-            parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(paramsJson)
-                ?? new Dictionary<string, object>();
-        }
-        catch
-        {
-            parameters = new Dictionary<string, object>();
-        }
-
-        calls.Add(new ToolCall
-        {
-            ToolName = toolName,
-            Parameters = parameters
-        });
-    }
+            ToolName = tc.Name,
+            Parameters = tc.Arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value)
+        }).ToList();
 
     private async Task<List<ToolResult>> ExecuteToolsAsync(
         List<ToolCall> calls,
@@ -374,4 +411,23 @@ public class ConversationMessage
 {
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+    /// <summary>Non-null when this is an assistant message that issued tool calls (native Ollama tool calling).</summary>
+    public List<OllamaNativeToolCall>? ToolCalls { get; set; }
 }
+
+/// <summary>A tool call returned by Ollama via message.tool_calls.</summary>
+public sealed class OllamaNativeToolCall
+{
+    public OllamaNativeToolCall(string name, Dictionary<string, System.Text.Json.JsonElement> arguments)
+    {
+        Name = name;
+        Arguments = arguments;
+    }
+    public string Name { get; }
+    public Dictionary<string, System.Text.Json.JsonElement> Arguments { get; }
+}
+
+/// <summary>Result returned by CallLlmAsync — visible content plus any structured tool calls.</summary>
+internal readonly record struct LlmCallResult(
+    string Content,
+    List<OllamaNativeToolCall> ToolCalls);

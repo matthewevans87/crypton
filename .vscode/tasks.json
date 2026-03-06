@@ -78,6 +78,22 @@
       "presentation": { "reveal": "always" }
     },
     {
+      "label": "build: Crypton.Api.ExecutionService",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Crypton.Api.ExecutionService/Crypton.Api.ExecutionService.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
       "label": "start: Crypton.Web.Dashboard",
       "type": "shell",
       "command": "npm run dev",
@@ -100,7 +116,8 @@
       "dependsOn": [
         "build: Crypton.Api.AgentRunner",
         "build: Crypton.Api.MarketData",
-        "build: Crypton.Api.MonitoringDashboard"
+        "build: Crypton.Api.MonitoringDashboard",
+        "build: Crypton.Api.ExecutionService"
       ],
       "dependsOrder": "sequence",
       "group": "build"
