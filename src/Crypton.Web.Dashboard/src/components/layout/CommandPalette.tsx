@@ -5,50 +5,99 @@ import { api } from '../../services/api';
 interface Command {
   id: string;
   label: string;
+  description?: string;
   category: 'recent' | 'panel' | 'navigation' | 'action' | 'agent';
   shortcut?: string;
+  /** Normal action: fires and closes the palette. */
   action: () => void;
+  /** Right-arrow action: fires without closing the palette (panel add commands only). */
+  keepOpenAction?: () => void;
+}
+
+/** Returns true when every whitespace-delimited token in `query` appears somewhere in `text`. */
+function matchesAllTokens(text: string, query: string): boolean {
+  if (!query.trim()) return true;
+  const lower = text.toLowerCase();
+  return query.trim().toLowerCase().split(/\s+/).every(token => lower.includes(token));
+}
+
+/** Wraps matched token substrings in a highlighted span. */
+function HighlightedLabel({ text, tokens }: { text: string; tokens: string[] }) {
+  if (!tokens.length) return <>{text}</>;
+
+  const lower = text.toLowerCase();
+  const ranges: [number, number][] = [];
+
+  for (const token of tokens) {
+    const idx = lower.indexOf(token);
+    if (idx !== -1) ranges.push([idx, idx + token.length]);
+  }
+
+  if (!ranges.length) return <>{text}</>;
+
+  // Sort and merge overlapping ranges
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [s, e] of ranges) {
+    if (merged.length && s <= merged[merged.length - 1][1]) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], e);
+    } else {
+      merged.push([s, e]);
+    }
+  }
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const [start, end] of merged) {
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    parts.push(
+      <span key={start} style={{ color: 'var(--color-info)', fontWeight: 700 }}>
+        {text.slice(start, end)}
+      </span>
+    );
+    cursor = end;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+
+  return <>{parts}</>;
 }
 
 const PANEL_COMMANDS: { type: PanelType; label: string; description: string }[] = [
-  { type: 'portfolio-summary', label: 'Portfolio Summary', description: 'Total value, 24h change, P&L' },
-  { type: 'holdings', label: 'Holdings', description: 'Asset holdings with allocation' },
-  { type: 'open-positions', label: 'Open Positions', description: 'Current positions with stops/targets' },
-  { type: 'trade-history', label: 'Trade History', description: 'Recent trades with P&L' },
-  { type: 'strategy-overview', label: 'Strategy Overview', description: 'Mode, posture, validity' },
-  { type: 'strategy-parameters', label: 'Strategy Parameters', description: 'Risk limits and constraints' },
-  { type: 'strategy-rationale', label: 'Strategy Rationale', description: 'Human-readable strategy text' },
-  { type: 'position-rules', label: 'Position Rules', description: 'Entry conditions and allocations' },
-  { type: 'price-ticker', label: 'Price Ticker', description: 'Live price with 24h change' },
-  { type: 'price-chart', label: 'Price Chart', description: 'Candlestick chart with indicators' },
-  { type: 'technical-indicators', label: 'Technical Indicators', description: 'RSI, MACD, Bollinger Bands' },
-  { type: 'macro-signals', label: 'Macro Signals', description: 'Trend, volatility, sentiment' },
-  { type: 'agent-state', label: 'Agent State', description: 'Current agent and state' },
-  { type: 'agent-activity', label: 'Agent Activity', description: 'Activity indicator and progress' },
-  { type: 'reasoning-trace', label: 'Reasoning Trace', description: 'Live agent thinking stream' },
-  { type: 'tool-calls', label: 'Tool Calls', description: 'List of tool invocations' },
-  { type: 'tool-call-detail', label: 'Tool Call Detail', description: 'Input/output of selected tool' },
-  { type: 'cycle-performance', label: 'Cycle Performance', description: 'Current cycle P&L and metrics' },
-  { type: 'daily-loss-limit', label: 'Daily Loss Limit', description: 'Status bar for daily limit' },
-  { type: 'lifetime-performance', label: 'Lifetime Performance', description: 'Total P&L and statistics' },
-  { type: 'cycle-history', label: 'Cycle History', description: 'List of past cycles' },
-  { type: 'loop-state', label: 'Loop State', description: 'Current step and progress' },
-  { type: 'loop-timeline', label: 'Loop Timeline', description: 'Visual timeline of cycle' },
-  { type: 'evaluation-rating', label: 'Evaluation Rating', description: 'A-F rating with trend' },
-  { type: 'recommendations', label: 'Recommendations', description: 'Key points from evaluation' },
-  { type: 'system-diagnostics', label: 'System Diagnostics', description: 'Live health of all services' },
-  { type: 'system-status', label: 'System Status', description: 'At-a-glance status for all services' },
-  { type: 'connection-health', label: 'Connection Health', description: 'HTTP and SignalR connectivity per service' },
-  { type: 'error-log', label: 'Error Log', description: 'Aggregated errors and warnings from all services' },
-  { type: 'ws-feed-marketdata', label: 'WS Feed: Market Data', description: 'Raw SignalR events from the market data service' },
-  { type: 'ws-feed-execution', label: 'WS Feed: Execution', description: 'Raw SignalR events from the execution service' },
-  { type: 'ws-feed-agentrunner', label: 'WS Feed: Agent Runner', description: 'Raw SignalR events from the agent runner service' },
+  // Agent Runner
+  { type: 'agent-state', label: 'Agent: State', description: 'Current agent state, progress, and active tool' },
+  { type: 'loop-state', label: 'Agent: Loop', description: 'Step timeline, cycle interval, next cycle time' },
+  { type: 'reasoning-trace', label: 'Agent: Reasoning Trace', description: 'Live agent thinking stream' },
+  { type: 'tool-calls', label: 'Agent: Tool Calls', description: 'List of tool invocations' },
+  { type: 'tool-call-detail', label: 'Agent: Tool Call Detail', description: 'Input/output of selected tool' },
+  { type: 'evaluation-rating', label: 'Agent: Evaluation Rating', description: 'A-F rating with trend from latest evaluation' },
+  { type: 'ws-feed-agentrunner', label: 'Agent: WS Feed', description: 'Raw SignalR events from the agent runner service' },
+  // Execution Service
+  { type: 'portfolio-summary', label: 'Execution: Portfolio Summary', description: 'Total value, 24h change, P&L' },
+  { type: 'holdings', label: 'Execution: Holdings', description: 'Asset holdings with allocation' },
+  { type: 'open-positions', label: 'Execution: Open Positions', description: 'Current positions with stops/targets' },
+  { type: 'strategy-overview', label: 'Execution: Strategy Overview', description: 'Mode, posture, validity, risk parameters' },
+  { type: 'daily-loss-limit', label: 'Execution: Daily Loss Limit', description: 'Status bar for daily loss limit usage' },
+  { type: 'cycle-performance', label: 'Execution: Cycle Performance', description: 'Current cycle P&L, win rate, evaluation rating' },
+  { type: 'cycle-history', label: 'Execution: Cycle History', description: 'List of past cycles with summary stats' },
+  { type: 'cycle-detail', label: 'Execution: Cycle Detail', description: 'Detailed view of a specific cycle' },
+  { type: 'ws-feed-execution', label: 'Execution: WS Feed', description: 'Raw SignalR events from the execution service' },
+  // Market Data
+  { type: 'price-ticker', label: 'Market: Price Ticker', description: 'Live price with 24h change, bid/ask' },
+  { type: 'price-chart', label: 'Market: Price Chart', description: 'Candlestick chart with OHLCV data' },
+  { type: 'technical-indicators', label: 'Market: Technical Indicators', description: 'RSI, MACD, Bollinger Bands' },
+  { type: 'ws-feed-marketdata', label: 'Market: WS Feed', description: 'Raw SignalR events from the market data service' },
+  // System
+  { type: 'system-status', label: 'System: Status', description: 'At-a-glance status for all services' },
+  { type: 'system-diagnostics', label: 'System: Diagnostics', description: 'Live health, metrics, and alerts for all services' },
+  { type: 'connection-health', label: 'System: Connection Health', description: 'HTTP and SignalR connectivity per service' },
+  { type: 'error-log', label: 'System: Error Log', description: 'Aggregated errors and warnings from all services' },
 ];
 
 export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const { toggleCommandPalette, activeTabId, addPanel, tabs, recentCommands, addRecentCommand } = useDashboardStore();
 
   const commands: Command[] = useMemo(() => {
@@ -93,20 +142,21 @@ export function CommandPalette() {
           api.agent.abort().catch((e) => console.error('Abort failed:', e));
         },
       },
-      ...PANEL_COMMANDS.map((pc) => ({
-        id: `add-${pc.type}`,
-        label: pc.label,
-        category: 'panel' as const,
-        action: () => {
-          const panel: PanelConfig = {
-            id: `${pc.type}-${Date.now()}`,
-            type: pc.type,
-          };
+      ...PANEL_COMMANDS.map((pc) => {
+        const addPanelFn = () => {
+          const panel: PanelConfig = { id: `${pc.type}-${Date.now()}`, type: pc.type };
           addPanel(activeTabId, panel);
           addRecentCommand(`add-${pc.type}`);
-          toggleCommandPalette();
-        },
-      })),
+        };
+        return {
+          id: `add-${pc.type}`,
+          label: pc.label,
+          description: pc.description,
+          category: 'panel' as const,
+          action: () => { addPanelFn(); toggleCommandPalette(); },
+          keepOpenAction: () => { addPanelFn(); },
+        };
+      }),
       ...tabs.map((tab) => ({
         id: `nav-${tab.id}`,
         label: `Switch to ${tab.title}`,
@@ -146,24 +196,37 @@ export function CommandPalette() {
       .filter((c): c is Command => c !== undefined);
   }, [recentCommands, commands]);
 
-  const filteredCommands = query
-    ? commands.filter(
-      (c) =>
-        c.label.toLowerCase().includes(query.toLowerCase()) ||
-        c.category.toLowerCase().includes(query.toLowerCase())
-    )
-    : commands;
+  const tokens = useMemo(
+    () => query.trim().toLowerCase().split(/\s+/).filter(Boolean),
+    [query]
+  );
 
-  const displayCommands = query
-    ? filteredCommands
-    : [
+  const filteredCommands = useMemo(() => {
+    if (!query.trim()) return commands;
+    return commands.filter(c =>
+      matchesAllTokens(`${c.label} ${c.description ?? ''} ${c.category}`, query)
+    );
+  }, [commands, query]);
+
+  const displayCommands: Command[] = useMemo(() => {
+    if (query.trim()) return filteredCommands;
+    return [
       ...recentCommandItems.map(cmd => ({ ...cmd, category: 'recent' as const })),
       ...filteredCommands.filter(cmd => !recentCommands.includes(cmd.id)),
     ];
+  }, [query, filteredCommands, recentCommandItems, recentCommands]);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Keep selected item scrolled into view
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const selected = list.querySelector('[data-selected="true"]') as HTMLElement | null;
+    selected?.scrollIntoView({ block: 'nearest' });
+  }, [selectedIndex]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -177,6 +240,18 @@ export function CommandPalette() {
         setSelectedIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === 'Enter' && displayCommands[selectedIndex]) {
         displayCommands[selectedIndex].action();
+      } else if (e.key === 'ArrowRight') {
+        const input = inputRef.current;
+        if (
+          input &&
+          input.selectionStart === input.value.length &&
+          input.selectionEnd === input.value.length &&
+          displayCommands[selectedIndex]
+        ) {
+          e.preventDefault();
+          const cmd = displayCommands[selectedIndex];
+          (cmd.keepOpenAction ?? cmd.action)();
+        }
       }
     };
 
@@ -188,12 +263,23 @@ export function CommandPalette() {
     setSelectedIndex(0);
   }, [query]);
 
-  const groupedCommands = displayCommands.reduce((acc, cmd) => {
-    const categoryLabel = cmd.category === 'recent' ? 'recent' : cmd.category;
-    if (!acc[categoryLabel]) acc[categoryLabel] = [];
-    acc[categoryLabel].push(cmd);
-    return acc;
-  }, {} as Record<string, Command[]>);
+  const groupedCommands = useMemo(() =>
+    displayCommands.reduce((acc, cmd) => {
+      const key = cmd.category;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(cmd);
+      return acc;
+    }, {} as Record<string, Command[]>),
+    [displayCommands]
+  );
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    recent: 'Recent',
+    agent: 'Agent Controls',
+    panel: 'Panels',
+    navigation: 'Navigation',
+    action: 'Actions',
+  };
 
   return (
     <div
@@ -211,7 +297,7 @@ export function CommandPalette() {
     >
       <div
         style={{
-          width: '500px',
+          width: '540px',
           maxHeight: '60vh',
           backgroundColor: 'var(--bg-panel)',
           border: '1px solid var(--border-default)',
@@ -228,7 +314,7 @@ export function CommandPalette() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command..."
+            placeholder="Type a command or panel name..."
             style={{
               width: '100%',
               backgroundColor: 'transparent',
@@ -241,7 +327,7 @@ export function CommandPalette() {
           />
         </div>
 
-        <div style={{ overflow: 'auto', flex: 1 }}>
+        <div ref={listRef} style={{ overflow: 'auto', flex: 1 }}>
           {Object.entries(groupedCommands).map(([category, cmds]) => (
             <div key={category}>
               <div
@@ -254,13 +340,15 @@ export function CommandPalette() {
                   backgroundColor: 'var(--bg-panel-header)',
                 }}
               >
-                {({ recent: 'Recent', agent: 'Agent Controls', action: 'Actions', panel: 'Panels', navigation: 'Navigation' } as Record<string, string>)[category] ?? category}
+                {CATEGORY_LABELS[category] ?? category}
               </div>
               {cmds.map((cmd) => {
                 const index = displayCommands.indexOf(cmd);
+                const isSelected = index === selectedIndex;
                 return (
                   <div
                     key={cmd.id}
+                    data-selected={isSelected}
                     onClick={cmd.action}
                     style={{
                       padding: 'var(--space-2) var(--space-3)',
@@ -268,17 +356,48 @@ export function CommandPalette() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      backgroundColor: index === selectedIndex ? 'var(--border-default)' : 'transparent',
+                      backgroundColor: isSelected ? 'var(--border-default)' : 'transparent',
                       color: 'var(--text-primary)',
+                      gap: 'var(--space-3)',
                     }}
                     onMouseEnter={() => setSelectedIndex(index)}
                   >
-                    <span>{cmd.label}</span>
-                    {cmd.shortcut && (
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                        {cmd.shortcut}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                      <span>
+                        <HighlightedLabel text={cmd.label} tokens={tokens} />
                       </span>
-                    )}
+                      {cmd.description && (
+                        <span style={{
+                          fontSize: 'var(--font-size-xs)',
+                          color: 'var(--text-tertiary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          <HighlightedLabel text={cmd.description} tokens={tokens} />
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+                      {cmd.shortcut && (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                          {cmd.shortcut}
+                        </span>
+                      )}
+                      {cmd.keepOpenAction && isSelected && (
+                        <span style={{
+                          fontSize: '10px',
+                          color: 'var(--text-tertiary)',
+                          fontFamily: 'var(--font-mono)',
+                          border: '1px solid var(--border-default)',
+                          borderRadius: '3px',
+                          padding: '0 4px',
+                          lineHeight: '16px',
+                        }}>
+                          → add
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}

@@ -6,6 +6,7 @@ using AgentRunner.Configuration;
 using AgentRunner.Hubs;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
+using AgentRunner.Startup;
 using AgentRunner.Telemetry;
 using AgentRunner.StateMachine;
 using AgentRunner.Tools;
@@ -126,6 +127,19 @@ _ = Task.Run(async () =>
     try
     {
         Log.Information("Starting agent runner service...");
+
+        var validator = new StartupValidator(new HttpClient());
+        var validation = await validator.ValidateAsync(config);
+
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+                Log.Error("Startup validation failed: {Error}", error);
+
+            app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+            return;
+        }
+
         await agentRunnerService.StartAsync();
         Log.Information("Agent runner service started successfully");
     }

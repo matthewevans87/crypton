@@ -1,8 +1,10 @@
 import { useDashboardStore } from '../../store/dashboard';
+import { formatTimestamp } from '../../utils/dateUtils';
 
 export function CyclePerformancePanel() {
   const { performance } = useDashboardStore();
   const cycle = performance.currentCycle;
+  const evaluation = performance.evaluation;
 
   if (!cycle) {
     return <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>;
@@ -18,6 +20,13 @@ export function CyclePerformancePanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+      {/* Cycle timestamp */}
+      {cycle.startDate && (
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>
+          Started {formatTimestamp(cycle.startDate, 'relative')}
+        </div>
+      )}
+
       {/* Total P&L */}
       <div>
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: '2px' }}>
@@ -80,9 +89,9 @@ export function CyclePerformancePanel() {
       </div>
 
       {/* Daily Loss Limit Status */}
-      <div style={{ 
-        marginTop: 'var(--space-1)', 
-        padding: '4px 6px', 
+      <div style={{
+        marginTop: 'var(--space-1)',
+        padding: '4px 6px',
         backgroundColor: cycle.dailyLossLimitBreached ? 'rgba(255, 68, 102, 0.1)' : 'rgba(0, 255, 200, 0.1)',
         borderRadius: '2px',
         fontSize: 'var(--font-size-xs)',
@@ -91,6 +100,33 @@ export function CyclePerformancePanel() {
       }}>
         {cycle.dailyLossLimitBreached ? '⚠ DAILY LIMIT BREACHED' : '✓ Daily Limit Active'}
       </div>
+
+      {/* Evaluation Rating */}
+      {evaluation && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '4px 6px',
+          backgroundColor: 'var(--bg-viewport)',
+          borderRadius: '2px',
+        }}>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)' }}>Evaluation</span>
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 600,
+            color: evaluation.rating === 'A' ? 'var(--color-profit)'
+              : evaluation.rating === 'B' ? 'var(--color-info)'
+                : evaluation.rating === 'C' ? 'var(--color-warning)'
+                  : 'var(--color-loss)',
+          }}>
+            {evaluation.rating}
+            {evaluation.ratingTrend === 'up' && ' ↑'}
+            {evaluation.ratingTrend === 'down' && ' ↓'}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

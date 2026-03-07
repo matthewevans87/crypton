@@ -122,6 +122,23 @@ export function LoopStatePanel() {
         })}
       </div>
 
+      {/* Progress Bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
+        <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-default)', borderRadius: '2px', overflow: 'hidden' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${state.progressPercent}%`,
+              backgroundColor: isWaiting ? 'var(--color-profit)' : 'var(--color-info)',
+              transition: 'width 300ms ease',
+            }}
+          />
+        </div>
+        <span style={{ fontSize: '9px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)', minWidth: '28px', textAlign: 'right' }}>
+          {state.progressPercent.toFixed(0)}%
+        </span>
+      </div>
+
       {/* Current State Details */}
       <div style={{ marginTop: 'var(--space-2)' }}>
         <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>Current Step</div>
