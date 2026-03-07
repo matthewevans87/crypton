@@ -38,13 +38,15 @@ public class SystemController : ControllerBase
     [HttpGet("status")]
     public async Task<ActionResult<SystemStatus>> GetStatus(CancellationToken requestCt)
     {
+        var correlationId = HttpContext.TraceIdentifier;
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestCt);
         cts.CancelAfter(TimeSpan.FromSeconds(4));
         var ct = cts.Token;
 
-        var mdTask = CheckMarketDataAsync(ct);
-        var esTask = CheckExecutionServiceAsync(ct);
-        var arTask = CheckAgentRunnerAsync(ct);
+        var mdTask = CheckMarketDataAsync(correlationId, ct);
+        var esTask = CheckExecutionServiceAsync(correlationId, ct);
+        var arTask = CheckAgentRunnerAsync(correlationId, ct);
 
         await Task.WhenAll(mdTask, esTask, arTask);
 
@@ -59,14 +61,14 @@ public class SystemController : ControllerBase
     // Per-service checks
     // -----------------------------------------------------------------------
 
-    private async Task<ServiceHealth> CheckMarketDataAsync(CancellationToken ct)
+    private async Task<ServiceHealth> CheckMarketDataAsync(string correlationId, CancellationToken ct)
     {
         try
         {
             var (statusCode, body) = await _marketData.GetRawMetricsAsync(ct);
 
             if (statusCode >= 500 || statusCode == 503)
-                return Offline("MarketData", _marketData.IsConnected);
+                return Offline("MarketData", _marketData.IsConnected, correlationId);
 
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
@@ -84,11 +86,13 @@ public class SystemController : ControllerBase
                 : new Dictionary<string, object?>();
 
             // Augment with keys we always want visible
-            var wsConnected = metrics.TryGetValue("wsConnected", out var wsc) && wsc?.ToString() == "True";
+            // MetricsCollector emits "exchange.connected" (bool) — not "wsConnected"
+            var wsConnected = metrics.TryGetValue("exchange.connected", out var wsc) && wsc?.ToString() == "True";
             var alertCount = alerts.Count;
 
             string detail;
             string status;
+            var reasons = new List<ServiceHealthReason>();
             if (!isHealthy || alertCount > 0)
             {
                 status = "degraded";
@@ -96,6 +100,24 @@ public class SystemController : ControllerBase
                 detail = wsConnected
                     ? $"Degraded — {alertSummary}"
                     : $"Exchange disconnected — {alertSummary}";
+
+                if (!wsConnected)
+                {
+                    reasons.Add(new ServiceHealthReason
+                    {
+                        Code = "marketdata.websocket_disconnected",
+                        Summary = "Market data WebSocket connection is disconnected.",
+                        Severity = "critical",
+                        Category = "connectivity",
+                        RecommendedAction = "Verify exchange connectivity and credentials, then trigger a reconnect workflow.",
+                        IsUserActionable = true,
+                    });
+                }
+
+                foreach (var alert in alerts)
+                {
+                    reasons.Add(MapMarketDataAlertToReason(alert));
+                }
             }
             else
             {
@@ -110,6 +132,8 @@ public class SystemController : ControllerBase
                 Detail = detail,
                 CheckedAt = DateTime.UtcNow,
                 SignalRConnected = _marketData.IsConnected,
+                CorrelationId = correlationId,
+                Reasons = reasons,
                 Metrics = BuildMetrics(new Dictionary<string, object?>
                 {
                     ["wsConnected"] = wsConnected,
@@ -121,24 +145,29 @@ public class SystemController : ControllerBase
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "MarketData health check failed");
-            return Offline("MarketData", false);
+            return Offline("MarketData", false, correlationId);
         }
     }
 
-    private async Task<ServiceHealth> CheckExecutionServiceAsync(CancellationToken ct)
+    private async Task<ServiceHealth> CheckExecutionServiceAsync(string correlationId, CancellationToken ct)
     {
         try
         {
             var (statusCode, body) = await _execution.GetRawStatusAsync(ct);
 
             if (statusCode >= 500 || statusCode == 503)
-                return Offline("ExecutionService", _execution.IsConnected);
+                return Offline("ExecutionService", _execution.IsConnected, correlationId);
 
             using var doc = JsonDocument.Parse(body);
             var root = doc.RootElement;
 
             var mode = root.TryGetProperty("mode", out var mv) ? mv.GetString() : "unknown";
             var safeMode = root.TryGetProperty("safe_mode", out var sm) && sm.GetBoolean();
+            var safeModeTriggered = root.TryGetProperty("safe_mode_triggered", out var smt) && smt.GetBoolean();
+            var safeModeReason = root.TryGetProperty("safe_mode_reason", out var smr) && smr.ValueKind != JsonValueKind.Null
+                ? smr.GetString()
+                : null;
+            var entriesSuspended = root.TryGetProperty("entries_suspended", out var es) && es.GetBoolean();
             var strategyState = root.TryGetProperty("strategy_state", out var ss) ? ss.GetString() : "unknown";
             var openPositions = root.TryGetProperty("open_positions", out var op) ? op.GetInt32() : 0;
             var strategyId = root.TryGetProperty("strategy_id", out var si) && si.ValueKind != JsonValueKind.Null
@@ -146,16 +175,54 @@ public class SystemController : ControllerBase
 
             string status;
             string detail;
+            var reasons = new List<ServiceHealthReason>();
 
             if (safeMode)
             {
                 status = "degraded";
                 detail = $"Safe mode active — {openPositions} open position{(openPositions == 1 ? "" : "s")}";
+
+                reasons.Add(new ServiceHealthReason
+                {
+                    Code = "execution.safe_mode_active",
+                    Summary = safeModeReason is { Length: > 0 }
+                        ? $"Execution service entered safe mode: {safeModeReason}."
+                        : "Execution service entered safe mode and is suppressing live trading actions.",
+                    Severity = "critical",
+                    Category = "risk",
+                    RecommendedAction = "Review risk thresholds and active exposure before clearing safe mode.",
+                    IsUserActionable = true,
+                });
             }
             else if (strategyState is "waiting" or "no_strategy" or null)
             {
                 status = "degraded";
                 detail = "Waiting for strategy — no active strategy loaded";
+
+                reasons.Add(new ServiceHealthReason
+                {
+                    Code = "execution.no_active_strategy",
+                    Summary = "No strategy is currently active, so execution cannot progress normally.",
+                    Severity = "warning",
+                    Category = "config",
+                    RecommendedAction = "Load or activate a valid strategy, then confirm strategy state transitions to running.",
+                    IsUserActionable = true,
+                });
+            }
+            else if (entriesSuspended)
+            {
+                status = "degraded";
+                detail = "Entries suspended by risk controls";
+
+                reasons.Add(new ServiceHealthReason
+                {
+                    Code = "execution.entries_suspended",
+                    Summary = "New entries are suspended because portfolio risk constraints were breached.",
+                    Severity = "warning",
+                    Category = "risk",
+                    RecommendedAction = "Check exposure and daily loss metrics; entries should resume once metrics return within limits.",
+                    IsUserActionable = true,
+                });
             }
             else
             {
@@ -171,10 +238,15 @@ public class SystemController : ControllerBase
                 Detail = detail,
                 CheckedAt = DateTime.UtcNow,
                 SignalRConnected = _execution.IsConnected,
+                CorrelationId = correlationId,
+                Reasons = reasons,
                 Metrics = new Dictionary<string, object?>
                 {
                     ["mode"] = mode,
                     ["safeMode"] = safeMode,
+                    ["safeModeTriggered"] = safeModeTriggered,
+                    ["safeModeReason"] = safeModeReason,
+                    ["entriesSuspended"] = entriesSuspended,
                     ["strategyState"] = strategyState,
                     ["strategyId"] = strategyId,
                     ["openPositions"] = openPositions,
@@ -184,18 +256,18 @@ public class SystemController : ControllerBase
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "ExecutionService health check failed");
-            return Offline("ExecutionService", false);
+            return Offline("ExecutionService", false, correlationId);
         }
     }
 
-    private async Task<ServiceHealth> CheckAgentRunnerAsync(CancellationToken ct)
+    private async Task<ServiceHealth> CheckAgentRunnerAsync(string correlationId, CancellationToken ct)
     {
         try
         {
             var status = await _agentRunner.GetStatusAsync(ct);
 
             if (status is null)
-                return Offline("AgentRunner", _agentRunner.IsConnected);
+                return Offline("AgentRunner", _agentRunner.IsConnected, correlationId);
 
             var root = status.Value;
 
@@ -215,16 +287,40 @@ public class SystemController : ControllerBase
 
             string serviceStatus;
             string detail;
+            var reasons = new List<ServiceHealthReason>();
 
             if (isPaused)
             {
                 serviceStatus = "degraded";
                 detail = $"Paused — {pauseReason ?? "no reason given"}";
+
+                reasons.Add(new ServiceHealthReason
+                {
+                    Code = "agentrunner.paused",
+                    Summary = pauseReason is { Length: > 0 }
+                        ? $"Agent loop is paused: {pauseReason}."
+                        : "Agent loop is paused with no explicit reason.",
+                    Severity = "warning",
+                    Category = "operator",
+                    RecommendedAction = "Confirm whether pause is intentional; resume loop when ready.",
+                    IsUserActionable = true,
+                });
             }
             else if (currentState is "Failed")
             {
                 serviceStatus = "degraded";
                 detail = "Agent loop in failed state";
+
+                reasons.Add(new ServiceHealthReason
+                {
+                    Code = "agentrunner.failed_state",
+                    Summary = "Agent loop entered a failed state and may require intervention.",
+                    Severity = "critical",
+                    Category = "bug",
+                    RecommendedAction = "Inspect recent error logs and state transitions, then restart loop after root cause review.",
+                    IsUserActionable = true,
+                    BugSuspected = true,
+                });
             }
             else if (currentState is "WaitingForNextCycle")
             {
@@ -253,6 +349,8 @@ public class SystemController : ControllerBase
                 Detail = detail,
                 CheckedAt = DateTime.UtcNow,
                 SignalRConnected = _agentRunner.IsConnected,
+                CorrelationId = correlationId,
+                Reasons = reasons,
                 Metrics = new Dictionary<string, object?>
                 {
                     ["currentState"] = currentState,
@@ -266,18 +364,85 @@ public class SystemController : ControllerBase
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "AgentRunner health check failed");
-            return Offline("AgentRunner", null);
+            return Offline("AgentRunner", null, correlationId);
         }
     }
 
-    private static ServiceHealth Offline(string name, bool? signalRConnected) => new()
+    private static ServiceHealth Offline(string name, bool? signalRConnected, string correlationId) => new()
     {
         Name = name,
         Status = "offline",
         Detail = "Service unreachable",
         CheckedAt = DateTime.UtcNow,
         SignalRConnected = signalRConnected,
+        CorrelationId = correlationId,
+        Reasons =
+        [
+            new ServiceHealthReason
+            {
+                Code = $"{name.ToLowerInvariant()}.unreachable",
+                Summary = $"{name} did not respond to health checks before timeout.",
+                Severity = "critical",
+                Category = "connectivity",
+                RecommendedAction = "Check service process/container status, network path, and recent startup errors.",
+                IsUserActionable = true,
+            },
+        ],
     };
+
+    private static ServiceHealthReason MapMarketDataAlertToReason(string alert)
+    {
+        var lower = alert.ToLowerInvariant();
+
+        if (lower.Contains("stale"))
+        {
+            return new ServiceHealthReason
+            {
+                Code = "marketdata.price_stale",
+                Summary = alert,
+                Severity = "critical",
+                Category = "data-quality",
+                RecommendedAction = "Validate exchange feed freshness and WebSocket subscription health.",
+                IsUserActionable = true,
+            };
+        }
+
+        if (lower.Contains("circuit breaker"))
+        {
+            return new ServiceHealthReason
+            {
+                Code = "marketdata.circuit_breaker_open",
+                Summary = alert,
+                Severity = "critical",
+                Category = "dependency",
+                RecommendedAction = "Review upstream exchange/API failures and wait for circuit reset before resuming normal operation.",
+                IsUserActionable = true,
+            };
+        }
+
+        if (lower.Contains("rate limit"))
+        {
+            return new ServiceHealthReason
+            {
+                Code = "marketdata.rate_limit_pressure",
+                Summary = alert,
+                Severity = "warning",
+                Category = "external-provider",
+                RecommendedAction = "Reduce request pressure or widen polling intervals to stay within provider limits.",
+                IsUserActionable = true,
+            };
+        }
+
+        return new ServiceHealthReason
+        {
+            Code = "marketdata.alert",
+            Summary = alert,
+            Severity = "warning",
+            Category = "unknown",
+            RecommendedAction = "Inspect MarketData metrics and logs for additional context.",
+            IsUserActionable = true,
+        };
+    }
 
     /// <summary>
     /// Merges <paramref name="base"/> with selected keys from <paramref name="source"/> if present.

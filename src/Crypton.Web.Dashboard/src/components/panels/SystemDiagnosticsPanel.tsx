@@ -21,6 +21,11 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
     AgentRunner: 'AI agent loop, cycle orchestration, artifact generation',
 };
 
+const REASON_SEVERITY_COLOR: Record<'warning' | 'critical', string> = {
+    warning: 'var(--color-warning)',
+    critical: 'var(--color-loss)',
+};
+
 function formatMetricKey(key: string): string {
     return key
         .replace(/([A-Z])/g, ' $1')
@@ -45,6 +50,7 @@ function ServiceCard({ svc }: { svc: ServiceHealth }) {
         ([key, val]) => val !== null && val !== undefined && key !== 'alerts'
     );
     const alertList = Array.isArray(svc.metrics['alerts']) ? (svc.metrics['alerts'] as string[]) : [];
+    const reasons = Array.isArray(svc.reasons) ? svc.reasons : [];
 
     const checkedAt = svc.checkedAt
         ? new Date(svc.checkedAt).toLocaleTimeString()
@@ -141,6 +147,75 @@ function ServiceCard({ svc }: { svc: ServiceHealth }) {
                             ⚠ {alert}
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Structured reason stack */}
+            {reasons.length > 0 && (
+                <div style={{ margin: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {reasons.map((reason) => {
+                        const severityColor = REASON_SEVERITY_COLOR[reason.severity] ?? 'var(--text-secondary)';
+                        return (
+                            <div
+                                key={`${svc.name}-${reason.code}`}
+                                style={{
+                                    border: `1px solid ${severityColor}44`,
+                                    borderRadius: '4px',
+                                    padding: '6px 8px',
+                                    backgroundColor: `${severityColor}10`,
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                    <span
+                                        style={{
+                                            fontSize: '10px',
+                                            lineHeight: 1,
+                                            border: `1px solid ${severityColor}66`,
+                                            color: severityColor,
+                                            borderRadius: '3px',
+                                            padding: '1px 5px',
+                                            textTransform: 'uppercase',
+                                            fontFamily: 'var(--font-mono)',
+                                        }}
+                                    >
+                                        {reason.severity}
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                                        {reason.code}
+                                    </span>
+                                    {reason.bugSuspected && (
+                                        <span
+                                            style={{
+                                                fontSize: '10px',
+                                                border: '1px solid var(--color-loss)',
+                                                color: 'var(--color-loss)',
+                                                borderRadius: '3px',
+                                                padding: '1px 5px',
+                                                textTransform: 'uppercase',
+                                                fontFamily: 'var(--font-mono)',
+                                            }}
+                                            title='Probable product bug; inspect logs and correlation IDs.'
+                                        >
+                                            bug suspected
+                                        </span>
+                                    )}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                                    {reason.summary}
+                                </div>
+                                {reason.recommendedAction && (
+                                    <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                                        Action: {reason.recommendedAction}
+                                    </div>
+                                )}
+                                {reason.bugSuspected && svc.correlationId && (
+                                    <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                                        Correlation: {svc.correlationId}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 

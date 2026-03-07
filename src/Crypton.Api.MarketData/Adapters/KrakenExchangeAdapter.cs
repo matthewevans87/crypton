@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MarketDataService.Configuration;
 using MarketDataService.Models;
 using MarketDataService.Services;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
 
     private readonly string? _apiKey;
     private readonly string? _apiSecret;
+    private readonly string _wsBaseUrl;
 
     private readonly SemaphoreSlim _rateLimiter = new(1, 1);
     private DateTime _nextRequestTime = DateTime.MinValue;
@@ -60,18 +62,16 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         { "SOL/USD", "SOLUSD" }
     };
 
-    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory, IConfiguration configuration)
+    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory, KrakenConfig config)
     {
         _httpClient = httpClient;
         _logger = logger;
         _loggerFactory = loggerFactory;
-        _httpClient.BaseAddress = new Uri(configuration["Kraken:RestBaseUrl"] ?? "https://api.kraken.com");
+        _httpClient.BaseAddress = new Uri(config.RestBaseUrl);
         _currentReconnectDelay = _initialReconnectDelay;
 
-        // Keys are injected via env vars Kraken__ApiKey and Kraken__ApiSecret,
-        // which IConfiguration maps to Kraken:ApiKey and Kraken:ApiSecret.
-        _apiKey = configuration["Kraken:ApiKey"];
-        _apiSecret = configuration["Kraken:ApiSecret"];
+        _apiKey = config.ApiKey;
+        _apiSecret = config.ApiSecret;
 
         if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_apiSecret))
         {
@@ -82,8 +82,19 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _logger.LogInformation("Kraken API key configured");
         }
 
+        _wsBaseUrl = config.WsBaseUrl;
+
         var circuitBreakerLogger = _loggerFactory.CreateLogger<CircuitBreaker>();
         _circuitBreaker = new CircuitBreaker(new CircuitBreakerOptions(), circuitBreakerLogger);
+    }
+
+    public KrakenExchangeAdapter(HttpClient httpClient, ILogger<KrakenExchangeAdapter> logger, ILoggerFactory loggerFactory, IConfiguration configuration)
+        : this(
+            httpClient,
+            logger,
+            loggerFactory,
+            configuration.GetSection("Kraken").Get<KrakenConfig>() ?? new KrakenConfig())
+    {
     }
 
     private readonly ILoggerFactory _loggerFactory;
@@ -186,7 +197,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
             _webSocket = new ClientWebSocket();
             _webSocketCts = new CancellationTokenSource();
 
-            await _webSocket.ConnectAsync(new Uri("wss://ws.kraken.com"), cancellationToken);
+            await _webSocket.ConnectAsync(new Uri(_wsBaseUrl), cancellationToken);
 
             _isConnected = true;
             _lastConnectedAt = DateTime.UtcNow;
@@ -250,46 +261,26 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         if (_webSocket?.State != WebSocketState.Open)
             return;
 
-        var krakenSymbols = SymbolMapping.Values.ToList();
+        var symbols = SymbolMapping.Keys.ToList();
 
-        var subscribeMessage = new
-        {
-            @event = "subscribe",
-            pair = krakenSymbols,
-            subscription = new { name = "ticker" }
-        };
+        await SendWsMessageAsync(new { method = "subscribe", @params = new { channel = "ticker", symbol = symbols } }, cancellationToken);
+        _logger.LogInformation("Sent ticker subscription for {Symbols}", string.Join(", ", symbols));
 
-        var json = JsonSerializer.Serialize(subscribeMessage);
+        await SendWsMessageAsync(new { method = "subscribe", @params = new { channel = "book", symbol = symbols, depth = 25 } }, cancellationToken);
+        _logger.LogInformation("Sent book subscription for {Symbols}", string.Join(", ", symbols));
+
+        await SendWsMessageAsync(new { method = "subscribe", @params = new { channel = "trade", symbol = symbols, snapshot = false } }, cancellationToken);
+        _logger.LogInformation("Sent trade subscription for {Symbols}", string.Join(", ", symbols));
+    }
+
+    private async Task SendWsMessageAsync(object message, CancellationToken cancellationToken)
+    {
+        if (_webSocket?.State != WebSocketState.Open)
+            return;
+
+        var json = JsonSerializer.Serialize(message);
         var bytes = Encoding.UTF8.GetBytes(json);
         await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
-
-        _logger.LogInformation("Subscribed to ticker channel for {Symbols}", string.Join(", ", krakenSymbols));
-
-        var bookSubscribeMessage = new
-        {
-            @event = "subscribe",
-            pair = krakenSymbols,
-            subscription = new { name = "book", depth = 25 }
-        };
-
-        json = JsonSerializer.Serialize(bookSubscribeMessage);
-        bytes = Encoding.UTF8.GetBytes(json);
-        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
-
-        _logger.LogInformation("Subscribed to book channel for {Symbols}", string.Join(", ", krakenSymbols));
-
-        var tradeSubscribeMessage = new
-        {
-            @event = "subscribe",
-            pair = krakenSymbols,
-            subscription = new { name = "trade" }
-        };
-
-        json = JsonSerializer.Serialize(tradeSubscribeMessage);
-        bytes = Encoding.UTF8.GetBytes(json);
-        await _webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
-
-        _logger.LogInformation("Subscribed to trade channel for {Symbols}", string.Join(", ", krakenSymbols));
     }
 
     private CancellationTokenSource? _balanceUpdateCts;
@@ -816,17 +807,34 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         {
             while (_webSocket?.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
-                var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                using var messageStream = new MemoryStream();
+                WebSocketReceiveResult result;
 
-                if (result.MessageType == WebSocketMessageType.Close)
+                do
                 {
-                    _isConnected = false;
-                    OnConnectionStateChanged?.Invoke(this, false);
-                    _logger.LogWarning("Kraken WebSocket closed");
-                    break;
+                    result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        _isConnected = false;
+                        OnConnectionStateChanged?.Invoke(this, false);
+                        _logger.LogWarning("Kraken WebSocket closed");
+                        return;
+                    }
+
+                    if (result.Count > 0)
+                    {
+                        messageStream.Write(buffer, 0, result.Count);
+                    }
+                }
+                while (!result.EndOfMessage);
+
+                if (result.MessageType != WebSocketMessageType.Text)
+                {
+                    continue;
                 }
 
-                var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                var message = Encoding.UTF8.GetString(messageStream.ToArray());
                 ProcessMessage(message);
             }
         }
@@ -854,75 +862,83 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         {
             var data = JsonSerializer.Deserialize<JsonElement>(message);
 
-            // Skip if not an object (e.g., trade updates are arrays)
             if (data.ValueKind != JsonValueKind.Object)
+                return;
+
+            // Subscription response: has "method" property
+            if (data.TryGetProperty("method", out var methodEl))
             {
+                if (methodEl.GetString() == "subscribe")
+                {
+                    var success = data.TryGetProperty("success", out var s) && s.GetBoolean();
+                    if (success)
+                    {
+                        if (data.TryGetProperty("result", out var result))
+                        {
+                            var channel = result.TryGetProperty("channel", out var ch) ? ch.GetString() : "unknown";
+                            var sym = result.TryGetProperty("symbol", out var symEl) ? symEl.GetString() : "";
+                            lock (_lock) { _subscribedSymbols.Add(sym ?? ""); }
+                            _logger.LogInformation("Subscribed to {Channel} for {Symbol}", channel, sym);
+                        }
+                    }
+                    else
+                    {
+                        var error = data.TryGetProperty("error", out var err) ? err.GetString() : "unknown error";
+                        _logger.LogWarning("Kraken subscription failed: {Error}", error);
+                    }
+                }
                 return;
             }
 
-            if (data.TryGetProperty("event", out var eventType))
+            if (!data.TryGetProperty("channel", out var channelNameEl))
+                return;
+
+            var channelName = channelNameEl.GetString();
+
+            if (channelName == "heartbeat")
+                return;
+
+            if (channelName == "status")
             {
-                var eventName = eventType.GetString();
-
-                if (eventName == "heartbeat")
+                if (data.TryGetProperty("data", out var statusData) &&
+                    statusData.ValueKind == JsonValueKind.Array &&
+                    statusData.GetArrayLength() > 0)
                 {
-                    return;
+                    var systemStatus = statusData[0].TryGetProperty("system", out var sys) ? sys.GetString() : "unknown";
+                    _logger.LogInformation("Kraken system status: {Status}", systemStatus);
                 }
-
-                if (eventName == "systemStatus")
-                {
-                    _logger.LogInformation("Kraken system status: {Status}", data.TryGetProperty("status", out var status) ? status.GetString() : "unknown");
-                    return;
-                }
-
-                if (eventName == "subscriptionStatus")
-                {
-                    var channelName = data.TryGetProperty("channelName", out var cn) ? cn.GetString() : "";
-                    _logger.LogInformation("Subscribed to {Channel}", channelName);
-                    return;
-                }
+                return;
             }
 
-            if (data.ValueKind == JsonValueKind.Array && data.GetArrayLength() >= 4)
+            if (!data.TryGetProperty("data", out var dataArray) || dataArray.ValueKind != JsonValueKind.Array)
+                return;
+
+            foreach (var item in dataArray.EnumerateArray())
             {
-                var channelName = data[2].GetString();
+                var symbol = item.TryGetProperty("symbol", out var symEl)
+                    ? NormalizeKrakenSymbol(symEl.GetString())
+                    : string.Empty;
 
-                if (channelName?.StartsWith("ticker") == true)
+                if (string.IsNullOrEmpty(symbol))
+                    continue;
+
+                if (channelName == "ticker")
                 {
-                    var tickerData = data[1];
-                    var ticker = ParseTickerUpdate(tickerData, channelName);
+                    var ticker = ParseTickerUpdate(item, symbol);
                     if (ticker != null)
-                    {
                         OnPriceUpdate?.Invoke(this, ticker);
-                    }
                 }
-
-                if (channelName?.StartsWith("book") == true)
+                else if (channelName == "book")
                 {
-                    var bookData = data[1];
-                    var orderBook = ParseOrderBookUpdate(bookData, channelName);
+                    var orderBook = ParseOrderBookUpdate(item, symbol);
                     if (orderBook != null)
-                    {
                         OnOrderBookUpdate?.Invoke(this, orderBook);
-                    }
                 }
-
-                if (channelName?.StartsWith("trade") == true)
+                else if (channelName == "trade")
                 {
-                    var tradesData = data[1];
-                    var symbol = channelName.Replace("trade", "").Replace("XBT", "BTC");
-
-                    if (tradesData.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var tradeArray in tradesData.EnumerateArray())
-                        {
-                            var trade = ParseTradeUpdate(tradeArray, symbol);
-                            if (trade != null)
-                            {
-                                OnTrade?.Invoke(this, trade);
-                            }
-                        }
-                    }
+                    var trade = ParseTradeUpdate(item, symbol);
+                    if (trade != null)
+                        OnTrade?.Invoke(this, trade);
                 }
             }
         }
@@ -932,57 +948,58 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
     }
 
-    private PriceTicker? ParseTickerUpdate(JsonElement data, string channelName)
+    private static string NormalizeKrakenSymbol(string? pair)
+    {
+        if (string.IsNullOrWhiteSpace(pair))
+        {
+            return string.Empty;
+        }
+
+        var mappedSymbol = SymbolMapping.FirstOrDefault(kvp =>
+            string.Equals(kvp.Value, pair, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(mappedSymbol.Key))
+        {
+            return mappedSymbol.Key;
+        }
+
+        return pair.Replace("XBT", "BTC", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private PriceTicker? ParseTickerUpdate(JsonElement data, string symbol)
     {
         try
         {
-            var symbol = channelName.Replace("ticker", "").Replace("XBT", "BTC");
-
             var ticker = new PriceTicker
             {
                 Asset = symbol,
                 LastUpdated = DateTime.UtcNow
             };
 
-            if (data.TryGetProperty("c", out var close) && close.GetArrayLength() >= 1)
-            {
-                ticker.Price = decimal.Parse(close[0].GetString() ?? "0");
-            }
+            // WS v2: all fields are numeric, not string arrays
+            if (data.TryGetProperty("last", out var last))
+                ticker.Price = last.GetDecimal();
 
-            if (data.TryGetProperty("b", out var bid) && bid.GetArrayLength() >= 1)
-            {
-                ticker.Bid = decimal.Parse(bid[0].GetString() ?? "0");
-            }
+            if (data.TryGetProperty("bid", out var bid))
+                ticker.Bid = bid.GetDecimal();
 
-            if (data.TryGetProperty("a", out var ask) && ask.GetArrayLength() >= 1)
-            {
-                ticker.Ask = decimal.Parse(ask[0].GetString() ?? "0");
-            }
+            if (data.TryGetProperty("ask", out var ask))
+                ticker.Ask = ask.GetDecimal();
 
-            if (data.TryGetProperty("v", out var volume) && volume.GetArrayLength() >= 2)
-            {
-                ticker.Volume24h = decimal.Parse(volume[1].GetString() ?? "0");
-            }
+            if (data.TryGetProperty("volume", out var volume))
+                ticker.Volume24h = volume.GetDecimal();
 
-            if (data.TryGetProperty("h", out var high) && high.GetArrayLength() >= 2)
-            {
-                ticker.High24h = decimal.Parse(high[1].GetString() ?? "0");
-            }
+            if (data.TryGetProperty("high", out var high))
+                ticker.High24h = high.GetDecimal();
 
-            if (data.TryGetProperty("l", out var low) && low.GetArrayLength() >= 2)
-            {
-                ticker.Low24h = decimal.Parse(low[1].GetString() ?? "0");
-            }
+            if (data.TryGetProperty("low", out var low))
+                ticker.Low24h = low.GetDecimal();
 
-            if (data.TryGetProperty("p", out var vwap) && vwap.GetArrayLength() >= 2)
-            {
-                var vwapValue = decimal.Parse(vwap[1].GetString() ?? "0");
-                if (vwapValue > 0)
-                {
-                    ticker.Change24h = ticker.Price - vwapValue;
-                    ticker.ChangePercent24h = (ticker.Change24h / vwapValue) * 100;
-                }
-            }
+            if (data.TryGetProperty("change", out var change))
+                ticker.Change24h = change.GetDecimal();
+
+            if (data.TryGetProperty("change_pct", out var changePct))
+                ticker.ChangePercent24h = changePct.GetDecimal();
 
             return ticker;
         }
@@ -992,99 +1009,44 @@ public class KrakenExchangeAdapter : IExchangeAdapter
         }
     }
 
-    private OrderBook? ParseOrderBookUpdate(JsonElement data, string channelName)
+    private OrderBook? ParseOrderBookUpdate(JsonElement data, string symbol)
     {
         try
         {
-            var symbol = channelName.Replace("book", "").Replace("XBT", "BTC");
-
             var orderBook = new OrderBook
             {
                 Symbol = symbol,
                 LastUpdated = DateTime.UtcNow
             };
 
-            if (data.TryGetProperty("as", out var asks))
-            {
-                foreach (var ask in asks.EnumerateArray())
-                {
-                    if (ask.GetArrayLength() >= 3)
-                    {
-                        orderBook.Asks.Add(new OrderBookEntry
-                        {
-                            Price = decimal.Parse(ask[0].GetString() ?? "0"),
-                            Quantity = decimal.Parse(ask[1].GetString() ?? "0"),
-                            Count = int.Parse(ask[2].GetString() ?? "0")
-                        });
-                    }
-                }
-            }
-
-            if (data.TryGetProperty("bs", out var bids))
+            // WS v2: bids/asks are [{price, qty}] objects; qty=0 means remove
+            if (data.TryGetProperty("bids", out var bids))
             {
                 foreach (var bid in bids.EnumerateArray())
                 {
-                    if (bid.GetArrayLength() >= 3)
-                    {
-                        orderBook.Bids.Add(new OrderBookEntry
-                        {
-                            Price = decimal.Parse(bid[0].GetString() ?? "0"),
-                            Quantity = decimal.Parse(bid[1].GetString() ?? "0"),
-                            Count = int.Parse(bid[2].GetString() ?? "0")
-                        });
-                    }
+                    var price = bid.TryGetProperty("price", out var p) ? p.GetDecimal() : 0;
+                    var qty = bid.TryGetProperty("qty", out var q) ? q.GetDecimal() : 0;
+                    if (price <= 0) continue;
+
+                    var existing = orderBook.Bids.FirstOrDefault(b => b.Price == price);
+                    if (qty == 0) { if (existing != null) orderBook.Bids.Remove(existing); }
+                    else if (existing != null) { existing.Quantity = qty; }
+                    else { orderBook.Bids.Add(new OrderBookEntry { Price = price, Quantity = qty }); }
                 }
             }
 
-            if (data.TryGetProperty("a", out var asksUpdate))
+            if (data.TryGetProperty("asks", out var asks))
             {
-                foreach (var ask in asksUpdate.EnumerateArray())
+                foreach (var ask in asks.EnumerateArray())
                 {
-                    if (ask.GetArrayLength() >= 3)
-                    {
-                        var price = decimal.Parse(ask[0].GetString() ?? "0");
-                        var quantity = decimal.Parse(ask[1].GetString() ?? "0");
+                    var price = ask.TryGetProperty("price", out var p) ? p.GetDecimal() : 0;
+                    var qty = ask.TryGetProperty("qty", out var q) ? q.GetDecimal() : 0;
+                    if (price <= 0) continue;
 
-                        var existing = orderBook.Asks.FirstOrDefault(a => a.Price == price);
-                        if (quantity == 0)
-                        {
-                            if (existing != null)
-                                orderBook.Asks.Remove(existing);
-                        }
-                        else
-                        {
-                            if (existing != null)
-                                existing.Quantity = quantity;
-                            else
-                                orderBook.Asks.Add(new OrderBookEntry { Price = price, Quantity = quantity, Count = 1 });
-                        }
-                    }
-                }
-            }
-
-            if (data.TryGetProperty("b", out var bidsUpdate))
-            {
-                foreach (var bid in bidsUpdate.EnumerateArray())
-                {
-                    if (bid.GetArrayLength() >= 3)
-                    {
-                        var price = decimal.Parse(bid[0].GetString() ?? "0");
-                        var quantity = decimal.Parse(bid[1].GetString() ?? "0");
-
-                        var existing = orderBook.Bids.FirstOrDefault(b => b.Price == price);
-                        if (quantity == 0)
-                        {
-                            if (existing != null)
-                                orderBook.Bids.Remove(existing);
-                        }
-                        else
-                        {
-                            if (existing != null)
-                                existing.Quantity = quantity;
-                            else
-                                orderBook.Bids.Add(new OrderBookEntry { Price = price, Quantity = quantity, Count = 1 });
-                        }
-                    }
+                    var existing = orderBook.Asks.FirstOrDefault(a => a.Price == price);
+                    if (qty == 0) { if (existing != null) orderBook.Asks.Remove(existing); }
+                    else if (existing != null) { existing.Quantity = qty; }
+                    else { orderBook.Asks.Add(new OrderBookEntry { Price = price, Quantity = qty }); }
                 }
             }
 
@@ -1104,21 +1066,29 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     {
         try
         {
-            if (data.GetArrayLength() >= 4)
-            {
-                var timestamp = long.Parse(data[2].GetString() ?? "0");
+            // WS v2: trade is an object with named fields
+            var tradeId = data.TryGetProperty("trade_id", out var id)
+                ? id.GetInt64().ToString()
+                : Guid.NewGuid().ToString();
 
-                return new Trade
-                {
-                    Id = $"{symbol}_{timestamp}",
-                    Symbol = symbol,
-                    Price = decimal.Parse(data[0].GetString() ?? "0"),
-                    Quantity = decimal.Parse(data[1].GetString() ?? "0"),
-                    Timestamp = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime,
-                    Side = data[3].GetString() ?? ""
-                };
-            }
-            return null;
+            var price = data.TryGetProperty("price", out var p) ? p.GetDecimal() : 0;
+            var qty = data.TryGetProperty("qty", out var q) ? q.GetDecimal() : 0;
+            var side = data.TryGetProperty("side", out var s) ? s.GetString() ?? "" : "";
+            var timestampStr = data.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null;
+
+            var timestamp = timestampStr != null && DateTime.TryParse(timestampStr, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+                ? parsed
+                : DateTime.UtcNow;
+
+            return new Trade
+            {
+                Id = $"{symbol}_{tradeId}",
+                Symbol = symbol,
+                Price = price,
+                Quantity = qty,
+                Timestamp = timestamp,
+                Side = side
+            };
         }
         catch
         {

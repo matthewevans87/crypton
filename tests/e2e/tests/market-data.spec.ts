@@ -11,7 +11,7 @@ dotenv.config({ path: path.join(__dirname, '../.env.test') });
  * and that the PriceTickerPanel displays them correctly.
  *
  * Tests prefixed with [mock only] are skipped unless services were started with
- * EXCHANGE__USE_MOCK=true (detected by checking if the price matches the known mock value).
+ * MARKETDATA__EXCHANGE__USEMOCK=true (detected by checking if the price matches the known mock value).
  */
 
 // These match exactly what MockExchangeAdapter.BaseP returns.
@@ -43,14 +43,14 @@ test.beforeAll(async () => {
 
 test.describe('Market Data (Mock Exchange)', () => {
   test('MarketData service returns mock BTC price', async ({ api }) => {
-    test.skip(!isMockMode, 'Needs EXCHANGE__USE_MOCK=true — start via ./scripts/start-test-services.sh');
+    test.skip(!isMockMode, 'Needs MARKETDATA__EXCHANGE__USEMOCK=true — start via ./scripts/start-test-services.sh');
     const ticker = await api.getPrice('BTC/USD');
     expect(ticker.price).toBe(MOCK_PRICES['BTC/USD']);
     expect(ticker.asset.toUpperCase()).toContain('BTC');
   });
 
   test('MarketData service returns mock ETH price', async ({ api }) => {
-    test.skip(!isMockMode, 'Needs EXCHANGE__USE_MOCK=true — start via ./scripts/start-test-services.sh');
+    test.skip(!isMockMode, 'Needs MARKETDATA__EXCHANGE__USEMOCK=true — start via ./scripts/start-test-services.sh');
     const ticker = await api.getPrice('ETH/USD');
     expect(ticker.price).toBe(MOCK_PRICES['ETH/USD']);
   });
@@ -68,7 +68,7 @@ test.describe('Market Data (Mock Exchange)', () => {
   });
 
   test('PriceTickerPanel renders BTC price within mock range', async ({ dashboardPage: page }) => {
-    test.skip(!isMockMode, 'Needs EXCHANGE__USE_MOCK=true — start via ./scripts/start-test-services.sh');
+    test.skip(!isMockMode, 'Needs MARKETDATA__EXCHANGE__USEMOCK=true — start via ./scripts/start-test-services.sh');
     // Default panel asset is BTC/USD — wait for it to appear
     const panel = page.locator('[data-testid="panel-price-ticker"][data-asset="BTC/USD"]');
     await panel.waitFor({ state: 'visible', timeout: 15_000 });

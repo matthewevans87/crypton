@@ -40,6 +40,9 @@ const PANEL_COMMANDS: { type: PanelType; label: string; description: string }[] 
   { type: 'system-status', label: 'System Status', description: 'At-a-glance status for all services' },
   { type: 'connection-health', label: 'Connection Health', description: 'HTTP and SignalR connectivity per service' },
   { type: 'error-log', label: 'Error Log', description: 'Aggregated errors and warnings from all services' },
+  { type: 'ws-feed-marketdata', label: 'WS Feed: Market Data', description: 'Raw SignalR events from the market data service' },
+  { type: 'ws-feed-execution', label: 'WS Feed: Execution', description: 'Raw SignalR events from the execution service' },
+  { type: 'ws-feed-agentrunner', label: 'WS Feed: Agent Runner', description: 'Raw SignalR events from the agent runner service' },
 ];
 
 export function CommandPalette() {

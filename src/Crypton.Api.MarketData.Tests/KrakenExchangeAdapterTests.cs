@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.WebSockets;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using MarketDataService.Adapters;
@@ -178,6 +179,31 @@ public class KrakenExchangeAdapterTests
     }
 
     [Fact]
+    public void ProcessMessage_WithTickerObject_RaisesPriceUpdate()
+    {
+        var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object, _configuration);
+        PriceTicker? receivedTicker = null;
+
+        adapter.OnPriceUpdate += (_, ticker) => receivedTicker = ticker;
+
+        var processMessage = typeof(KrakenExchangeAdapter).GetMethod(
+            "ProcessMessage",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(processMessage);
+
+        // WS v2 ticker message format
+        var message = "{\"channel\":\"ticker\",\"type\":\"update\",\"data\":[{\"symbol\":\"XBT/USD\",\"bid\":50000.0,\"bid_qty\":0.5,\"ask\":50010.0,\"ask_qty\":0.3,\"last\":50005.0,\"volume\":200.0,\"vwap\":50002.0,\"low\":49000.0,\"high\":51000.0,\"change\":5.0,\"change_pct\":0.01}]}";
+        processMessage!.Invoke(adapter, new object[] { message });
+
+        Assert.NotNull(receivedTicker);
+        Assert.Equal("BTC/USD", receivedTicker!.Asset);
+        Assert.Equal(50005.0m, receivedTicker.Price);
+        Assert.Equal(50000.0m, receivedTicker.Bid);
+        Assert.Equal(50010.0m, receivedTicker.Ask);
+    }
+
+    [Fact]
     public async Task GetTradesAsync_WithValidSymbol_ReturnsTrades()
     {
         var tradesResponse = @"{
@@ -351,7 +377,9 @@ public class KrakenExchangeAdapterTests
         var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""1234567890"", ""b""]");
+        // WS v2: trade is an object with named fields
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(
+            "{\"price\": 50000.5, \"qty\": 0.5, \"trade_id\": 1234567890, \"side\": \"buy\", \"timestamp\": \"2024-06-01T12:00:00.000Z\"}");
 
         var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
 
@@ -360,7 +388,7 @@ public class KrakenExchangeAdapterTests
         Assert.Equal("BTC/USD", result.Symbol);
         Assert.Equal(50000.5m, result.Price);
         Assert.Equal(0.5m, result.Quantity);
-        Assert.Equal("b", result.Side);
+        Assert.Equal("buy", result.Side);
     }
 
     [Fact]
@@ -431,28 +459,32 @@ public class KrakenExchangeAdapterTests
         var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""1234567890"", ""s""]");
+        // WS v2: side field is the full word "sell"
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(
+            "{\"price\": 50000.5, \"qty\": 0.5, \"trade_id\": 1234567890, \"side\": \"sell\", \"timestamp\": \"2024-06-01T12:00:00.000Z\"}");
 
         var result = method?.Invoke(adapter, new object[] { tradeData, "ETH/USD" }) as Trade;
 
         Assert.NotNull(result);
-        Assert.Equal("s", result.Side);
+        Assert.Equal("sell", result.Side);
     }
 
     [Fact]
-    public void ParseTradeUpdate_WithZeroTimestamp_ReturnsEpochTime()
+    public void ParseTradeUpdate_WithIsoTimestamp_ParsesCorrectly()
     {
         var adapter = new KrakenExchangeAdapter(_httpClient, _mockLogger.Object, _mockLoggerFactory.Object, _configuration);
 
         var method = typeof(KrakenExchangeAdapter).GetMethod("ParseTradeUpdate",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-        var tradeData = JsonSerializer.Deserialize<JsonElement>(@"[""50000.5"", ""0.5"", ""0"", ""b""]");
+        // WS v2: timestamp is an ISO 8601 string, not a Unix float
+        var tradeData = JsonSerializer.Deserialize<JsonElement>(
+            "{\"price\": 50000.5, \"qty\": 0.5, \"trade_id\": 999, \"side\": \"buy\", \"timestamp\": \"1970-01-01T00:00:00.000Z\"}");
 
         var result = method?.Invoke(adapter, new object[] { tradeData, "BTC/USD" }) as Trade;
 
         Assert.NotNull(result);
-        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(0).UtcDateTime, result.Timestamp);
+        Assert.Equal(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc), result.Timestamp);
     }
 }
 

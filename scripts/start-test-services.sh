@@ -105,7 +105,7 @@ start_service "market-data" \
   "$REPO_ROOT/src/Crypton.Api.MarketData/Crypton.Api.MarketData.csproj" \
   "ASPNETCORE_URLS=http://localhost:5002" \
   "ASPNETCORE_ENVIRONMENT=Development" \
-  "EXCHANGE__USE_MOCK=true"
+  "MARKETDATA__EXCHANGE__USEMOCK=true"
 
 wait_healthy "market-data" "http://localhost:5002/health/live" 60
 
@@ -114,8 +114,8 @@ start_service "execution-service" \
   "$REPO_ROOT/src/Crypton.Api.ExecutionService/Crypton.Api.ExecutionService.csproj" \
   "ASPNETCORE_URLS=http://localhost:5004" \
   "ASPNETCORE_ENVIRONMENT=Development" \
-  "EXECUTION_SERVICE__API__ApiKey=${TEST_API_KEY:-test-key-1234}" \
-  "EXECUTION_SERVICE__MarketDataServiceUrl=http://localhost:5002"
+  "EXECUTIONSERVICE__API__APIKEY=${TEST_API_KEY:-test-key-1234}" \
+  "EXECUTIONSERVICE__MARKETDATASERVICEURL=http://localhost:5002"
 
 wait_healthy "execution-service" "http://localhost:5004/health/live" 60
 
@@ -124,10 +124,10 @@ start_service "agent-runner" \
   "$REPO_ROOT/src/Crypton.Api.AgentRunner/Crypton.Api.AgentRunner.csproj" \
   "ASPNETCORE_URLS=http://localhost:5003" \
   "ASPNETCORE_ENVIRONMENT=Development" \
-  "Api__ApiKey=${TEST_API_KEY:-test-key-1234}" \
-  "Tools__MarketDataService__BaseUrl=http://localhost:5002" \
-  "Tools__ExecutionService__BaseUrl=http://localhost:5004" \
-  "Cycle__ScheduleIntervalMinutes=99999"
+  "AGENTRUNNER__API__APIKEY=${TEST_API_KEY:-test-key-1234}" \
+  "AGENTRUNNER__TOOLS__MARKETDATASERVICE__BASEURL=http://localhost:5002" \
+  "AGENTRUNNER__TOOLS__EXECUTIONSERVICE__BASEURL=http://localhost:5004" \
+  "AGENTRUNNER__CYCLE__SCHEDULEINTERVALMINUTES=99999"
 
 wait_healthy "agent-runner" "http://localhost:5003/health/live" 60
 
@@ -136,10 +136,10 @@ start_service "monitoring-dashboard" \
   "$REPO_ROOT/src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj" \
   "ASPNETCORE_URLS=http://localhost:5001" \
   "ASPNETCORE_ENVIRONMENT=Development" \
-  "AgentRunner__Url=http://localhost:5003" \
-  "AgentRunner__ApiKey=${TEST_API_KEY:-test-key-1234}" \
-  "ExecutionService__Url=http://localhost:5004" \
-  "MarketDataService__Url=http://localhost:5002"
+  "MONITORINGDASHBOARD__AGENTRUNNER__URL=http://localhost:5003" \
+  "MONITORINGDASHBOARD__AGENTRUNNER__APIKEY=${TEST_API_KEY:-test-key-1234}" \
+  "MONITORINGDASHBOARD__EXECUTIONSERVICE__URL=http://localhost:5004" \
+  "MONITORINGDASHBOARD__MARKETDATASERVICE__URL=http://localhost:5002"
 
 wait_healthy "monitoring-dashboard" "http://localhost:5001/health/live" 60
 

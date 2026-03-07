@@ -23,6 +23,7 @@ public sealed class StatusControllerTests : IDisposable
     private readonly IStrategyService _strategy = Substitute.For<IStrategyService>();
     private readonly PositionRegistry _registry;
     private readonly InMemoryEventLogger _logger = new();
+    private readonly PortfolioRiskEnforcer _riskEnforcer;
 
     public StatusControllerTests()
     {
@@ -33,6 +34,7 @@ public sealed class StatusControllerTests : IDisposable
             Path.Combine(_tempDir, "trades.json"),
             _logger,
             NullLogger<PositionRegistry>.Instance);
+        _riskEnforcer = new PortfolioRiskEnforcer(_logger);
     }
 
     public void Dispose() => Directory.Delete(_tempDir, recursive: true);
@@ -70,7 +72,7 @@ public sealed class StatusControllerTests : IDisposable
         _strategy.State.Returns(StrategyState.Active);
         _strategy.ActiveStrategyId.Returns("strat-123");
 
-        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub());
+        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub(), _riskEnforcer);
         var result = controller.GetStatus() as OkObjectResult;
 
         result.Should().NotBeNull();
@@ -93,7 +95,7 @@ public sealed class StatusControllerTests : IDisposable
         _safeMode.IsActive.Returns(true);
         _strategy.State.Returns(StrategyState.None);
 
-        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub());
+        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub(), _riskEnforcer);
         var result = controller.GetStatus() as OkObjectResult;
 
         result.Should().NotBeNull();

@@ -230,7 +230,19 @@ export interface ServiceHealth {
   detail: string;
   checkedAt: string;
   signalRConnected?: boolean | null;
+  correlationId?: string | null;
   metrics: Record<string, unknown>;
+  reasons?: ServiceHealthReason[];
+}
+
+export interface ServiceHealthReason {
+  code: string;
+  summary: string;
+  severity: 'warning' | 'critical';
+  category: string;
+  recommendedAction: string;
+  isUserActionable: boolean;
+  bugSuspected: boolean;
 }
 
 export interface SystemStatus {

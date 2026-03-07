@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MonitoringDashboard.Configuration;
 using MonitoringDashboard.Models;
 using MonitoringDashboard.Services;
 using System.Text.Json;
@@ -18,16 +19,12 @@ public class AgentController : ControllerBase
     public AgentController(
         IAgentRunnerClient agentRunnerClient,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        MonitoringDashboardConfig configuration)
     {
         _agentRunnerClient = agentRunnerClient;
         _httpClientFactory = httpClientFactory;
-        _agentRunnerUrl = configuration["AgentRunner:Url"]?.TrimEnd('/')
-            ?? throw new InvalidOperationException("AgentRunner:Url is not configured.");
-        var apiKey = configuration["AgentRunner:ApiKey"];
-        _agentRunnerApiKey = !string.IsNullOrEmpty(apiKey)
-            ? apiKey
-            : throw new InvalidOperationException("AgentRunner:ApiKey is not configured. Set AGENT_RUNNER_API_KEY in ~/.config/crypton/.env");
+        _agentRunnerUrl = configuration.AgentRunner.Url.TrimEnd('/');
+        _agentRunnerApiKey = configuration.AgentRunner.ApiKey;
     }
 
     private HttpClient CreateAgentRunnerClient()

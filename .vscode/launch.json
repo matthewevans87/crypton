@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
-        // ── AgentRunner ────────────────────────────────────────────────
+        // ── Debug with Build ───────────────────────────────────────────
         {
             "name": "Debug Crypton.Api.AgentRunner",
             "type": "coreclr",
@@ -18,45 +18,15 @@
             },
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5003"
             },
-        },
-        {
-            "name": "Debug Crypton.Api.AgentRunner (No Build)",
-            "type": "coreclr",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/Crypton.Api.AgentRunner/bin/Debug/net10.0/Crypton.Api.AgentRunner.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/src/Crypton.Api.AgentRunner",
-            "stopAtEntry": false,
-            "envFile": "${env:HOME}/.config/crypton/.env",
-            "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 1
             }
         },
-        {
-            "name": "Debug Crypton.Api.AgentRunner (CLI)",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build: Crypton.Api.AgentRunner",
-            "program": "${workspaceFolder}/src/Crypton.Api.AgentRunner/bin/Debug/net10.0/Crypton.Api.AgentRunner.dll",
-            "args": ["--cli", "run-cycle", "--verbose"],
-            "cwd": "${workspaceFolder}/src/Crypton.Api.AgentRunner",
-            "stopAtEntry": false,
-            "console": "integratedTerminal",
-            "envFile": "${env:HOME}/.config/crypton/.env",
-            "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        },
-        {
-            "name": "Attach to Crypton.Api.AgentRunner",
-            "type": "coreclr",
-            "request": "attach",
-            "processName": "Crypton.Api.AgentRunner"
-        },
-
-        // ── MarketData ─────────────────────────────────────────────────
         {
             "name": "Debug Crypton.Api.MarketData",
             "type": "coreclr",
@@ -73,30 +43,15 @@
             },
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5002"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 2
             }
         },
-        {
-            "name": "Debug Crypton.Api.MarketData (No Build)",
-            "type": "coreclr",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/Crypton.Api.MarketData/bin/Debug/net10.0/Crypton.Api.MarketData.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/src/Crypton.Api.MarketData",
-            "stopAtEntry": false,
-            "envFile": "${env:HOME}/.config/crypton/.env",
-            "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        },
-        {
-            "name": "Attach to Crypton.Api.MarketData",
-            "type": "coreclr",
-            "request": "attach",
-            "processName": "Crypton.Api.MarketData"
-        },
-
-        // ── MonitoringDashboard ────────────────────────────────────────
         {
             "name": "Debug Crypton.Api.MonitoringDashboard",
             "type": "coreclr",
@@ -113,30 +68,15 @@
             },
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5001"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 3
             }
         },
-        {
-            "name": "Debug Crypton.Api.MonitoringDashboard (No Build)",
-            "type": "coreclr",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/Crypton.Api.MonitoringDashboard/bin/Debug/net10.0/Crypton.Api.MonitoringDashboard.dll",
-            "args": [],
-            "cwd": "${workspaceFolder}/src/Crypton.Api.MonitoringDashboard",
-            "stopAtEntry": false,
-            "envFile": "${env:HOME}/.config/crypton/.env",
-            "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
-            }
-        },
-        {
-            "name": "Attach to Crypton.Api.MonitoringDashboard",
-            "type": "coreclr",
-            "request": "attach",
-            "processName": "Crypton.Api.MonitoringDashboard"
-        },
-
-        // ── ExecutionService ───────────────────────────────────────────
         {
             "name": "Debug Crypton.Api.ExecutionService",
             "type": "coreclr",
@@ -153,7 +93,72 @@
             },
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5004"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug",
+                "order": 4
+            }
+        },
+
+        // ── Debug without Build ────────────────────────────────────────
+        {
+            "name": "Debug Crypton.Api.AgentRunner (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/Crypton.Api.AgentRunner/bin/Debug/net10.0/Crypton.Api.AgentRunner.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Crypton.Api.AgentRunner",
+            "stopAtEntry": false,
+            "envFile": "${env:HOME}/.config/crypton/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5003"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug (No Build)",
+                "order": 1
+            }
+        },
+        {
+            "name": "Debug Crypton.Api.MarketData (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/Crypton.Api.MarketData/bin/Debug/net10.0/Crypton.Api.MarketData.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Crypton.Api.MarketData",
+            "stopAtEntry": false,
+            "envFile": "${env:HOME}/.config/crypton/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5002"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug (No Build)",
+                "order": 2
+            }
+        },
+        {
+            "name": "Debug Crypton.Api.MonitoringDashboard (No Build)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/Crypton.Api.MonitoringDashboard/bin/Debug/net10.0/Crypton.Api.MonitoringDashboard.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Crypton.Api.MonitoringDashboard",
+            "stopAtEntry": false,
+            "envFile": "${env:HOME}/.config/crypton/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5001"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug (No Build)",
+                "order": 3
             }
         },
         {
@@ -166,7 +171,36 @@
             "stopAtEntry": false,
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5004"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "Debug (No Build)",
+                "order": 4
+            }
+        },
+
+        // ── Debug CLI ──────────────────────────────────────────────────
+        {
+            "name": "Debug Crypton.Api.AgentRunner (CLI)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build: Crypton.Api.AgentRunner",
+            "program": "${workspaceFolder}/src/Crypton.Api.AgentRunner/bin/Debug/net10.0/Crypton.Api.AgentRunner.dll",
+            "args": ["--cli", "run-cycle", "--verbose"],
+            "cwd": "${workspaceFolder}/src/Crypton.Api.AgentRunner",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "envFile": "${env:HOME}/.config/crypton/.env",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5003"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "CLI",
+                "order": 1
             }
         },
         {
@@ -181,14 +215,60 @@
             "console": "integratedTerminal",
             "envFile": "${env:HOME}/.config/crypton/.env",
             "env": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://0.0.0.0:5004"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "CLI",
+                "order": 2
+            }
+        },
+
+        // ── Attach ────────────────────────────────────────────────────
+        {
+            "name": "Attach to Crypton.Api.AgentRunner",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "Crypton.Api.AgentRunner",
+            "presentation": {
+                "hidden": false,
+                "group": "Attach",
+                "order": 1
+            }
+        },
+        {
+            "name": "Attach to Crypton.Api.MarketData",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "Crypton.Api.MarketData",
+            "presentation": {
+                "hidden": false,
+                "group": "Attach",
+                "order": 2
+            }
+        },
+        {
+            "name": "Attach to Crypton.Api.MonitoringDashboard",
+            "type": "coreclr",
+            "request": "attach",
+            "processName": "Crypton.Api.MonitoringDashboard",
+            "presentation": {
+                "hidden": false,
+                "group": "Attach",
+                "order": 3
             }
         },
         {
             "name": "Attach to Crypton.Api.ExecutionService",
             "type": "coreclr",
             "request": "attach",
-            "processName": "Crypton.Api.ExecutionService"
+            "processName": "Crypton.Api.ExecutionService",
+            "presentation": {
+                "hidden": false,
+                "group": "Attach",
+                "order": 4
+            }
         },
 
         // ── Frontend ───────────────────────────────────────────────────
@@ -196,9 +276,26 @@
             "name": "Debug Crypton.Web.Dashboard",
             "type": "chrome",
             "request": "launch",
-            "url": "http://localhost:3000",
+            "url": "http://localhost:5000",
             "webRoot": "${workspaceFolder}/src/Crypton.Web.Dashboard/src",
-            "preLaunchTask": "start: Crypton.Web.Dashboard"
+            "presentation": {
+                "hidden": false,
+                "group": "Frontend",
+                "order": 1
+            }
+        },
+        {
+            "name": "Debug Crypton.Web.Dashboard (With Task)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5000",
+            "webRoot": "${workspaceFolder}/src/Crypton.Web.Dashboard/src",
+            "preLaunchTask": "start: Crypton.Web.Dashboard",
+            "presentation": {
+                "hidden": false,
+                "group": "Frontend",
+                "order": 2
+            }
         }
     ],
     "compounds": [

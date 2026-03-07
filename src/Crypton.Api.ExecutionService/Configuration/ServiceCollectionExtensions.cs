@@ -23,7 +23,7 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.Configure<ExecutionServiceConfig>(
-            configuration.GetSection("execution_service"));
+            configuration.GetSection("executionService"));
 
         // Event logging
         services.AddSingleton<IEventLogger, FileEventLogger>();

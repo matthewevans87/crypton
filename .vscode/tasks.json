@@ -96,18 +96,23 @@
     {
       "label": "start: Crypton.Web.Dashboard",
       "type": "shell",
-      "command": "npm run dev",
+      "command": "npm run dev -- --port 5000",
       "options": {
-        "cwd": "${workspaceFolder}/src/Crypton.Web.Dashboard"
+        "cwd": "${workspaceFolder}/src/Crypton.Web.Dashboard",
+        "env": {
+          "NO_COLOR": "1"
+        }
       },
       "isBackground": true,
       "problemMatcher": {
         "owner": "vite",
-        "pattern": { "regexp": "." },
+        "pattern": {
+          "regexp": "^(?!x)x$"
+        },
         "background": {
           "activeOnStart": true,
-          "beginsPattern": "VITE",
-          "endsPattern": "Local:"
+          "beginsPattern": "^\\s*VITE\\s+v",
+          "endsPattern": "^\\s*.*Local:\\s+http://localhost:5000/?"
         }
       }
     },

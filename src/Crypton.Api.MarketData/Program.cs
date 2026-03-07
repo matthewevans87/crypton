@@ -1,5 +1,6 @@
 using Crypton.Configuration;
 using MarketDataService.Adapters;
+using MarketDataService.Configuration;
 using MarketDataService.Hubs;
 using MarketDataService.Models;
 using MarketDataService.Services;
@@ -8,7 +9,7 @@ using Scalar.AspNetCore;
 using Serilog;
 
 // Load .env file before the host builder so values flow into IConfiguration.
-DotEnvLoader.Load();
+LoadEnvironment(args);
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -20,6 +21,23 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    var effectiveConfiguration = BuildServiceScopedConfiguration(builder.Configuration, "MarketData");
+
+    var marketDataConfig = effectiveConfiguration.Get<MarketDataConfig>()
+        ?? throw new InvalidOperationException("Failed to bind MarketDataConfig from IConfiguration.");
+
+    var startupConfigErrors = ValidateMarketDataConfiguration(marketDataConfig);
+    if (startupConfigErrors.Count > 0)
+    {
+        foreach (var startupConfigError in startupConfigErrors)
+        {
+            Log.Error("Configuration contract violation: {ConfigError}", startupConfigError);
+        }
+
+        throw new InvalidOperationException(
+            $"Market Data Service configuration validation failed with {startupConfigErrors.Count} error(s). See ERROR logs.");
+    }
+
     builder.Host.UseSerilog();
 
     builder.Services.AddControllers();
@@ -27,12 +45,11 @@ try
     builder.Services.AddOpenApi();
     builder.Services.AddSignalR();
 
+    builder.Services.AddSingleton(marketDataConfig);
     builder.Services.AddHttpClient();
     builder.Services.AddLogging();
     builder.Services.AddSingleton<IMarketDataCache, InMemoryMarketDataCache>();
-    var useMock = string.Equals(
-        builder.Configuration["Exchange:UseMock"] ?? builder.Configuration["EXCHANGE__USE_MOCK"],
-        "true", StringComparison.OrdinalIgnoreCase);
+    var useMock = marketDataConfig.Exchange.UseMock;
 
     if (useMock)
     {
@@ -46,7 +63,7 @@ try
                 sp.GetRequiredService<HttpClient>(),
                 sp.GetRequiredService<ILogger<KrakenExchangeAdapter>>(),
                 sp.GetRequiredService<ILoggerFactory>(),
-                sp.GetRequiredService<IConfiguration>()));
+                sp.GetRequiredService<MarketDataConfig>().Kraken));
     }
     builder.Services.AddSingleton<ITechnicalIndicatorService, TechnicalIndicatorService>();
     builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
@@ -157,4 +174,93 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+static void LoadEnvironment(string[] args)
+{
+    var envFileIndex = Array.IndexOf(args, "--env-file");
+    if (envFileIndex >= 0 && envFileIndex + 1 < args.Length)
+    {
+        var rawPath = args[envFileIndex + 1];
+        var resolved = rawPath.StartsWith("~/", StringComparison.Ordinal)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                rawPath[2..])
+            : rawPath;
+
+        DotEnvLoader.Load(new FileInfo(resolved));
+        return;
+    }
+
+    var userEnvPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".config", "crypton", ".env");
+
+    if (File.Exists(userEnvPath))
+    {
+        DotEnvLoader.Load(new FileInfo(userEnvPath));
+        return;
+    }
+
+    DotEnvLoader.Load();
+}
+
+static List<string> ValidateMarketDataConfiguration(MarketDataConfig config)
+{
+    var errors = new List<string>();
+
+    if (!config.Exchange.UseMock)
+    {
+        if (string.IsNullOrWhiteSpace(config.Kraken.ApiKey))
+        {
+            errors.Add("Missing required configuration 'kraken:apiKey' (env: MARKETDATA__KRAKEN__APIKEY) when exchange:useMock=false.");
+        }
+
+        if (string.IsNullOrWhiteSpace(config.Kraken.ApiSecret))
+        {
+            errors.Add("Missing required configuration 'kraken:apiSecret' (env: MARKETDATA__KRAKEN__APISECRET) when exchange:useMock=false.");
+        }
+    }
+
+    if (!Uri.TryCreate(config.Kraken.RestBaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'kraken:restBaseUrl' must be an absolute URI.");
+    }
+
+    if (!Uri.TryCreate(config.Kraken.WsBaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'kraken:wsBaseUrl' must be an absolute URI.");
+    }
+
+    return errors;
+}
+
+static IConfiguration BuildServiceScopedConfiguration(IConfiguration configuration, string serviceName)
+{
+    var serviceOverrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    var serviceSection = configuration.GetSection(serviceName);
+
+    void Flatten(IConfigurationSection section, string pathPrefix)
+    {
+        foreach (var child in section.GetChildren())
+        {
+            var childPath = string.IsNullOrEmpty(pathPrefix)
+                ? child.Key
+                : $"{pathPrefix}:{child.Key}";
+
+            if (child.Value is not null)
+            {
+                serviceOverrides[childPath] = child.Value;
+            }
+
+            Flatten(child, childPath);
+        }
+    }
+
+    Flatten(serviceSection, string.Empty);
+
+    return new ConfigurationBuilder()
+        .AddConfiguration(configuration)
+        .AddInMemoryCollection(serviceOverrides)
+        .Build();
 }

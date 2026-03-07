@@ -68,7 +68,10 @@ export type PanelType =
   | 'system-status'
   | 'system-diagnostics'
   | 'connection-health'
-  | 'error-log';
+  | 'error-log'
+  | 'ws-feed-marketdata'
+  | 'ws-feed-execution'
+  | 'ws-feed-agentrunner';
 
 interface DashboardState {
   // UI State
@@ -171,6 +174,15 @@ const defaultTabs: Tab[] = [
       { id: 'system-diagnostics', type: 'system-diagnostics' },
       { id: 'connection-health', type: 'connection-health' },
       { id: 'error-log', type: 'error-log' },
+    ],
+  },
+  {
+    id: 'ws-feeds',
+    title: 'WS Feeds',
+    panels: [
+      { id: 'ws-feed-marketdata', type: 'ws-feed-marketdata' },
+      { id: 'ws-feed-execution', type: 'ws-feed-execution' },
+      { id: 'ws-feed-agentrunner', type: 'ws-feed-agentrunner' },
     ],
   },
 ];

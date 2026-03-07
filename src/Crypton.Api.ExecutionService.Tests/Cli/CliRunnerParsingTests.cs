@@ -122,43 +122,4 @@ public sealed class CliRunnerParsingTests
         envFilePath.Should().BeNull();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Env alias logic
-    // ─────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void EnvAlias_ShortForm_MappedToLongForm()
-    {
-        // Simulates the alias mapping from Program.cs.
-        // KRAKEN_API_KEY → EXECUTION_SERVICE__KRAKEN__ApiKey
-        const string shortKey = "KRAKEN_API_KEY";
-        const string longKey = "EXECUTION_SERVICE__KRAKEN__ApiKey";
-        const string testValue = "test-key-123";
-
-        // Save original values.
-        var originalShort = Environment.GetEnvironmentVariable(shortKey);
-        var originalLong = Environment.GetEnvironmentVariable(longKey);
-
-        try
-        {
-            Environment.SetEnvironmentVariable(longKey, null);
-            Environment.SetEnvironmentVariable(shortKey, testValue);
-
-            // Run the alias logic.
-            var value = Environment.GetEnvironmentVariable(shortKey);
-            if (!string.IsNullOrEmpty(value) &&
-                string.IsNullOrEmpty(Environment.GetEnvironmentVariable(longKey)))
-            {
-                Environment.SetEnvironmentVariable(longKey, value);
-            }
-
-            Environment.GetEnvironmentVariable(longKey).Should().Be(testValue);
-        }
-        finally
-        {
-            // Restore original values.
-            Environment.SetEnvironmentVariable(shortKey, originalShort);
-            Environment.SetEnvironmentVariable(longKey, originalLong);
-        }
-    }
 }

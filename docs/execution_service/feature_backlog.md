@@ -57,7 +57,7 @@ In addition to the polling REST API endpoints, the service must expose a real-ti
 
 - The service must include a `Dockerfile` following the same multi-stage build pattern as the other service projects in this repository (build → publish → final, based on `mcr.microsoft.com/dotnet/aspnet:10.0`).
 - The service listens on port **5004** (ASPNETCORE_HTTP_PORTS=5004) in the container.
-- A service entry must be added to `docker-compose.yml` following the same structure as existing services: named volumes for `data/` and `logs/`, environment variable pass-through for `KRAKEN_API_KEY` and `KRAKEN_SECRET_KEY`, and a health check on `GET /health/live`.
+- A service entry must be added to `docker-compose.yml` following the same structure as existing services: named volumes for `data/` and `logs/`, environment variable pass-through for `EXECUTIONSERVICE__KRAKEN__APIKEY` and `EXECUTIONSERVICE__KRAKEN__APISECRET`, and a health check on `GET /health/live`.
 - Data directories (`artifacts/`, `logs/`) are volume-mounted so that state survives container restarts.
 - The service must be usable and fully testable without Docker: `dotnet run` in service mode and `dotnet test` in the test project must both work with no container dependency.
 

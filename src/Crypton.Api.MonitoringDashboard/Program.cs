@@ -1,5 +1,6 @@
 using Crypton.Configuration;
 using MonitoringDashboard.Hubs;
+using MonitoringDashboard.Configuration;
 using MonitoringDashboard.Models;
 using MonitoringDashboard.Services;
 using Microsoft.AspNetCore.SignalR;
@@ -18,27 +19,26 @@ using DashboardToolCall = MonitoringDashboard.Models.ToolCall;
 // Load .env file before the host builder so values flow into IConfiguration.
 // Prefer ~/.config/crypton/.env (user-level secrets, never committed), then
 // fall back to a .env found by walking up from cwd.
-var userEnvFile = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-    ".config", "crypton", ".env");
-if (File.Exists(userEnvFile))
-    DotEnvLoader.Load(new FileInfo(userEnvFile));
-else
-    DotEnvLoader.Load();
-
-// Map short-form env var names to ASP.NET Core's double-underscore hierarchy.
-var envAliases = new Dictionary<string, string>
-{
-    ["AGENT_RUNNER_API_KEY"] = "AgentRunner__ApiKey",
-};
-foreach (var (shortKey, fullKey) in envAliases)
-{
-    var val = Environment.GetEnvironmentVariable(shortKey);
-    if (val is not null && Environment.GetEnvironmentVariable(fullKey) is null)
-        Environment.SetEnvironmentVariable(fullKey, val);
-}
+LoadEnvironment(args);
 
 var builder = WebApplication.CreateBuilder(args);
+
+var effectiveConfiguration = BuildServiceScopedConfiguration(builder.Configuration, "MonitoringDashboard");
+
+var dashboardConfig = effectiveConfiguration.Get<MonitoringDashboardConfig>()
+    ?? throw new InvalidOperationException("Failed to bind MonitoringDashboardConfig from IConfiguration.");
+
+var startupConfigErrors = ValidateMonitoringDashboardConfiguration(dashboardConfig);
+if (startupConfigErrors.Count > 0)
+{
+    foreach (var startupConfigError in startupConfigErrors)
+    {
+        Console.Error.WriteLine($"ERROR: Configuration contract violation: {startupConfigError}");
+    }
+
+    throw new InvalidOperationException(
+        $"Monitoring Dashboard configuration validation failed with {startupConfigErrors.Count} error(s). See ERROR logs.");
+}
 
 builder.Host.UseSerilog();
 
@@ -47,29 +47,27 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton(dashboardConfig);
 
-var marketDataServiceUrl = builder.Configuration["MarketDataService:Url"] ?? "http://localhost:5002";
 builder.Services.AddSingleton<IMarketDataServiceClient>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
     var logger = sp.GetRequiredService<ILogger<MarketDataServiceClient>>();
-    return new MarketDataServiceClient(marketDataServiceUrl, httpClient, logger);
+    return new MarketDataServiceClient(dashboardConfig.MarketDataService.Url, httpClient, logger);
 });
 
-var executionServiceUrl = builder.Configuration["ExecutionService:Url"] ?? "http://localhost:5004";
 builder.Services.AddSingleton<IExecutionServiceClient>(sp =>
 {
     var httpClient = new HttpClient();
     var logger = sp.GetRequiredService<ILogger<ExecutionServiceClient>>();
-    return new ExecutionServiceClient(executionServiceUrl, httpClient, logger);
+    return new ExecutionServiceClient(dashboardConfig.ExecutionService.Url, httpClient, logger);
 });
 
-var agentRunnerUrl = builder.Configuration["AgentRunner:Url"] ?? "http://localhost:5003";
 builder.Services.AddSingleton<IAgentRunnerClient>(sp =>
 {
     var factory = sp.GetRequiredService<IHttpClientFactory>();
     var logger = sp.GetRequiredService<ILogger<AgentRunnerClient>>();
-    return new AgentRunnerClient(factory, agentRunnerUrl, logger);
+    return new AgentRunnerClient(factory, dashboardConfig.AgentRunner.Url, logger);
 });
 
 builder.Services.AddCors(options =>
@@ -331,3 +329,88 @@ app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
 app.MapGet("/health/ready", () => Results.Ok(new { status = "ready" }));
 
 app.Run();
+
+static void LoadEnvironment(string[] args)
+{
+    var envFileIndex = Array.IndexOf(args, "--env-file");
+    if (envFileIndex >= 0 && envFileIndex + 1 < args.Length)
+    {
+        var rawPath = args[envFileIndex + 1];
+        var resolved = rawPath.StartsWith("~/", StringComparison.Ordinal)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                rawPath[2..])
+            : rawPath;
+
+        DotEnvLoader.Load(new FileInfo(resolved));
+        return;
+    }
+
+    var userEnvFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".config", "crypton", ".env");
+    if (File.Exists(userEnvFile))
+    {
+        DotEnvLoader.Load(new FileInfo(userEnvFile));
+        return;
+    }
+
+    DotEnvLoader.Load();
+}
+
+static List<string> ValidateMonitoringDashboardConfiguration(MonitoringDashboardConfig config)
+{
+    var errors = new List<string>();
+
+    if (!Uri.TryCreate(config.MarketDataService.Url, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'marketDataService:url' must be an absolute URI (env: MONITORINGDASHBOARD__MARKETDATASERVICE__URL).");
+    }
+
+    if (!Uri.TryCreate(config.ExecutionService.Url, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'executionService:url' must be an absolute URI (env: MONITORINGDASHBOARD__EXECUTIONSERVICE__URL).");
+    }
+
+    if (!Uri.TryCreate(config.AgentRunner.Url, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'agentRunner:url' must be an absolute URI (env: MONITORINGDASHBOARD__AGENTRUNNER__URL).");
+    }
+
+    if (string.IsNullOrWhiteSpace(config.AgentRunner.ApiKey))
+    {
+        errors.Add("Missing required configuration 'agentRunner:apiKey' (env: MONITORINGDASHBOARD__AGENTRUNNER__APIKEY).");
+    }
+
+    return errors;
+}
+
+static IConfiguration BuildServiceScopedConfiguration(IConfiguration configuration, string serviceName)
+{
+    var serviceOverrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    var serviceSection = configuration.GetSection(serviceName);
+
+    void Flatten(IConfigurationSection section, string pathPrefix)
+    {
+        foreach (var child in section.GetChildren())
+        {
+            var childPath = string.IsNullOrEmpty(pathPrefix)
+                ? child.Key
+                : $"{pathPrefix}:{child.Key}";
+
+            if (child.Value is not null)
+            {
+                serviceOverrides[childPath] = child.Value;
+            }
+
+            Flatten(child, childPath);
+        }
+    }
+
+    Flatten(serviceSection, string.Empty);
+
+    return new ConfigurationBuilder()
+        .AddConfiguration(configuration)
+        .AddInMemoryCollection(serviceOverrides)
+        .Build();
+}

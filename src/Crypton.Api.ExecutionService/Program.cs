@@ -1,6 +1,7 @@
 using Crypton.Configuration;
 using Crypton.Api.ExecutionService.Cli;
 using Crypton.Api.ExecutionService.Configuration;
+using Microsoft.Extensions.Logging;
 using Scalar.AspNetCore;
 
 // ── Environment + secrets loading ────────────────────────────────────────────
@@ -34,24 +35,6 @@ else
         DotEnvLoader.Load();
 }
 
-// ── Environment variable aliases ─────────────────────────────────────────────
-// Allow short, conventional names (e.g. KRAKEN_API_KEY) to flow into the
-// strongly-typed ExecutionServiceConfig without the full config-key prefix.
-ApplyEnvAlias("KRAKEN_API_KEY", "EXECUTION_SERVICE__KRAKEN__ApiKey");
-ApplyEnvAlias("KRAKEN_API_SECRET", "EXECUTION_SERVICE__KRAKEN__ApiSecret");
-ApplyEnvAlias("KRAKEN_SECRET_KEY", "EXECUTION_SERVICE__KRAKEN__ApiSecret");
-ApplyEnvAlias("MARKET_DATA_URL", "EXECUTION_SERVICE__MarketDataServiceUrl");
-
-static void ApplyEnvAlias(string source, string target)
-{
-    var value = Environment.GetEnvironmentVariable(source);
-    if (!string.IsNullOrEmpty(value) &&
-        string.IsNullOrEmpty(Environment.GetEnvironmentVariable(target)))
-    {
-        Environment.SetEnvironmentVariable(target, value);
-    }
-}
-
 // ── CLI mode detection ────────────────────────────────────────────────────────
 // Defined verbs that route to CliRunner rather than the ASP.NET host.
 // Two ways to enter CLI mode:
@@ -76,6 +59,8 @@ if (isCliMode)
 // ── Service mode ──────────────────────────────────────────────────────────────
 var builder = WebApplication.CreateBuilder(args);
 
+ValidateExecutionServiceConfiguration(builder.Configuration);
+
 builder.Services.AddExecutionServiceCore(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -92,4 +77,58 @@ app.MapHealthChecks("/health/live");
 
 await app.RunAsync();
 return 0;
+
+static void ValidateExecutionServiceConfiguration(IConfiguration configuration)
+{
+    using var startupLoggerFactory = LoggerFactory.Create(logging => logging.AddSimpleConsole());
+    var startupLogger = startupLoggerFactory.CreateLogger("ExecutionService.Startup");
+
+    var errors = new List<string>();
+
+    var config = configuration.GetSection("executionService").Get<ExecutionServiceConfig>()
+        ?? new ExecutionServiceConfig();
+
+    if (string.IsNullOrWhiteSpace(config.Api.ApiKey))
+    {
+        errors.Add("Missing required configuration 'executionService:api:apiKey' (env: EXECUTIONSERVICE__API__APIKEY).");
+    }
+
+    if (string.IsNullOrWhiteSpace(config.Kraken.ApiKey))
+    {
+        errors.Add("Missing required configuration 'executionService:kraken:apiKey' (env: EXECUTIONSERVICE__KRAKEN__APIKEY).");
+    }
+
+    if (string.IsNullOrWhiteSpace(config.Kraken.ApiSecret))
+    {
+        errors.Add("Missing required configuration 'executionService:kraken:apiSecret' (env: EXECUTIONSERVICE__KRAKEN__APISECRET).");
+    }
+
+    if (!Uri.TryCreate(config.Kraken.RestBaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'executionService:kraken:restBaseUrl' must be an absolute URI.");
+    }
+
+    if (!Uri.TryCreate(config.Kraken.WsBaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'executionService:kraken:wsBaseUrl' must be an absolute URI.");
+    }
+
+    if (!Uri.TryCreate(config.MarketDataServiceUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'executionService:marketDataServiceUrl' must be an absolute URI.");
+    }
+
+    if (errors.Count == 0)
+    {
+        return;
+    }
+
+    foreach (var error in errors)
+    {
+        startupLogger.LogError("Configuration contract violation: {ConfigError}", error);
+    }
+
+    throw new InvalidOperationException(
+        $"Execution Service configuration validation failed with {errors.Count} error(s). See ERROR logs.");
+}
 

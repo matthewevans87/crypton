@@ -733,13 +733,13 @@ This section maps each Execution Service feature to the specific API endpoints i
 
 ### 5.3 Startup / DI Wiring
 
-| Feature                                                        | Status                                                                                                         |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `KrakenRestAdapter` instantiated in DI                         | ❌ Not registered; created manually in `DelegatingExchangeAdapter.SetLiveAdapters` which itself is never called |
-| `KrakenWebSocketAdapter` instantiated in DI                    | ❌ Same as above                                                                                                |
-| `DelegatingExchangeAdapter.SetLiveAdapters` called at startup  | ❌ Nobody calls this                                                                                            |
-| `IMarketDataSource` wired to real impl.                        | ❌ `NullMarketDataSource` registered                                                                            |
-| `MarketDataService__Url` in `execution-service` docker-compose | ❌ Not set                                                                                                      |
+| Feature                                                                        | Status                                                                                                         |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `KrakenRestAdapter` instantiated in DI                                         | ❌ Not registered; created manually in `DelegatingExchangeAdapter.SetLiveAdapters` which itself is never called |
+| `KrakenWebSocketAdapter` instantiated in DI                                    | ❌ Same as above                                                                                                |
+| `DelegatingExchangeAdapter.SetLiveAdapters` called at startup                  | ❌ Nobody calls this                                                                                            |
+| `IMarketDataSource` wired to real impl.                                        | ❌ `NullMarketDataSource` registered                                                                            |
+| `EXECUTIONSERVICE__MARKETDATASERVICEURL` in `execution-service` docker-compose | ❌ Not set                                                                                                      |
 
 ---
 

@@ -5,7 +5,7 @@ namespace MarketDataService.Adapters;
 
 /// <summary>
 /// Deterministic, no-network exchange adapter used for E2E testing.
-/// Activated when EXCHANGE__USE_MOCK=true is set.
+/// Activated when MARKETDATA__EXCHANGE__USEMOCK=true is set.
 /// </summary>
 public class MockExchangeAdapter : IExchangeAdapter
 {

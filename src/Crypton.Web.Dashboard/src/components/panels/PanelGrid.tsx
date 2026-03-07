@@ -23,6 +23,7 @@ import { SystemDiagnosticsPanel } from '../panels/SystemDiagnosticsPanel';
 import { SystemStatusPanel } from '../panels/SystemStatusPanel';
 import { ConnectionHealthPanel } from '../panels/ConnectionHealthPanel';
 import { ErrorLogPanel } from '../panels/ErrorLogPanel';
+import { WsFeedMarketDataPanel, WsFeedExecutionPanel, WsFeedAgentRunnerPanel } from '../panels/WsFeedPanel';
 
 const GRID_SIZE = 8;
 const MIN_PANEL_WIDTH = 200;
@@ -60,6 +61,9 @@ const PANEL_COMPONENTS: Record<string, React.FC<{ config?: Record<string, unknow
   'system-status': SystemStatusPanel,
   'connection-health': ConnectionHealthPanel,
   'error-log': ErrorLogPanel,
+  'ws-feed-marketdata': WsFeedMarketDataPanel,
+  'ws-feed-execution': WsFeedExecutionPanel,
+  'ws-feed-agentrunner': WsFeedAgentRunnerPanel,
 };
 
 function snapToGrid(value: number): number {

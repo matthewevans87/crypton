@@ -32,6 +32,25 @@ type EventHandlers = {
 let hubConnection: signalR.HubConnection | null = null;
 let handlers: EventHandlers = {};
 
+// Raw event bus — lightweight pub-sub so WsFeedPanel components can observe the live
+// stream from the shared hub connection without opening additional connections.
+type RawListener = (data: unknown) => void;
+const rawListeners = new Map<string, Set<RawListener>>();
+
+function emitRaw(method: string, data: unknown): void {
+  rawListeners.get(method)?.forEach((cb) => cb(data));
+}
+
+export const rawFeedBus = {
+  on(method: string, cb: RawListener): void {
+    if (!rawListeners.has(method)) rawListeners.set(method, new Set());
+    rawListeners.get(method)!.add(cb);
+  },
+  off(method: string, cb: RawListener): void {
+    rawListeners.get(method)?.delete(cb);
+  },
+};
+
 const throttledPriceUpdates = batchUpdates<PriceTicker>((updates) => {
   updates.forEach((data) => handlers.onPriceUpdated?.(data));
 }, 100);
@@ -50,6 +69,7 @@ export const signalRService = {
       .build();
 
     hubConnection.on('PortfolioUpdated', (data: PortfolioSummary) => {
+      emitRaw('PortfolioUpdated', data);
       if (hubConnection?.state !== signalR.HubConnectionState.Connected) {
         messageQueue.enqueue('PortfolioUpdated', data);
         return;
@@ -58,6 +78,7 @@ export const signalRService = {
     });
 
     hubConnection.on('PositionUpdated', (data: { asset: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number }) => {
+      emitRaw('PositionUpdated', data);
       handlers.onPortfolioUpdated?.({
         totalValue: data.currentPrice * data.quantity,
         unrealizedPnL: 0,
@@ -65,10 +86,12 @@ export const signalRService = {
     });
 
     hubConnection.on('PositionClosed', (data: { asset: string }) => {
+      emitRaw('PositionClosed', data);
       console.log('Position closed:', data.asset);
     });
 
     hubConnection.on('PriceUpdated', (data: PriceTicker) => {
+      emitRaw('PriceUpdated', data);
       if (hubConnection?.state !== signalR.HubConnectionState.Connected) {
         messageQueue.enqueue('PriceUpdated', data);
         return;
@@ -77,34 +100,42 @@ export const signalRService = {
     });
 
     hubConnection.on('AgentStateChanged', (data: AgentState) => {
+      emitRaw('AgentStateChanged', data);
       handlers.onAgentStateChanged?.(data);
     });
 
     hubConnection.on('ToolCallStarted', (data: ToolCall) => {
+      emitRaw('ToolCallStarted', data);
       handlers.onToolCallUpdated?.(data);
     });
 
     hubConnection.on('ToolCallCompleted', (data: ToolCall) => {
+      emitRaw('ToolCallCompleted', data);
       handlers.onToolCallUpdated?.(data);
     });
 
     hubConnection.on('ReasoningUpdated', (data: ReasoningStep) => {
+      emitRaw('ReasoningUpdated', data);
       handlers.onReasoningUpdated?.(data);
     });
 
     hubConnection.on('StrategyUpdated', (data: Strategy) => {
+      emitRaw('StrategyUpdated', data);
       handlers.onStrategyUpdated?.(data);
     });
 
     hubConnection.on('CycleCompleted', (data: CyclePerformance) => {
+      emitRaw('CycleCompleted', data);
       handlers.onCycleCompleted?.(data);
     });
 
     hubConnection.on('EvaluationCompleted', (data: EvaluationSummary) => {
+      emitRaw('EvaluationCompleted', data);
       handlers.onEvaluationCompleted?.(data);
     });
 
     hubConnection.on('ErrorOccurred', (error: string) => {
+      emitRaw('ErrorOccurred', error);
       handlers.onError?.(error);
     });
 

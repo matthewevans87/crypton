@@ -42,28 +42,15 @@ else
         DotEnvLoader.Load();  // walk up from cwd
 }
 
-// Map short-form env var names (common in .env files) to the double-underscore
-// hierarchy form that ASP.NET Core IConfiguration expects. Only applied when the
-// target key is not already set (short form wins if both are present).
-var envAliases = new Dictionary<string, string>
-{
-    ["BRAVE_SEARCH_API_KEY"] = "Tools__BraveSearch__ApiKey",
-    ["AGENT_RUNNER_API_KEY"] = "Api__ApiKey",
-};
-foreach (var (shortKey, fullKey) in envAliases)
-{
-    var val = Environment.GetEnvironmentVariable(shortKey);
-    if (val is not null && Environment.GetEnvironmentVariable(fullKey) is null)
-        Environment.SetEnvironmentVariable(fullKey, val);
-}
-
 var builder = WebApplication.CreateBuilder(args);
+
+var effectiveConfiguration = BuildServiceScopedConfiguration(builder.Configuration, "AgentRunner");
 
 // Bind configuration from IConfiguration (appsettings.json + env vars + cmdline).
 // Secrets are provided via environment variables using the __ hierarchy convention:
-//   Tools__BraveSearch__ApiKey  →  AgentRunnerConfig.Tools.BraveSearch.ApiKey
-//   Api__ApiKey                 →  AgentRunnerConfig.Api.ApiKey
-var config = builder.Configuration.Get<AgentRunnerConfig>()
+//   AGENTRUNNER__TOOLS__BRAVESEARCH__APIKEY  →  AgentRunnerConfig.Tools.BraveSearch.ApiKey
+//   AGENTRUNNER__API__APIKEY                 →  AgentRunnerConfig.Api.ApiKey
+var config = effectiveConfiguration.Get<AgentRunnerConfig>()
     ?? throw new InvalidOperationException("Failed to bind AgentRunnerConfig from IConfiguration.");
 
 var logger = new EventLogger(
@@ -78,11 +65,7 @@ Log.Logger = new LoggerConfiguration()
 
 Log.Information("Starting Agent Runner...");
 
-if (string.IsNullOrEmpty(config.Tools.BraveSearch.ApiKey))
-    Log.Warning("Brave Search API key not configured. Set env var: Tools__BraveSearch__ApiKey");
-
-if (string.IsNullOrEmpty(config.Api.ApiKey))
-    Log.Warning("Agent Runner API key not configured. Set env var: Api__ApiKey");
+ValidateAgentRunnerConfiguration(config);
 
 var artifactManager = new ArtifactManager(config.Storage);
 var mailboxManager = new MailboxManager(config.Storage);
@@ -171,3 +154,71 @@ var listenUrl = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
 Log.Information("Agent Runner listening on {Url}", listenUrl);
 
 app.Run(listenUrl);
+
+static void ValidateAgentRunnerConfiguration(AgentRunnerConfig config)
+{
+    var errors = new List<string>();
+
+    if (string.IsNullOrWhiteSpace(config.Tools.BraveSearch.ApiKey))
+    {
+        errors.Add("Missing required configuration 'tools:braveSearch:apiKey' (env: AGENTRUNNER__TOOLS__BRAVESEARCH__APIKEY).");
+    }
+
+    if (string.IsNullOrWhiteSpace(config.Api.ApiKey))
+    {
+        errors.Add("Missing required configuration 'api:apiKey' (env: AGENTRUNNER__API__APIKEY).");
+    }
+
+    if (!Uri.TryCreate(config.Tools.ExecutionService.BaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'tools:executionService:baseUrl' must be an absolute URI.");
+    }
+
+    if (!Uri.TryCreate(config.Tools.MarketDataService.BaseUrl, UriKind.Absolute, out _))
+    {
+        errors.Add("Configuration 'tools:marketDataService:baseUrl' must be an absolute URI.");
+    }
+
+    if (errors.Count == 0)
+    {
+        return;
+    }
+
+    foreach (var error in errors)
+    {
+        Log.Error("Configuration contract violation: {ConfigError}", error);
+    }
+
+    throw new InvalidOperationException(
+        $"Agent Runner configuration validation failed with {errors.Count} error(s). See ERROR logs.");
+}
+
+static IConfiguration BuildServiceScopedConfiguration(IConfiguration configuration, string serviceName)
+{
+    var serviceOverrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+    var serviceSection = configuration.GetSection(serviceName);
+
+    void Flatten(IConfigurationSection section, string pathPrefix)
+    {
+        foreach (var child in section.GetChildren())
+        {
+            var childPath = string.IsNullOrEmpty(pathPrefix)
+                ? child.Key
+                : $"{pathPrefix}:{child.Key}";
+
+            if (child.Value is not null)
+            {
+                serviceOverrides[childPath] = child.Value;
+            }
+
+            Flatten(child, childPath);
+        }
+    }
+
+    Flatten(serviceSection, string.Empty);
+
+    return new ConfigurationBuilder()
+        .AddConfiguration(configuration)
+        .AddInMemoryCollection(serviceOverrides)
+        .Build();
+}

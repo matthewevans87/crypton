@@ -52,7 +52,7 @@ async function startManagedServices(): Promise<void> {
       env: {
         ASPNETCORE_URLS: 'http://localhost:5002',
         ASPNETCORE_ENVIRONMENT: 'Development',
-        EXCHANGE__USE_MOCK: 'true',
+        MARKETDATA__EXCHANGE__USEMOCK: 'true',
       },
     },
     {
@@ -61,8 +61,8 @@ async function startManagedServices(): Promise<void> {
       env: {
         ASPNETCORE_URLS: 'http://localhost:5004',
         ASPNETCORE_ENVIRONMENT: 'Development',
-        EXECUTION_SERVICE__API__ApiKey: testApiKey,
-        EXECUTION_SERVICE__MarketDataServiceUrl: 'http://localhost:5002',
+        EXECUTIONSERVICE__API__APIKEY: testApiKey,
+        EXECUTIONSERVICE__MARKETDATASERVICEURL: 'http://localhost:5002',
       },
     },
     {
@@ -71,10 +71,10 @@ async function startManagedServices(): Promise<void> {
       env: {
         ASPNETCORE_URLS: 'http://localhost:5003',
         ASPNETCORE_ENVIRONMENT: 'Development',
-        Api__ApiKey: testApiKey,
-        Tools__MarketDataService__BaseUrl: 'http://localhost:5002',
-        Tools__ExecutionService__BaseUrl: 'http://localhost:5004',
-        Cycle__ScheduleIntervalMinutes: '99999',
+        AGENTRUNNER__API__APIKEY: testApiKey,
+        AGENTRUNNER__TOOLS__MARKETDATASERVICE__BASEURL: 'http://localhost:5002',
+        AGENTRUNNER__TOOLS__EXECUTIONSERVICE__BASEURL: 'http://localhost:5004',
+        AGENTRUNNER__CYCLE__SCHEDULEINTERVALMINUTES: '99999',
       },
     },
     {
@@ -83,10 +83,10 @@ async function startManagedServices(): Promise<void> {
       env: {
         ASPNETCORE_URLS: 'http://localhost:5001',
         ASPNETCORE_ENVIRONMENT: 'Development',
-        AgentRunner__Url: 'http://localhost:5003',
-        AgentRunner__ApiKey: testApiKey,
-        ExecutionService__Url: 'http://localhost:5004',
-        MarketDataService__Url: 'http://localhost:5002',
+        MONITORINGDASHBOARD__AGENTRUNNER__URL: 'http://localhost:5003',
+        MONITORINGDASHBOARD__AGENTRUNNER__APIKEY: testApiKey,
+        MONITORINGDASHBOARD__EXECUTIONSERVICE__URL: 'http://localhost:5004',
+        MONITORINGDASHBOARD__MARKETDATASERVICE__URL: 'http://localhost:5002',
       },
     },
   ];

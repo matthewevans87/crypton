@@ -10,11 +10,11 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5003
-      - Tools__BraveSearch__ApiKey=${BRAVE_SEARCH_API_KEY}
-      - Api__ApiKey=${AGENT_RUNNER_API_KEY}
-      - Tools__MarketDataService__BaseUrl=http://market-data-service:5002
-      - Tools__ExecutionService__BaseUrl=http://execution-service:5004
-      - Ollama__BaseUrl=http://host-gateway:11434
+      - AGENTRUNNER__TOOLS__BRAVESEARCH__APIKEY=${BRAVE_SEARCH_API_KEY}
+      - AGENTRUNNER__API__APIKEY=${AGENT_RUNNER_API_KEY}
+      - AGENTRUNNER__TOOLS__MARKETDATASERVICE__BASEURL=http://market-data-service:5002
+      - AGENTRUNNER__TOOLS__EXECUTIONSERVICE__BASEURL=http://execution-service:5004
+      - AGENTRUNNER__OLLAMA__BASEURL=http://host-gateway:11434
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:
@@ -44,8 +44,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5002
-      - Kraken__ApiKey=${KRAKEN_API_KEY}
-      - Kraken__ApiSecret=${KRAKEN_SECRET_KEY}
+      - MARKETDATA__KRAKEN__APIKEY=${KRAKEN_API_KEY}
+      - MARKETDATA__KRAKEN__APISECRET=${KRAKEN_SECRET_KEY}
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -69,11 +69,11 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5004
-      - EXECUTION_SERVICE__KRAKEN__ApiKey=${KRAKEN_API_KEY}
-      - EXECUTION_SERVICE__KRAKEN__ApiSecret=${KRAKEN_SECRET_KEY}
-      - EXECUTION_SERVICE__API__ApiKey=${EXECUTION_SERVICE_API_KEY}
+      - EXECUTIONSERVICE__KRAKEN__APIKEY=${KRAKEN_API_KEY}
+      - EXECUTIONSERVICE__KRAKEN__APISECRET=${KRAKEN_SECRET_KEY}
+      - EXECUTIONSERVICE__API__APIKEY=${EXECUTION_SERVICE_API_KEY}
       # MarketDataServiceUrl tells MarketDataServiceClient where to connect for price ticks.
-      - EXECUTION_SERVICE__MarketDataServiceUrl=http://market-data-service:5002
+      - EXECUTIONSERVICE__MARKETDATASERVICEURL=http://market-data-service:5002
     volumes:
       - crypton_artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/execution/logs:/app/logs
@@ -104,9 +104,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5001
-      - MarketDataService__Url=http://market-data-service:5002
-      - ExecutionService__Url=http://execution-service:5004
-      - AgentRunner__Url=http://agent-runner:5003
+      - MONITORINGDASHBOARD__MARKETDATASERVICE__URL=http://market-data-service:5002
+      - MONITORINGDASHBOARD__EXECUTIONSERVICE__URL=http://execution-service:5004
+      - MONITORINGDASHBOARD__AGENTRUNNER__URL=http://agent-runner:5003
+      - MONITORINGDASHBOARD__AGENTRUNNER__APIKEY=${AGENT_RUNNER_API_KEY}
     depends_on:
       market-data-service:
         condition: service_healthy

@@ -25,19 +25,22 @@ public sealed class StatusController : ControllerBase
     private readonly IStrategyService _strategy;
     private readonly PositionRegistry _positions;
     private readonly MarketDataHub _marketData;
+    private readonly PortfolioRiskEnforcer _riskEnforcer;
 
     public StatusController(
         IOperationModeService mode,
         ISafeModeController safeMode,
         IStrategyService strategy,
         PositionRegistry positions,
-        MarketDataHub marketData)
+        MarketDataHub marketData,
+        PortfolioRiskEnforcer riskEnforcer)
     {
         _mode = mode;
         _safeMode = safeMode;
         _strategy = strategy;
         _positions = positions;
         _marketData = marketData;
+        _riskEnforcer = riskEnforcer;
     }
 
     [HttpGet("/status")]
@@ -45,6 +48,9 @@ public sealed class StatusController : ControllerBase
     {
         mode = _mode.CurrentMode,
         safe_mode = _safeMode.IsActive,
+        safe_mode_triggered = _riskEnforcer.SafeModeTriggered,
+        safe_mode_reason = _riskEnforcer.SafeModeTriggerReason,
+        entries_suspended = _riskEnforcer.EntriesSuspended,
         strategy_state = _strategy.State.ToString().ToLowerInvariant(),
         strategy_id = _strategy.ActiveStrategyId,
         open_positions = _positions.OpenPositions.Count,
