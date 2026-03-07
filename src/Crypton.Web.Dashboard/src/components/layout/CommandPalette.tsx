@@ -113,6 +113,36 @@ export function CommandPalette() {
         },
       },
       {
+        id: 'agent-start',
+        label: 'Agent: Start Loop',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-start');
+          toggleCommandPalette();
+          api.agent.start().catch((e) => console.error('Start failed:', e));
+        },
+      },
+      {
+        id: 'agent-recover',
+        label: 'Agent: Recover From Degraded',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-recover');
+          toggleCommandPalette();
+          api.agent.recover().catch((e) => console.error('Recover failed:', e));
+        },
+      },
+      {
+        id: 'agent-degrade',
+        label: 'Agent: Enter Degraded Mode',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('agent-degrade');
+          toggleCommandPalette();
+          api.agent.degrade('manual operator action').catch((e) => console.error('Degrade failed:', e));
+        },
+      },
+      {
         id: 'agent-pause',
         label: 'Agent: Pause Loop',
         category: 'agent' as const,
@@ -140,6 +170,56 @@ export function CommandPalette() {
           addRecentCommand('agent-abort');
           toggleCommandPalette();
           api.agent.abort().catch((e) => console.error('Abort failed:', e));
+        },
+      },
+      {
+        id: 'execution-degrade',
+        label: 'Execution: Enter Degraded Mode',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('execution-degrade');
+          toggleCommandPalette();
+          api.execution.degrade('manual operator action').catch((e) => console.error('Execution degrade failed:', e));
+        },
+      },
+      {
+        id: 'execution-recover',
+        label: 'Execution: Recover From Degraded',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('execution-recover');
+          toggleCommandPalette();
+          api.execution.recover().catch((e) => console.error('Execution recover failed:', e));
+        },
+      },
+      {
+        id: 'execution-promote-live',
+        label: 'Execution: Promote To Live',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('execution-promote-live');
+          toggleCommandPalette();
+          api.execution.promoteToLive('manual operator action').catch((e) => console.error('Promote to live failed:', e));
+        },
+      },
+      {
+        id: 'execution-demote-paper',
+        label: 'Execution: Demote To Paper',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('execution-demote-paper');
+          toggleCommandPalette();
+          api.execution.demoteToPaper('manual operator action').catch((e) => console.error('Demote to paper failed:', e));
+        },
+      },
+      {
+        id: 'execution-reload-strategy',
+        label: 'Execution: Reload Strategy',
+        category: 'agent' as const,
+        action: () => {
+          addRecentCommand('execution-reload-strategy');
+          toggleCommandPalette();
+          api.execution.reloadStrategy().catch((e) => console.error('Reload strategy failed:', e));
         },
       },
       ...PANEL_COMMANDS.map((pc) => {

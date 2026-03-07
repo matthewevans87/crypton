@@ -10,6 +10,7 @@ public sealed class MonitoringDashboardConfig
 public sealed class ServiceEndpointConfig
 {
     public string Url { get; init; } = string.Empty;
+    public string ApiKey { get; init; } = string.Empty;
 }
 
 public sealed class AgentRunnerConfig

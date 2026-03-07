@@ -34,6 +34,38 @@ public class AgentController : ControllerBase
         return client;
     }
 
+    private async Task<IActionResult> ProxyAgentPostAsync(string relativePath, object? body, CancellationToken ct)
+    {
+        try
+        {
+            var client = CreateAgentRunnerClient();
+            var content = body is null
+                ? null
+                : new StringContent(
+                    System.Text.Json.JsonSerializer.Serialize(body),
+                    System.Text.Encoding.UTF8,
+                    "application/json");
+
+            var response = await client.PostAsync($"{_agentRunnerUrl}/{relativePath.TrimStart('/')}", content, ct);
+            var responseBody = await response.Content.ReadAsStringAsync(ct);
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return StatusCode((int)response.StatusCode, new { status = response.StatusCode.ToString() });
+            }
+
+            return new ContentResult
+            {
+                Content = responseBody,
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
+        }
+    }
+
     /// <summary>
     /// Returns the current agent state from AgentRunner GET /api/status.
     /// </summary>
@@ -138,73 +170,51 @@ public class AgentController : ControllerBase
     [HttpPost("force-cycle")]
     public async Task<IActionResult> ForceCycle(CancellationToken ct)
     {
-        try
-        {
-            var client = CreateAgentRunnerClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/force-cycle", null, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-            return StatusCode((int)response.StatusCode, body);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
-        }
+        return await ProxyAgentPostAsync("api/control/force-cycle", null, ct);
     }
 
     /// <summary>Pause the loop (POST /api/agent/pause).</summary>
     [HttpPost("pause")]
     public async Task<IActionResult> Pause([FromBody] object? body, CancellationToken ct)
     {
-        try
-        {
-            var client = CreateAgentRunnerClient();
-            var content = body is null
-                ? null
-                : new StringContent(
-                    System.Text.Json.JsonSerializer.Serialize(body),
-                    System.Text.Encoding.UTF8, "application/json");
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/pause", content, ct);
-            var responseBody = await response.Content.ReadAsStringAsync(ct);
-            return StatusCode((int)response.StatusCode, responseBody);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
-        }
+        return await ProxyAgentPostAsync("api/control/pause", body, ct);
     }
 
     /// <summary>Resume a paused loop (POST /api/agent/resume).</summary>
     [HttpPost("resume")]
     public async Task<IActionResult> Resume(CancellationToken ct)
     {
-        try
-        {
-            var client = CreateAgentRunnerClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/resume", null, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-            return StatusCode((int)response.StatusCode, body);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
-        }
+        return await ProxyAgentPostAsync("api/control/resume", null, ct);
     }
 
     /// <summary>Abort the current cycle (POST /api/agent/abort).</summary>
     [HttpPost("abort")]
     public async Task<IActionResult> Abort(CancellationToken ct)
     {
-        try
+        return await ProxyAgentPostAsync("api/control/abort", null, ct);
+    }
+
+    [HttpPost("start")]
+    public async Task<IActionResult> Start(CancellationToken ct)
+    {
+        return await ProxyAgentPostAsync("api/control/start", null, ct);
+    }
+
+    [HttpPost("recover")]
+    public async Task<IActionResult> Recover(CancellationToken ct)
+    {
+        return await ProxyAgentPostAsync("api/control/recover", null, ct);
+    }
+
+    [HttpPost("degrade")]
+    public async Task<IActionResult> Degrade([FromBody] DegradeRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
         {
-            var client = CreateAgentRunnerClient();
-            var response = await client.PostAsync($"{_agentRunnerUrl}/api/override/abort", null, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-            return StatusCode((int)response.StatusCode, body);
+            return BadRequest(new { error = "reason is required" });
         }
-        catch (Exception ex)
-        {
-            return StatusCode(502, new { error = $"AgentRunner unavailable: {ex.Message}" });
-        }
+
+        return await ProxyAgentPostAsync("api/control/degrade", request, ct);
     }
 
     // -----------------------------------------------------------------------
@@ -246,3 +256,5 @@ public class AgentController : ControllerBase
         }
     }
 }
+
+public sealed record DegradeRequest(string Reason);

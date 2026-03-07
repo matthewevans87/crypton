@@ -60,7 +60,11 @@ builder.Services.AddSingleton<IExecutionServiceClient>(sp =>
 {
     var httpClient = new HttpClient();
     var logger = sp.GetRequiredService<ILogger<ExecutionServiceClient>>();
-    return new ExecutionServiceClient(dashboardConfig.ExecutionService.Url, httpClient, logger);
+    return new ExecutionServiceClient(
+        dashboardConfig.ExecutionService.Url,
+        dashboardConfig.ExecutionService.ApiKey,
+        httpClient,
+        logger);
 });
 
 builder.Services.AddSingleton<IAgentRunnerClient>(sp =>
@@ -370,6 +374,11 @@ static List<string> ValidateMonitoringDashboardConfiguration(MonitoringDashboard
     if (!Uri.TryCreate(config.ExecutionService.Url, UriKind.Absolute, out _))
     {
         errors.Add("Configuration 'executionService:url' must be an absolute URI (env: MONITORINGDASHBOARD__EXECUTIONSERVICE__URL).");
+    }
+
+    if (string.IsNullOrWhiteSpace(config.ExecutionService.ApiKey))
+    {
+        errors.Add("Missing required configuration 'executionService:apiKey' (env: MONITORINGDASHBOARD__EXECUTIONSERVICE__APIKEY).");
     }
 
     if (!Uri.TryCreate(config.AgentRunner.Url, UriKind.Absolute, out _))

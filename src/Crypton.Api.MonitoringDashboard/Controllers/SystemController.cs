@@ -163,10 +163,14 @@ public class SystemController : ControllerBase
 
             var mode = root.TryGetProperty("mode", out var mv) ? mv.GetString() : "unknown";
             var safeMode = root.TryGetProperty("safe_mode", out var sm) && sm.GetBoolean();
+            var isDegraded = root.TryGetProperty("is_degraded", out var idg) && idg.GetBoolean();
             var safeModeTriggered = root.TryGetProperty("safe_mode_triggered", out var smt) && smt.GetBoolean();
             var safeModeReason = root.TryGetProperty("safe_mode_reason", out var smr) && smr.ValueKind != JsonValueKind.Null
                 ? smr.GetString()
                 : null;
+            var degradedErrors = root.TryGetProperty("degraded_errors", out var des) && des.ValueKind == JsonValueKind.Array
+                ? des.EnumerateArray().Select(e => e.GetString()).OfType<string>().ToList()
+                : [];
             var entriesSuspended = root.TryGetProperty("entries_suspended", out var es) && es.GetBoolean();
             var strategyState = root.TryGetProperty("strategy_state", out var ss) ? ss.GetString() : "unknown";
             var openPositions = root.TryGetProperty("open_positions", out var op) ? op.GetInt32() : 0;
@@ -193,6 +197,23 @@ public class SystemController : ControllerBase
                     RecommendedAction = "Review risk thresholds and active exposure before clearing safe mode.",
                     IsUserActionable = true,
                 });
+            }
+            else if (isDegraded)
+            {
+                status = "degraded";
+                detail = degradedErrors.Count > 0
+                    ? $"Degraded - {degradedErrors[0]}"
+                    : "Degraded - control policy active";
+
+                reasons.AddRange(degradedErrors.Select(error => new ServiceHealthReason
+                {
+                    Code = "execution.degraded",
+                    Summary = error,
+                    Severity = "warning",
+                    Category = "operator",
+                    RecommendedAction = "Review degraded reason and recover service via control plane when prerequisites are restored.",
+                    IsUserActionable = true,
+                }));
             }
             else if (strategyState is "waiting" or "no_strategy" or null)
             {
@@ -244,6 +265,8 @@ public class SystemController : ControllerBase
                 {
                     ["mode"] = mode,
                     ["safeMode"] = safeMode,
+                    ["isDegraded"] = isDegraded,
+                    ["degradedErrors"] = degradedErrors,
                     ["safeModeTriggered"] = safeModeTriggered,
                     ["safeModeReason"] = safeModeReason,
                     ["entriesSuspended"] = entriesSuspended,
@@ -273,6 +296,10 @@ public class SystemController : ControllerBase
 
             var currentState = root.TryGetProperty("currentState", out var cs) ? cs.GetString() : "Unknown";
             var isPaused = root.TryGetProperty("isPaused", out var ip) && ip.GetBoolean();
+            var isDegraded = root.TryGetProperty("isDegraded", out var idg) && idg.GetBoolean();
+            var degradedErrors = root.TryGetProperty("degradedErrors", out var de) && de.ValueKind == JsonValueKind.Array
+                ? de.EnumerateArray().Select(e => e.GetString()).OfType<string>().ToList()
+                : [];
             var pauseReason = root.TryGetProperty("pauseReason", out var pr) && pr.ValueKind != JsonValueKind.Null
                 ? pr.GetString() : null;
             var cycleId = root.TryGetProperty("currentCycleId", out var ci) && ci.ValueKind != JsonValueKind.Null
@@ -305,6 +332,23 @@ public class SystemController : ControllerBase
                     RecommendedAction = "Confirm whether pause is intentional; resume loop when ready.",
                     IsUserActionable = true,
                 });
+            }
+            else if (isDegraded)
+            {
+                serviceStatus = "degraded";
+                detail = degradedErrors.Count > 0
+                    ? $"Degraded - {degradedErrors[0]}"
+                    : "Degraded - startup prerequisites failed";
+
+                reasons.AddRange(degradedErrors.Select(error => new ServiceHealthReason
+                {
+                    Code = "agentrunner.degraded",
+                    Summary = error,
+                    Severity = "warning",
+                    Category = "dependency",
+                    RecommendedAction = "Restore dependencies and use start/recover control action.",
+                    IsUserActionable = true,
+                }));
             }
             else if (currentState is "Failed")
             {
@@ -355,6 +399,8 @@ public class SystemController : ControllerBase
                 {
                     ["currentState"] = currentState,
                     ["isPaused"] = isPaused,
+                    ["isDegraded"] = isDegraded,
+                    ["degradedErrors"] = degradedErrors,
                     ["pauseReason"] = pauseReason,
                     ["currentCycleId"] = cycleId,
                     ["nextScheduledTime"] = nextRun?.ToString("o"),

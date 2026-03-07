@@ -261,6 +261,11 @@ export function SystemDiagnosticsPanel() {
     const { systemHealth, setSystemHealth } = useDashboardStore();
     const [refreshing, setRefreshing] = useState(false);
     const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+    const [agentReason, setAgentReason] = useState('manual operator action');
+    const [executionReason, setExecutionReason] = useState('manual operator action');
+    const [operatorNote, setOperatorNote] = useState('manual operator action');
+    const [controlMessage, setControlMessage] = useState<string | null>(null);
+    const [runningAction, setRunningAction] = useState<string | null>(null);
 
     const handleRefresh = async () => {
         setRefreshing(true);
@@ -274,6 +279,22 @@ export function SystemDiagnosticsPanel() {
             // silently ignore — panels never crash on refresh errors
         } finally {
             setRefreshing(false);
+        }
+    };
+
+    const runControl = async (actionName: string, action: () => Promise<unknown>) => {
+        setRunningAction(actionName);
+        setControlMessage(null);
+
+        try {
+            await action();
+            setControlMessage(`${actionName} completed`);
+            await handleRefresh();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setControlMessage(`${actionName} failed: ${message}`);
+        } finally {
+            setRunningAction(null);
         }
     };
 
@@ -330,6 +351,105 @@ export function SystemDiagnosticsPanel() {
                     >
                         {refreshing ? 'checking…' : '↻ Refresh'}
                     </button>
+                </div>
+            </div>
+
+            {/* Operator controls */}
+            <div
+                style={{
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '6px',
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    backgroundColor: 'var(--bg-panel)',
+                }}
+            >
+                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Operator Controls</div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto auto', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>AgentRunner</span>
+                    <input
+                        value={agentReason}
+                        onChange={(e) => setAgentReason(e.target.value)}
+                        placeholder='degrade reason'
+                        style={{
+                            minWidth: '180px',
+                            background: 'var(--bg-main)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            fontSize: '11px',
+                        }}
+                    />
+                    <button onClick={() => runControl('Agent start', () => api.agent.start())} disabled={!!runningAction}>Start</button>
+                    <button onClick={() => runControl('Agent recover', () => api.agent.recover())} disabled={!!runningAction}>Recover</button>
+                    <button
+                        onClick={() => runControl('Agent degrade', () => api.agent.degrade(agentReason.trim()))}
+                        disabled={!!runningAction || !agentReason.trim()}
+                    >
+                        Degrade
+                    </button>
+                    <button onClick={() => runControl('Agent pause', () => api.agent.pause('manual operator action'))} disabled={!!runningAction}>Pause</button>
+                    <button onClick={() => runControl('Agent resume', () => api.agent.resume())} disabled={!!runningAction}>Resume</button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>ExecutionService</span>
+                    <input
+                        value={executionReason}
+                        onChange={(e) => setExecutionReason(e.target.value)}
+                        placeholder='degrade reason'
+                        style={{
+                            minWidth: '180px',
+                            background: 'var(--bg-main)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            fontSize: '11px',
+                        }}
+                    />
+                    <input
+                        value={operatorNote}
+                        onChange={(e) => setOperatorNote(e.target.value)}
+                        placeholder='operator note'
+                        style={{
+                            minWidth: '180px',
+                            background: 'var(--bg-main)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-default)',
+                            borderRadius: '4px',
+                            padding: '4px 6px',
+                            fontSize: '11px',
+                        }}
+                    />
+                    <button
+                        onClick={() => runControl('Execution degrade', () => api.execution.degrade(executionReason.trim()))}
+                        disabled={!!runningAction || !executionReason.trim()}
+                    >
+                        Degrade
+                    </button>
+                    <button onClick={() => runControl('Execution recover', () => api.execution.recover())} disabled={!!runningAction}>Recover</button>
+                    <button
+                        onClick={() => runControl('Execution promote live', () => api.execution.promoteToLive(operatorNote.trim()))}
+                        disabled={!!runningAction}
+                    >
+                        Promote Live
+                    </button>
+                    <button
+                        onClick={() => runControl('Execution demote paper', () => api.execution.demoteToPaper(operatorNote.trim()))}
+                        disabled={!!runningAction}
+                    >
+                        Demote Paper
+                    </button>
+                    <button onClick={() => runControl('Execution reload strategy', () => api.execution.reloadStrategy())} disabled={!!runningAction}>Reload</button>
+                </div>
+
+                <div style={{ fontSize: '11px', color: runningAction ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
+                    {runningAction ? `${runningAction} in progress...` : (controlMessage ?? 'Use controls for manual degraded-mode operations.')}
                 </div>
             </div>
 

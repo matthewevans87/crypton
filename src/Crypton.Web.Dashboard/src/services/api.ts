@@ -160,9 +160,23 @@ export const api = {
     getCycleInterval: () => fetchJson('/agent/config/cycle-interval'),
     setCycleInterval: (minutes: number) => postJson('/agent/config/cycle-interval', { cycleIntervalMinutes: minutes }),
     forceCycle: () => postJson('/agent/force-cycle', {}),
+    start: () => postJson('/agent/start', {}),
+    recover: () => postJson('/agent/recover', {}),
+    degrade: (reason: string) => postJson('/agent/degrade', { reason }),
     pause: (reason?: string) => postJson('/agent/pause', reason ? { reason } : {}),
     resume: () => postJson('/agent/resume', {}),
     abort: () => postJson('/agent/abort', {}),
+  },
+
+  // Execution controls
+  execution: {
+    degrade: (reason: string) => postJson('/execution/degrade', { reason }),
+    recover: () => postJson('/execution/recover', {}),
+    promoteToLive: (operatorNote?: string) =>
+      postJson('/execution/promote-to-live', operatorNote ? { operatorNote } : {}),
+    demoteToPaper: (operatorNote?: string) =>
+      postJson('/execution/demote-to-paper', operatorNote ? { operatorNote } : {}),
+    reloadStrategy: () => postJson('/execution/reload-strategy', {}),
   },
   
   // Performance

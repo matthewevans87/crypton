@@ -26,6 +26,7 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
 {
     private HubConnection? _connection;
     private readonly string _baseUrl;
+    private readonly string _apiKey;
     private readonly HttpClient _httpClient;
     private readonly ILogger<ExecutionServiceClient> _logger;
     private bool _isConnected;
@@ -35,11 +36,28 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
 
     public bool IsConnected => _isConnected;
 
-    public ExecutionServiceClient(string baseUrl, HttpClient httpClient, ILogger<ExecutionServiceClient> logger)
+    public ExecutionServiceClient(
+        string baseUrl,
+        string apiKey,
+        HttpClient httpClient,
+        ILogger<ExecutionServiceClient> logger)
     {
         _baseUrl = baseUrl.TrimEnd('/');
+        _apiKey = apiKey;
         _httpClient = httpClient;
         _logger = logger;
+    }
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, $"{_baseUrl}/{path.TrimStart('/')}");
+
+        if (!string.IsNullOrWhiteSpace(_apiKey))
+        {
+            request.Headers.Add("X-Api-Key", _apiKey);
+        }
+
+        return request;
     }
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
@@ -128,7 +146,8 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
     {
         try
         {
-            var resp = await _httpClient.GetAsync($"{_baseUrl}/positions", ct);
+            using var request = CreateRequest(HttpMethod.Get, "positions");
+            var resp = await _httpClient.SendAsync(request, ct);
             return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
         }
         catch (Exception ex)
@@ -142,7 +161,8 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
     {
         try
         {
-            var resp = await _httpClient.GetAsync($"{_baseUrl}/trades", ct);
+            using var request = CreateRequest(HttpMethod.Get, "trades");
+            var resp = await _httpClient.SendAsync(request, ct);
             return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
         }
         catch (Exception ex)
@@ -156,7 +176,8 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
     {
         try
         {
-            var resp = await _httpClient.GetAsync($"{_baseUrl}/strategy", ct);
+            using var request = CreateRequest(HttpMethod.Get, "strategy");
+            var resp = await _httpClient.SendAsync(request, ct);
             return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
         }
         catch (Exception ex)
@@ -170,7 +191,8 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
     {
         try
         {
-            var resp = await _httpClient.GetAsync($"{_baseUrl}/status", ct);
+            using var request = CreateRequest(HttpMethod.Get, "api/status");
+            var resp = await _httpClient.SendAsync(request, ct);
             return ((int)resp.StatusCode, await resp.Content.ReadAsStringAsync(ct));
         }
         catch (Exception ex)
