@@ -20,6 +20,8 @@ function ServiceChip({ svc }: { svc: ServiceHealth }) {
   const tooltip = `${svc.name}: ${svc.detail}`;
   return (
     <div
+      data-testid={`service-chip-${svc.name.toLowerCase()}`}
+      data-status={svc.status}
       title={tooltip}
       style={{
         display: 'flex',
@@ -51,6 +53,7 @@ export function StatusBar() {
 
   return (
     <div
+      data-testid="status-bar"
       style={{
         height: '24px',
         backgroundColor: 'var(--bg-panel-header)',
@@ -67,6 +70,7 @@ export function StatusBar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
         {/* Dashboard SignalR connection */}
         <div
+          data-testid={`status-${connectionStatus}`}
           title="MonitoringDashboard — SignalR connection"
           style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', cursor: 'default' }}
         >

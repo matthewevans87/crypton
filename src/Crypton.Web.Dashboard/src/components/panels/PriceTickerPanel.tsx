@@ -65,6 +65,8 @@ export const PriceTickerPanel = React.memo(function PriceTickerPanel({ config }:
 
   return (
     <div
+      data-testid="panel-price-ticker"
+      data-asset={ticker.asset}
       className={flashClass}
       style={{
         display: 'flex',
@@ -77,6 +79,7 @@ export const PriceTickerPanel = React.memo(function PriceTickerPanel({ config }:
           {ticker.asset}
         </span>
         <span
+          data-testid="price-value"
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-lg)',

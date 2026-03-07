@@ -6,14 +6,18 @@ export function AgentStatePanel() {
   const state = agent.loop?.agentState;
   const reducedMotion = useReducedMotion();
 
+  const stateColor = state ? (state.isRunning ? 'var(--color-active)' : 'var(--color-idle)') : 'var(--color-idle)';
+
   if (!state) {
-    return <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>;
+    return (
+      <div data-testid="panel-agent-state">
+        <div style={{ color: 'var(--text-tertiary)' }}>Loading...</div>
+      </div>
+    );
   }
 
-  const stateColor = state.isRunning ? 'var(--color-active)' : 'var(--color-idle)';
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+    <div data-testid="panel-agent-state" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
       {/* State and Agent */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         <div
@@ -26,6 +30,7 @@ export function AgentStatePanel() {
           }}
         />
         <span
+          data-testid="agent-current-state"
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-lg)',

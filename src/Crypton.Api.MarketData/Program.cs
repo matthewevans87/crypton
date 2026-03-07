@@ -30,12 +30,24 @@ try
     builder.Services.AddHttpClient();
     builder.Services.AddLogging();
     builder.Services.AddSingleton<IMarketDataCache, InMemoryMarketDataCache>();
-    builder.Services.AddSingleton<IExchangeAdapter>(sp =>
-        new KrakenExchangeAdapter(
-            sp.GetRequiredService<HttpClient>(),
-            sp.GetRequiredService<ILogger<KrakenExchangeAdapter>>(),
-            sp.GetRequiredService<ILoggerFactory>(),
-            sp.GetRequiredService<IConfiguration>()));
+    var useMock = string.Equals(
+        builder.Configuration["Exchange:UseMock"] ?? builder.Configuration["EXCHANGE__USE_MOCK"],
+        "true", StringComparison.OrdinalIgnoreCase);
+
+    if (useMock)
+    {
+        builder.Services.AddSingleton<IExchangeAdapter>(sp =>
+            new MockExchangeAdapter(sp.GetRequiredService<ILogger<MockExchangeAdapter>>()));
+    }
+    else
+    {
+        builder.Services.AddSingleton<IExchangeAdapter>(sp =>
+            new KrakenExchangeAdapter(
+                sp.GetRequiredService<HttpClient>(),
+                sp.GetRequiredService<ILogger<KrakenExchangeAdapter>>(),
+                sp.GetRequiredService<ILoggerFactory>(),
+                sp.GetRequiredService<IConfiguration>()));
+    }
     builder.Services.AddSingleton<ITechnicalIndicatorService, TechnicalIndicatorService>();
     builder.Services.AddSingleton<IMetricsCollector, MetricsCollector>();
 

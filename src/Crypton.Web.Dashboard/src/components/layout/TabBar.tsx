@@ -4,16 +4,16 @@ import { useDashboardStore } from '../../store/dashboard';
 const MAX_TABS = 8;
 
 export function TabBar() {
-  const { 
-    tabs, 
-    activeTabId, 
-    setActiveTab, 
-    removeTab, 
-    addTab, 
+  const {
+    tabs,
+    activeTabId,
+    setActiveTab,
+    removeTab,
+    addTab,
     reorderPanels,
     tabs: allTabs,
   } = useDashboardStore();
-  
+
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const [draggingTab, setDraggingTab] = useState<string | null>(null);
   const [dragOverTab, setDragOverTab] = useState<string | null>(null);
@@ -103,6 +103,8 @@ export function TabBar() {
         {tabs.map((tab) => (
           <div
             key={tab.id}
+            data-testid={`tab-${tab.id}`}
+            data-active={tab.id === activeTabId ? 'true' : 'false'}
             ref={(el) => {
               if (el) tabRefs.current.set(tab.id, el);
             }}
@@ -119,8 +121,8 @@ export function TabBar() {
               alignItems: 'center',
               gap: 'var(--space-2)',
               backgroundColor: tab.id === activeTabId ? 'var(--bg-viewport)' : 'transparent',
-              border: tab.id === activeTabId 
-                ? '1px solid var(--border-default)' 
+              border: tab.id === activeTabId
+                ? '1px solid var(--border-default)'
                 : '1px solid transparent',
               borderBottom: tab.id === activeTabId ? 'none' : '1px solid transparent',
               borderRadius: '4px 4px 0 0',
@@ -167,7 +169,7 @@ export function TabBar() {
             )}
           </div>
         ))}
-        
+
         {tabs.length < MAX_TABS && (
           <button
             onClick={() => addTab()}
@@ -232,11 +234,11 @@ export function TabBar() {
   );
 }
 
-function ContextMenuItem({ 
-  children, 
-  onClick 
-}: { 
-  children: React.ReactNode; 
+function ContextMenuItem({
+  children,
+  onClick
+}: {
+  children: React.ReactNode;
   onClick: () => void;
 }) {
   return (

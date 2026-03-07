@@ -167,7 +167,10 @@ const defaultTabs: Tab[] = [
     id: 'diagnostics',
     title: 'Diagnostics',
     panels: [
+      { id: 'system-status', type: 'system-status' },
       { id: 'system-diagnostics', type: 'system-diagnostics' },
+      { id: 'connection-health', type: 'connection-health' },
+      { id: 'error-log', type: 'error-log' },
     ],
   },
 ];

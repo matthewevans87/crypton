@@ -28,3 +28,6 @@ _work/
 .service
 artifacts
 **/TestResults/
+
+**/node_modules/
+**/dist/

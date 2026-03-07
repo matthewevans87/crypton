@@ -16,7 +16,11 @@ export function SystemStatusPanel() {
     const { systemHealth } = useDashboardStore();
 
     if (!systemHealth) {
-        return <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)' }}>Waiting for status…</div>;
+        return (
+            <div data-testid="panel-system-status">
+                <div style={{ color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)' }}>Waiting for status…</div>
+            </div>
+        );
     }
 
     const allOnline = systemHealth.every((s) => s.status === 'online');
@@ -25,17 +29,20 @@ export function SystemStatusPanel() {
     const overallLabel = allOnline ? 'All Systems Operational' : anyOffline ? 'Service Outage' : 'Degraded';
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            <div style={{
-                padding: 'var(--space-1) var(--space-2)',
-                borderRadius: '3px',
-                backgroundColor: `${overallColor}18`,
-                border: `1px solid ${overallColor}44`,
-                fontSize: 'var(--font-size-xs)',
-                color: overallColor,
-                fontWeight: 600,
-                textAlign: 'center',
-            }}>
+        <div data-testid="panel-system-status" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <div
+                data-testid="system-status-overall"
+                data-status={allOnline ? 'online' : anyOffline ? 'offline' : 'degraded'}
+                style={{
+                    padding: 'var(--space-1) var(--space-2)',
+                    borderRadius: '3px',
+                    backgroundColor: `${overallColor}18`,
+                    border: `1px solid ${overallColor}44`,
+                    fontSize: 'var(--font-size-xs)',
+                    color: overallColor,
+                    fontWeight: 600,
+                    textAlign: 'center',
+                }}>
                 {overallLabel}
             </div>
 
@@ -46,6 +53,8 @@ export function SystemStatusPanel() {
                 return (
                     <div
                         key={svc.name}
+                        data-testid={`service-status-${svc.name.toLowerCase()}`}
+                        data-status={svc.status}
                         style={{
                             display: 'flex',
                             alignItems: 'center',
