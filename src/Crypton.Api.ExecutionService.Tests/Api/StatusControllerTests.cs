@@ -84,6 +84,7 @@ public sealed class StatusControllerTests : IDisposable
 
         dict["mode"].Should().Be("paper");
         dict["safe_mode"].Should().Be(false);
+        dict["is_degraded"].Should().Be(false);
         dict["strategy_state"].Should().Be("active");
         dict["strategy_id"].Should().Be("strat-123");
     }
@@ -102,6 +103,38 @@ public sealed class StatusControllerTests : IDisposable
         var dict = result!.Value!.GetType().GetProperties()
             .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
         dict["safe_mode"].Should().Be(true);
+        dict["is_degraded"].Should().Be(true);
+    }
+
+    [Fact]
+    public void Ready_Returns503_WhenSafeModeActive()
+    {
+        _safeMode.IsActive.Returns(true);
+        _safeMode.Reason.Returns("manual activation");
+
+        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub(), _riskEnforcer);
+        var result = controller.Ready() as ObjectResult;
+
+        result.Should().NotBeNull();
+        result!.StatusCode.Should().Be(503);
+
+        var dict = result.Value!.GetType().GetProperties()
+            .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
+        dict["reason"].Should().Be("degraded");
+    }
+
+    [Fact]
+    public void Ready_Returns200_WhenNotDegraded()
+    {
+        _safeMode.IsActive.Returns(false);
+
+        var controller = new StatusController(_mode, _safeMode, _strategy, _registry, MakeMarketDataHub(), _riskEnforcer);
+        var result = controller.Ready() as OkObjectResult;
+
+        result.Should().NotBeNull();
+        var dict = result!.Value!.GetType().GetProperties()
+            .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
+        dict["status"].Should().Be("ready");
     }
 
     [Fact]

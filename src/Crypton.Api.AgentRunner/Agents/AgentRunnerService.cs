@@ -9,7 +9,7 @@ using AgentRunner.Tools;
 
 namespace AgentRunner.Agents;
 
-public class AgentRunnerService
+public class AgentRunnerService : IAgentRunnerLifecycle
 {
     private readonly LoopStateMachine _stateMachine;
     private readonly StatePersistence _persistence;
@@ -29,6 +29,8 @@ public class AgentRunnerService
     private bool _isRestarting;
     private string? _latestPreviousCycleId;
     private DateTime _nextScheduledRunTime;
+
+    public bool IsRunning => _runTask != null && !_runTask.IsCompleted;
 
     public event EventHandler<LoopState>? StateChanged;
     public event EventHandler<string>? CycleCompleted;
@@ -72,6 +74,12 @@ public class AgentRunnerService
 
     public async Task StartAsync()
     {
+        if (IsRunning)
+        {
+            _logger.LogInfo("Agent Runner is already running. Ignoring duplicate start request.");
+            return;
+        }
+
         _logger.LogInfo("Agent Runner starting...");
 
         _healthMonitor = new LoopHealthMonitor(_stateMachine, _config, _logger);
@@ -134,6 +142,12 @@ public class AgentRunnerService
 
     public async Task StopAsync()
     {
+        if (!IsRunning)
+        {
+            _logger.LogInfo("Agent Runner is not running. Ignoring stop request.");
+            return;
+        }
+
         _logger.LogInfo("Agent Runner stopping...");
 
         _runCts?.Cancel();
@@ -150,6 +164,9 @@ public class AgentRunnerService
         }
 
         await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
+
+        _runTask = null;
+        _runCts = null;
 
         _logger.LogInfo("Agent Runner stopped");
     }

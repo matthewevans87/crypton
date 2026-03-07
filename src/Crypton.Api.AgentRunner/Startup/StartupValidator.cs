@@ -9,7 +9,7 @@ namespace AgentRunner.Startup;
 /// before the loop starts. All checks run in parallel; each failure produces an independent
 /// error message.
 /// </summary>
-public class StartupValidator
+public class StartupValidator : IStartupValidator
 {
     private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(10);
 

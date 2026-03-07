@@ -86,6 +86,13 @@ var agentRunnerService = new AgentRunnerService(
     agentInvoker,
     logger,
     metricsCollector);
+var startupValidator = new StartupValidator(new HttpClient());
+var serviceAvailabilityState = new ServiceAvailabilityState();
+var startupCoordinator = new AgentRunnerStartupCoordinator(
+    startupValidator,
+    serviceAvailabilityState,
+    agentRunnerService,
+    config);
 
 // CLI mode: `dotnet run -- --cli <command> [options]`
 // Run a single step or full cycle with verbose console output, then exit.
@@ -104,7 +111,11 @@ builder.Services.AddSingleton(statePersistence);
 builder.Services.AddSingleton(contextBuilder);
 builder.Services.AddSingleton(agentInvoker);
 builder.Services.AddSingleton(agentRunnerService);
+builder.Services.AddSingleton<IAgentRunnerLifecycle>(agentRunnerService);
 builder.Services.AddSingleton(metricsCollector);
+builder.Services.AddSingleton<IStartupValidator>(startupValidator);
+builder.Services.AddSingleton(serviceAvailabilityState);
+builder.Services.AddSingleton(startupCoordinator);
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -126,22 +137,20 @@ _ = Task.Run(async () =>
 {
     try
     {
-        Log.Information("Starting agent runner service...");
+        Log.Information("Checking startup dependencies before agent runner loop start...");
 
-        var validator = new StartupValidator(new HttpClient());
-        var validation = await validator.ValidateAsync(config);
+        var result = await startupCoordinator.TryStartAsync();
 
-        if (!validation.IsValid)
+        if (result.IsDegraded)
         {
-            foreach (var error in validation.Errors)
+            foreach (var error in result.Errors)
                 Log.Error("Startup validation failed: {Error}", error);
 
-            app.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+            Log.Warning("Agent runner entered degraded service mode. It will not run the loop until dependencies recover and /api/control/start is triggered.");
             return;
         }
 
-        await agentRunnerService.StartAsync();
-        Log.Information("Agent runner service started successfully");
+        Log.Information(result.Message);
     }
     catch (Exception ex)
     {

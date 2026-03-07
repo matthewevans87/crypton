@@ -2,6 +2,7 @@ using AgentRunner.Agents;
 using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Mailbox;
+using AgentRunner.Startup;
 using AgentRunner.StateMachine;
 using AgentRunner.Telemetry;
 using Microsoft.AspNetCore.Mvc;
@@ -40,17 +41,20 @@ public class StatusController : ControllerBase
     private readonly Artifacts.ArtifactManager _artifactManager;
     private readonly Mailbox.MailboxManager _mailboxManager;
     private readonly MetricsCollector _metrics;
+    private readonly ServiceAvailabilityState _availabilityState;
 
     public StatusController(
         AgentRunnerService agentRunner,
         Artifacts.ArtifactManager artifactManager,
         Mailbox.MailboxManager mailboxManager,
-        MetricsCollector metrics)
+        MetricsCollector metrics,
+        ServiceAvailabilityState availabilityState)
     {
         _agentRunner = agentRunner;
         _artifactManager = artifactManager;
         _mailboxManager = mailboxManager;
         _metrics = metrics;
+        _availabilityState = availabilityState;
     }
 
     [HttpGet("status")]
@@ -68,7 +72,10 @@ public class StatusController : ControllerBase
                 ? _agentRunner.NextScheduledRunTime
                 : (DateTime?)null,
             isPaused = _agentRunner.CurrentCycle?.IsPaused ?? false,
-            pauseReason = _agentRunner.CurrentCycle?.PauseReason
+            pauseReason = _agentRunner.CurrentCycle?.PauseReason,
+            isDegraded = _availabilityState.IsDegraded,
+            degradedErrors = _availabilityState.Errors,
+            degradedSince = _availabilityState.LastTransitionAt
         });
     }
 
@@ -173,14 +180,62 @@ public class StatusController : ControllerBase
 
 [ApiController]
 [Route("api/override")]
+[Route("api/control")]
 [ApiKey]
 public class OverrideController : ControllerBase
 {
     private readonly AgentRunnerService _agentRunner;
+    private readonly AgentRunnerStartupCoordinator _startupCoordinator;
+    private readonly ServiceAvailabilityState _availabilityState;
 
-    public OverrideController(AgentRunnerService agentRunner)
+    public OverrideController(
+        AgentRunnerService agentRunner,
+        AgentRunnerStartupCoordinator startupCoordinator,
+        ServiceAvailabilityState availabilityState)
     {
         _agentRunner = agentRunner;
+        _startupCoordinator = startupCoordinator;
+        _availabilityState = availabilityState;
+    }
+
+    [HttpPost("start")]
+    public async Task<IActionResult> Start()
+    {
+        var result = await _startupCoordinator.TryStartAsync(HttpContext.RequestAborted);
+
+        if (result.IsDegraded)
+        {
+            return StatusCode(503, new
+            {
+                message = result.Message,
+                errors = result.Errors
+            });
+        }
+
+        return Ok(new
+        {
+            message = result.Message
+        });
+    }
+
+    [HttpPost("recover")]
+    public Task<IActionResult> Recover() => Start();
+
+    [HttpPost("degrade")]
+    public IActionResult Degrade([FromBody] DegradeRequest body)
+    {
+        if (string.IsNullOrWhiteSpace(body.Reason))
+        {
+            return BadRequest(new { error = "reason is required" });
+        }
+
+        _availabilityState.EnterDegraded([$"manual: {body.Reason.Trim()}"]);
+
+        return Ok(new
+        {
+            message = "Agent runner entered degraded mode",
+            errors = _availabilityState.Errors
+        });
     }
 
     [HttpPost("pause")]
@@ -235,15 +290,24 @@ public class InjectRequest
     public string Content { get; set; } = string.Empty;
 }
 
+public class DegradeRequest
+{
+    public string? Reason { get; set; }
+}
+
 [ApiController]
 [Route("health")]
 public class HealthController : ControllerBase
 {
     private readonly AgentRunnerService _agentRunner;
+    private readonly ServiceAvailabilityState _availabilityState;
 
-    public HealthController(AgentRunnerService agentRunner)
+    public HealthController(
+        AgentRunnerService agentRunner,
+        ServiceAvailabilityState availabilityState)
     {
         _agentRunner = agentRunner;
+        _availabilityState = availabilityState;
     }
 
     [HttpGet("live")]
@@ -255,6 +319,16 @@ public class HealthController : ControllerBase
     [HttpGet("ready")]
     public IActionResult Ready()
     {
+        if (_availabilityState.IsDegraded)
+        {
+            return StatusCode(503, new
+            {
+                status = "not ready",
+                reason = "degraded",
+                errors = _availabilityState.Errors
+            });
+        }
+
         var state = _agentRunner.CurrentState;
         var isReady = state != LoopState.Failed;
 

@@ -44,12 +44,17 @@ public sealed class StatusController : ControllerBase
     }
 
     [HttpGet("/status")]
+    [HttpGet("/api/status")]
     public IActionResult GetStatus() => Ok(new
     {
         mode = _mode.CurrentMode,
         safe_mode = _safeMode.IsActive,
+        is_degraded = _safeMode.IsActive,
         safe_mode_triggered = _riskEnforcer.SafeModeTriggered,
         safe_mode_reason = _riskEnforcer.SafeModeTriggerReason,
+        degraded_errors = _safeMode.IsActive && !string.IsNullOrWhiteSpace(_safeMode.Reason)
+            ? new[] { _safeMode.Reason }
+            : Array.Empty<string>(),
         entries_suspended = _riskEnforcer.EntriesSuspended,
         strategy_state = _strategy.State.ToString().ToLowerInvariant(),
         strategy_id = _strategy.ActiveStrategyId,
@@ -58,7 +63,32 @@ public sealed class StatusController : ControllerBase
     });
 
     [HttpGet("/health/live")]
-    public IActionResult Live() => Ok();
+    public IActionResult Live() => Ok(new { status = "alive" });
+
+    [HttpGet("/health/ready")]
+    public IActionResult Ready()
+    {
+        if (_safeMode.IsActive)
+        {
+            return StatusCode(503, new
+            {
+                status = "not ready",
+                reason = "degraded",
+                errors = !string.IsNullOrWhiteSpace(_safeMode.Reason)
+                    ? new[] { _safeMode.Reason }
+                    : new[] { "safe mode active" }
+            });
+        }
+
+        return Ok(new
+        {
+            status = "ready",
+            checks = new[]
+            {
+                new { name = "safe_mode", passed = true }
+            }
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +248,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpPost("/operator/safe-mode/activate")]
+    [HttpPost("/api/control/degrade")]
     [ServiceFilter(typeof(ApiKeyAuthFilter))]
     public async Task<IActionResult> ActivateSafeMode(
         [FromBody] SafeModeActivateRequest body,
@@ -231,6 +262,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpPost("/operator/safe-mode/deactivate")]
+    [HttpPost("/api/control/recover")]
     [ServiceFilter(typeof(ApiKeyAuthFilter))]
     public async Task<IActionResult> DeactivateSafeMode(CancellationToken ct = default)
     {
@@ -239,6 +271,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpPost("/operator/mode/promote-to-live")]
+    [HttpPost("/api/control/promote-to-live")]
     [ServiceFilter(typeof(ApiKeyAuthFilter))]
     public async Task<IActionResult> PromoteToLive([FromBody] OperatorNoteRequest body, CancellationToken ct = default)
     {
@@ -247,6 +280,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpPost("/operator/mode/demote-to-paper")]
+    [HttpPost("/api/control/demote-to-paper")]
     [ServiceFilter(typeof(ApiKeyAuthFilter))]
     public async Task<IActionResult> DemoteToPaper([FromBody] OperatorNoteRequest body, CancellationToken ct = default)
     {
@@ -255,6 +289,7 @@ public sealed class OperatorController : ControllerBase
     }
 
     [HttpPost("/operator/strategy/reload")]
+    [HttpPost("/api/control/reload-strategy")]
     [ServiceFilter(typeof(ApiKeyAuthFilter))]
     public async Task<IActionResult> ReloadStrategy(CancellationToken ct = default)
     {
