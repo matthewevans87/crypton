@@ -23,6 +23,8 @@ type FeedState = Record<string, SubState>;
 const SERVICE_METHODS: Record<string, string[]> = {
     'ws-feed-marketdata': [
         'PriceUpdated',
+        'OrderBookUpdated',
+        'TradeOccurred',
     ],
     'ws-feed-execution': [
         'PortfolioUpdated',

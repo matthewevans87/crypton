@@ -99,6 +99,17 @@ export const signalRService = {
       throttledPriceUpdates(data);
     });
 
+    // These events are emitted by the monitoring dashboard hub; even if no
+    // state handler consumes them yet, registering methods prevents SignalR
+    // from logging "No client method" warnings for high-frequency updates.
+    hubConnection.on('OrderBookUpdated', (data: unknown) => {
+      emitRaw('OrderBookUpdated', data);
+    });
+
+    hubConnection.on('TradeOccurred', (data: unknown) => {
+      emitRaw('TradeOccurred', data);
+    });
+
     hubConnection.on('AgentStateChanged', (data: AgentState) => {
       emitRaw('AgentStateChanged', data);
       handlers.onAgentStateChanged?.(data);
