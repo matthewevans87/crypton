@@ -114,7 +114,7 @@ Crypton.Api.ExecutionService/
 │       ├── ConditionNode.cs      # PriceComparison, IndicatorComparison, Crossing, And, Or, Not
 │       └── ConditionParser.cs    # Recursive-descent DSL parser
 ├── Program.cs                    # Dual-mode entry point
-├── config.yaml                   # Default configuration (loaded as Content)
+├── appsettings.json                   # Default configuration (loaded as Content)
 └── Dockerfile                    # Multi-stage build, port 5004
 ```
 
@@ -128,7 +128,7 @@ Crypton.Api.ExecutionService/
 dotnet run --project src/Crypton.Api.ExecutionService
 ```
 
-The service starts on port 5004. Configuration is read from `config.yaml` in the output directory, then overridden by environment variables and `appsettings.json`.
+The service starts on port 5004. Configuration is read from `appsettings.json` in the output directory, then overridden by environment variables and `appsettings.json`.
 
 ### CLI mode
 

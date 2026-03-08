@@ -89,7 +89,7 @@ This tool is made for and used by developers. Exposing technical details is a fe
 - `docs/crypton.md` — Full system spec: agent definitions, strategy DSL, schema, mailbox protocol.
 - `docs/<service>/feature_backlog.md` — Prioritised feature lists (P0–P3) per service.
 - `src/<Service>/IMPLEMENTATION.md` — Per-service implementation notes where present.
-- `config.yaml` — Top-level runtime configuration reference.
+
 
 ## Development Workflow
 

@@ -390,7 +390,7 @@ All exchange interactions must go through a formal `IExchangeAdapter` interface.
   - `GetOpenPositions()` → `IEnumerable<ExchangePosition>`
   - `GetTradeHistory(since)` → `IEnumerable<Trade>`
 - All methods must be async, cancellation-token-aware, and throw typed exceptions for exchange-specific error conditions.
-- The adapter in use must be configurable (e.g., via `config.yaml`) without code changes.
+- The adapter in use must be configurable (e.g., via `appsettings.json`) without code changes.
 
 **Acceptance Criteria:**
 - [ ] The Kraken adapter implements `IExchangeAdapter` in full.
@@ -499,7 +499,7 @@ Paper trading mode simulates all order execution against live market data with n
 The `Paper Trading Adapter` implements `IExchangeAdapter` and all methods operate against a simulated ledger rather than the real exchange. Paper trading is the default operating mode.
 
 **Technical Requirements:**
-- The paper trading adapter maintains a simulated account ledger (starting balance configurable in `config.yaml`).
+- The paper trading adapter maintains a simulated account ledger (starting balance configurable in `appsettings.json`).
 - Market orders are filled immediately at the current mid-price plus a configurable simulated slippage factor.
 - Limit orders are filled when the live price reaches the limit price; they join an in-memory pending order book.
 - A configurable simulated commission rate is applied to all fills and deducted from the ledger.
@@ -534,7 +534,7 @@ Live trading mode routes all orders to the real Kraken exchange using real capit
 
 **Acceptance Criteria:**
 - [ ] The service starts in paper mode on first launch.
-- [ ] Live mode cannot be entered by modifying `strategy.json` or `config.yaml` alone.
+- [ ] Live mode cannot be entered by modifying `strategy.json` or `appsettings.json` alone.
 - [ ] After an operator issues a `promote` command via the REST API and the service is restarted, it resumes in live mode.
 - [ ] All live order dispatches are tagged `"mode": "live"` in the event log.
 - [ ] Demoting from live to paper mode via the REST API immediately stops real order dispatch; pending real orders are left open (not cancelled) and must be reviewed by the operator.
@@ -614,7 +614,7 @@ The service must track crashes and unclean exits and automatically enter safe mo
 - On startup, read the persisted failure counter. If the counter equals or exceeds the configured threshold N, enter safe mode immediately before loading the strategy or resuming execution.
 - On clean shutdown (operator command or graceful exit), reset the failure counter.
 - On startup after a successful initialization and at least one full evaluation cycle, decrement or reset the failure counter to indicate a stable run.
-- N must be configurable in `config.yaml`.
+- N must be configurable in `appsettings.json`.
 
 **Acceptance Criteria:**
 - [ ] After N consecutive unclean exits (simulated in tests), the service enters safe mode on the next startup without loading a strategy.
@@ -709,7 +709,7 @@ The Execution Service exposes a REST API for operator commands and status querie
 
 **Technical Requirements:**
 - Implement using ASP.NET Core with JSON request/response bodies.
-- Authentication: bearer token (API key) loaded from `config.yaml`; unauthenticated requests to mutating endpoints return `401`.
+- Authentication: bearer token (API key) loaded from `appsettings.json`; unauthenticated requests to mutating endpoints return `401`.
 - All mutating endpoints must write an event log entry: `{ event: "<command>", operator: "<token_id>", timestamp: "<utc>", params: { ... } }`.
 
 **Read Endpoints:**
@@ -764,7 +764,7 @@ The Execution Service must emit a structured, append-only event log capturing ev
 Every event must be a self-contained JSON object written to a line-delimited JSON (NDJSON) file. Events must never be deleted or mutated after writing.
 
 **Technical Requirements:**
-- Log file path is configurable in `config.yaml`; default is `logs/execution_events.ndjson`.
+- Log file path is configurable in `appsettings.json`; default is `logs/execution_events.ndjson`.
 - Each event object must include at minimum: `timestamp` (ISO 8601 UTC), `event_type`, `service_version`, and `mode` (`paper`/`live`).
 - Events must be written synchronously relative to the action they describe (i.e., the log entry is written before the action is considered complete).
 - A log rotation policy must be configurable (e.g., rotate daily, keep last N files).
