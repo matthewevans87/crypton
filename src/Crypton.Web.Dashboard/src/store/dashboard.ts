@@ -123,6 +123,8 @@ interface DashboardState {
   setSelectedToolCall: (id: string | null) => void;
   setConnectionStatus: (status: 'connected' | 'connecting' | 'disconnected') => void;
   
+  resetToDefaults: () => void;
+  
   setPortfolioData: (data: Partial<DashboardState['portfolio']>) => void;
   setStrategyData: (data: Partial<DashboardState['strategy']>) => void;
   setMarketData: (data: Partial<DashboardState['market']>) => void;
@@ -133,46 +135,58 @@ interface DashboardState {
 
 const defaultTabs: Tab[] = [
   {
-    id: 'main',
-    title: 'Main',
+    id: 'market',
+    title: 'Market',
     panels: [
-      { id: 'portfolio-summary', type: 'portfolio-summary' },
-      { id: 'strategy-overview', type: 'strategy-overview' },
-      { id: 'agent-state', type: 'agent-state' },
-      { id: 'cycle-performance', type: 'cycle-performance' },
       { id: 'price-ticker-btc', type: 'price-ticker', config: { asset: 'BTC/USD' } },
       { id: 'price-ticker-eth', type: 'price-ticker', config: { asset: 'ETH/USD' } },
+      { id: 'price-chart', type: 'price-chart' },
+      { id: 'technical-indicators', type: 'technical-indicators', config: { asset: 'BTC/USD' } },
+      { id: 'ws-feed-marketdata', type: 'ws-feed-marketdata' },
     ],
   },
   {
-    id: 'analysis',
-    title: 'Analysis',
+    id: 'account',
+    title: 'Account',
     panels: [
+      { id: 'portfolio-summary', type: 'portfolio-summary' },
+      { id: 'holdings', type: 'holdings' },
+      { id: 'open-positions', type: 'open-positions' },
+    ],
+  },
+  {
+    id: 'agents',
+    title: 'Agents',
+    panels: [
+      { id: 'agent-state', type: 'agent-state' },
       { id: 'loop-state', type: 'loop-state' },
       { id: 'reasoning-trace', type: 'reasoning-trace' },
       { id: 'tool-calls', type: 'tool-calls' },
-      { id: 'technical-indicators', type: 'technical-indicators', config: { asset: 'BTC/USD' } },
-      { id: 'open-positions', type: 'open-positions' },
-      { id: 'holdings', type: 'holdings' },
+      { id: 'tool-call-detail', type: 'tool-call-detail' },
+      { id: 'evaluation-rating', type: 'evaluation-rating' },
+      { id: 'ws-feed-agentrunner', type: 'ws-feed-agentrunner' },
     ],
   },
   {
-    id: 'diagnostics',
-    title: 'Diagnostics',
+    id: 'execution',
+    title: 'Execution Engine',
+    panels: [
+      { id: 'strategy-overview', type: 'strategy-overview' },
+      { id: 'daily-loss-limit', type: 'daily-loss-limit' },
+      { id: 'cycle-performance', type: 'cycle-performance' },
+      { id: 'cycle-history', type: 'cycle-history' },
+      { id: 'cycle-detail', type: 'cycle-detail' },
+      { id: 'ws-feed-execution', type: 'ws-feed-execution' },
+    ],
+  },
+  {
+    id: 'system',
+    title: 'System',
     panels: [
       { id: 'system-status', type: 'system-status' },
       { id: 'system-diagnostics', type: 'system-diagnostics' },
       { id: 'connection-health', type: 'connection-health' },
       { id: 'error-log', type: 'error-log' },
-    ],
-  },
-  {
-    id: 'ws-feeds',
-    title: 'WS Feeds',
-    panels: [
-      { id: 'ws-feed-marketdata', type: 'ws-feed-marketdata' },
-      { id: 'ws-feed-execution', type: 'ws-feed-execution' },
-      { id: 'ws-feed-agentrunner', type: 'ws-feed-agentrunner' },
     ],
   },
 ];
@@ -182,7 +196,7 @@ export const useDashboardStore = create<DashboardState>()(
     (set, get) => ({
       // Initial UI State
       tabs: defaultTabs,
-      activeTabId: 'main',
+      activeTabId: 'market',
       maximizedPanelId: null,
       commandPaletteOpen: false,
       recentCommands: [],
@@ -370,6 +384,13 @@ export const useDashboardStore = create<DashboardState>()(
       setSelectedToolCall: (id) => set({ selectedToolCallId: id }),
       
       setConnectionStatus: (status) => set({ connectionStatus: status }),
+      
+      resetToDefaults: () => set({
+        tabs: defaultTabs,
+        activeTabId: defaultTabs[0].id,
+        maximizedPanelId: null,
+        recentCommands: [],
+      }),
       
       // Data Actions
       setPortfolioData: (data) => set((state) => ({

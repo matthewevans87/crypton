@@ -98,7 +98,7 @@ export function CommandPalette() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { toggleCommandPalette, activeTabId, addPanel, tabs, recentCommands, addRecentCommand } = useDashboardStore();
+  const { toggleCommandPalette, activeTabId, addPanel, tabs, recentCommands, addRecentCommand, resetToDefaults } = useDashboardStore();
 
   const commands: Command[] = useMemo(() => {
     return [
@@ -265,6 +265,16 @@ export function CommandPalette() {
         action: () => {
           addRecentCommand('action-refresh');
           window.location.reload();
+        },
+      },
+      {
+        id: 'action-reset-layout',
+        label: 'Reset Tabs & Panels to Defaults',
+        description: 'Restore the default tab layout and remove custom panels',
+        category: 'action',
+        action: () => {
+          resetToDefaults();
+          toggleCommandPalette();
         },
       },
     ];
