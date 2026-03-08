@@ -45,7 +45,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5002
       - MARKETDATA__KRAKEN__APIKEY=${KRAKEN_API_KEY}
-      - MARKETDATA__KRAKEN__APISECRET=${KRAKEN_SECRET_KEY}
+      - MARKETDATA__KRAKEN__APISECRET=${MARKETDATA__KRAKEN__APISECRET}
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -70,7 +70,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5004
       - EXECUTIONSERVICE__KRAKEN__APIKEY=${KRAKEN_API_KEY}
-      - EXECUTIONSERVICE__KRAKEN__APISECRET=${KRAKEN_SECRET_KEY}
+      - EXECUTIONSERVICE__KRAKEN__APISECRET=${EXECUTIONSERVICE__KRAKEN__APISECRET}
       - EXECUTIONSERVICE__API__APIKEY=${EXECUTION_SERVICE_API_KEY}
       # MarketDataServiceUrl tells MarketDataServiceClient where to connect for price ticks.
       - EXECUTIONSERVICE__MARKETDATASERVICEURL=http://market-data-service:5002
