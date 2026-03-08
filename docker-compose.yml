@@ -21,6 +21,11 @@ services:
     volumes:
       - crypton_artifacts:/app/artifacts
       - /home/matthew-evans/.config/crypton/logs:/app/logs
+    depends_on:
+      market-data-service:
+        condition: service_healthy
+      execution-service:
+        condition: service_healthy
     restart: unless-stopped
     logging:
       driver: "json-file"
