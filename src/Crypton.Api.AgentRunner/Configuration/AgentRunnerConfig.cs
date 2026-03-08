@@ -54,6 +54,7 @@ public class AgentSettings
 public class ToolConfig
 {
     public BraveSearchConfig BraveSearch { get; set; } = new();
+    public BirdConfig Bird { get; set; } = new();
     public ExecutionServiceConfig ExecutionService { get; set; } = new();
     public MarketDataServiceConfig MarketDataService { get; set; } = new();
     public int DefaultTimeoutSeconds { get; set; } = 30;
@@ -88,6 +89,12 @@ public class BraveSearchConfig
 {
     /// <summary>Injected at runtime via env var Tools__BraveSearch__ApiKey.</summary>
     public string ApiKey { get; set; } = string.Empty;
+}
+
+public class BirdConfig
+{
+    /// <summary>Base URL for the bird HTTP server. Override via env var: AGENTRUNNER__TOOLS__BIRD__BASEURL</summary>
+    public string BaseUrl { get; set; } = "http://localhost:11435";
 }
 
 public class ExecutionServiceConfig

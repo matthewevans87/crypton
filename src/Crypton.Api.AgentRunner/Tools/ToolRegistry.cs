@@ -35,7 +35,7 @@ public class ToolRegistry
             httpClient,
             config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
-        var birdTool = new BirdTool(config.Tools.DefaultTimeoutSeconds);
+        var birdTool = new BirdTool(httpClient, config.Tools.Bird.BaseUrl, config.Tools.DefaultTimeoutSeconds);
 
         _executor.RegisterTool(webSearchTool);
         _executor.RegisterTool(webFetchTool);

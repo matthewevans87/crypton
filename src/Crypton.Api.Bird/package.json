@@ -1,0 +1,10 @@
+{
+  "name": "crypton-bird-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HTTP wrapper around the bird CLI for container access",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

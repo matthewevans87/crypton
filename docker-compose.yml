@@ -15,6 +15,7 @@ services:
       - AGENTRUNNER__TOOLS__MARKETDATASERVICE__BASEURL=http://market-data-service:5002
       - AGENTRUNNER__TOOLS__EXECUTIONSERVICE__BASEURL=http://execution-service:5004
       - AGENTRUNNER__OLLAMA__BASEURL=http://host-gateway:11434
+      - AGENTRUNNER__TOOLS__BIRD__BASEURL=http://host-gateway:11435
     extra_hosts:
       - "host-gateway:host-gateway"
     volumes:

@@ -1,14 +1,19 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 
 namespace AgentRunner.Tools;
 
 public class BirdTool : Tool
 {
+    private readonly HttpClient _httpClient;
+    private readonly string _baseUrl;
     private readonly int _defaultTimeoutSeconds;
 
-    public BirdTool(int defaultTimeoutSeconds = 30)
+    public BirdTool(HttpClient httpClient, string baseUrl, int defaultTimeoutSeconds = 30)
     {
+        _httpClient = httpClient;
+        _baseUrl = baseUrl.TrimEnd('/');
         _defaultTimeoutSeconds = defaultTimeoutSeconds;
     }
 
@@ -87,61 +92,61 @@ public class BirdTool : Tool
 
     private async Task<(bool Success, string? Output, string? Error)> ExecuteBirdAsync(string args, CancellationToken cancellationToken)
     {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "bird",
-                Arguments = args,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-
         try
         {
-            process.Start();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(_defaultTimeoutSeconds));
 
-            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-            var completed = await Task.Run(() => process.WaitForExit(TimeSpan.FromSeconds(_defaultTimeoutSeconds)), cancellationToken);
-
-            if (!completed)
+            var payload = JsonSerializer.Serialize(new
             {
-                try { process.Kill(); } catch { }
-                return (false, null, "Bird command timed out");
+                args,
+                timeoutMs = _defaultTimeoutSeconds * 1000
+            });
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync($"{_baseUrl}/execute", content, cts.Token);
+            var json = await response.Content.ReadAsStringAsync(cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return (false, null, $"Bird server returned HTTP {(int)response.StatusCode}: {json}");
             }
 
-            var error = await errorTask;
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
 
-            if (process.ExitCode != 0)
+            var exitCode = root.GetProperty("exitCode").GetInt32();
+            var stdout = root.GetProperty("stdout").GetString() ?? "";
+            var stderr = root.GetProperty("stderr").GetString() ?? "";
+
+            if (exitCode != 0)
             {
-                return (false, null, string.IsNullOrEmpty(error) ? $"Bird exited with code {process.ExitCode}" : error.Trim());
+                var error = string.IsNullOrEmpty(stderr) ? $"Bird exited with code {exitCode}" : stderr.Trim();
+                return (false, null, error);
             }
 
-            var output = await outputTask;
-
-            if (string.IsNullOrWhiteSpace(output))
+            if (string.IsNullOrWhiteSpace(stdout))
             {
                 return (true, "[]", null);
             }
 
             try
             {
-                var normalized = NormalizeTweetOutput(output);
+                var normalized = NormalizeTweetOutput(stdout);
                 return (true, normalized, null);
             }
             catch
             {
-                return (true, output, null);
+                return (true, stdout, null);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, null, "Bird command timed out");
         }
         catch (Exception ex)
         {
-            return (false, null, ex.Message);
+            return (false, null, $"Bird server error: {ex.Message}");
         }
     }
 

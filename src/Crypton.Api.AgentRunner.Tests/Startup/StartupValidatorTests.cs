@@ -7,21 +7,13 @@ namespace AgentRunner.Tests.Startup;
 
 public class StartupValidatorTests
 {
-    private static readonly Func<string, CancellationToken, Task<string?>> BirdOk =
-        (_, _) => Task.FromResult<string?>(null);
-
-    private static readonly Func<string, CancellationToken, Task<string?>> BirdMissing =
-        (exe, _) => Task.FromResult<string?>($"'{exe}' CLI is not available: No such file or directory");
-
-    private static readonly Func<string, CancellationToken, Task<string?>> BirdUnauthenticated =
-        (exe, _) => Task.FromResult<string?>($"'{exe}' is not authenticated: Unauthorized");
-
     private static AgentRunnerConfig CreateConfig() => new()
     {
         Ollama = new OllamaConfig { BaseUrl = "http://localhost:11434" },
         Tools = new ToolConfig
         {
             BraveSearch = new BraveSearchConfig { ApiKey = "test-key" },
+            Bird = new BirdConfig { BaseUrl = "http://localhost:11435" },
             ExecutionService = new ExecutionServiceConfig { BaseUrl = "http://localhost:5000" },
             MarketDataService = new MarketDataServiceConfig { BaseUrl = "http://localhost:5002" }
         }
@@ -33,6 +25,7 @@ public class StartupValidatorTests
         handler.Setup("http://localhost:11434/api/tags", HttpStatusCode.OK);
         handler.Setup("http://localhost:5000/health/live", HttpStatusCode.OK);
         handler.Setup("http://localhost:5002/health/live", HttpStatusCode.OK);
+        handler.Setup("http://localhost:11435/health", HttpStatusCode.OK);
         handler.SetupPrefix("https://api.search.brave.com/", HttpStatusCode.OK);
         return handler;
     }
@@ -42,7 +35,7 @@ public class StartupValidatorTests
     [Fact]
     public async Task ValidateAsync_AllServicesAvailable_ReturnsValid()
     {
-        var validator = new StartupValidator(new HttpClient(AllHttpOk()), BirdOk);
+        var validator = new StartupValidator(new HttpClient(AllHttpOk()));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.True(result.IsValid);
@@ -57,7 +50,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupException("http://localhost:11434/api/tags", new HttpRequestException("Connection refused"));
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -71,7 +64,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.Setup("http://localhost:11434/api/tags", HttpStatusCode.ServiceUnavailable);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -85,7 +78,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupException("http://localhost:5000/health/live", new HttpRequestException("Connection refused"));
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -99,7 +92,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.Setup("http://localhost:5002/health/live", HttpStatusCode.InternalServerError);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -113,7 +106,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupPrefix("https://api.search.brave.com/", HttpStatusCode.Unauthorized);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -127,7 +120,7 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupPrefix("https://api.search.brave.com/", HttpStatusCode.Forbidden);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -142,18 +135,18 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupPrefix("https://api.search.brave.com/", HttpStatusCode.BadRequest);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdOk);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.True(result.IsValid);
     }
 
-    // ── Bird CLI check ─────────────────────────────────────────────────────────
+    // ── Bird Server check ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ValidateAsync_BirdCliAvailable_ReturnsValid()
+    public async Task ValidateAsync_BirdServerAvailable_ReturnsValid()
     {
-        var validator = new StartupValidator(new HttpClient(AllHttpOk()), BirdOk);
+        var validator = new StartupValidator(new HttpClient(AllHttpOk()));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.True(result.IsValid);
@@ -161,40 +154,31 @@ public class StartupValidatorTests
     }
 
     [Fact]
-    public async Task ValidateAsync_BirdCliNotOnPath_ReturnsError()
+    public async Task ValidateAsync_BirdServerUnreachable_ReturnsError()
     {
-        var validator = new StartupValidator(new HttpClient(AllHttpOk()), BirdMissing);
+        var handler = AllHttpOk();
+        handler.SetupException("http://localhost:11435/health", new HttpRequestException("Connection refused"));
+
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
         var error = Assert.Single(result.Errors);
-        Assert.Contains("bird", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Bird Server", error);
     }
 
     [Fact]
-    public async Task ValidateAsync_BirdCliUnauthenticated_ReturnsError()
+    public async Task ValidateAsync_BirdServerUnhealthy_ReturnsError()
     {
-        var validator = new StartupValidator(new HttpClient(AllHttpOk()), BirdUnauthenticated);
+        var handler = AllHttpOk();
+        handler.Setup("http://localhost:11435/health", HttpStatusCode.InternalServerError);
+
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
         var error = Assert.Single(result.Errors);
-        Assert.Contains("bird", error, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("authenticated", error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ValidateAsync_BirdCliTimesOut_ReturnsError()
-    {
-        Func<string, CancellationToken, Task<string?>> birdTimeout =
-            (exe, _) => Task.FromResult<string?>($"'{exe}' CLI did not respond within 10s");
-
-        var validator = new StartupValidator(new HttpClient(AllHttpOk()), birdTimeout);
-        var result = await validator.ValidateAsync(CreateConfig());
-
-        Assert.False(result.IsValid);
-        var error = Assert.Single(result.Errors);
-        Assert.Contains("bird", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Bird Server", error);
     }
 
     // ── Multiple failures ──────────────────────────────────────────────────────
@@ -205,9 +189,10 @@ public class StartupValidatorTests
         var handler = AllHttpOk();
         handler.SetupException("http://localhost:11434/api/tags", new HttpRequestException("Connection refused"));
         handler.SetupException("http://localhost:5000/health/live", new HttpRequestException("Connection refused"));
+        handler.SetupException("http://localhost:11435/health", new HttpRequestException("Connection refused"));
         handler.SetupPrefix("https://api.search.brave.com/", HttpStatusCode.Unauthorized);
 
-        var validator = new StartupValidator(new HttpClient(handler), BirdMissing);
+        var validator = new StartupValidator(new HttpClient(handler));
         var result = await validator.ValidateAsync(CreateConfig());
 
         Assert.False(result.IsValid);
@@ -215,7 +200,7 @@ public class StartupValidatorTests
         Assert.Contains(result.Errors, e => e.Contains("Ollama"));
         Assert.Contains(result.Errors, e => e.Contains("Execution Service"));
         Assert.Contains(result.Errors, e => e.Contains("Brave Search"));
-        Assert.Contains(result.Errors, e => e.Contains("bird", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Errors, e => e.Contains("Bird Server"));
     }
 }
 

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using AgentRunner.Configuration;
 
@@ -15,16 +14,9 @@ public class StartupValidator : IStartupValidator
 
     private readonly HttpClient _httpClient;
 
-    // Injected in tests to avoid spawning a real process.
-    // Returns null on success, or an error string on failure.
-    private readonly Func<string, CancellationToken, Task<string?>>? _cliChecker;
-
-    public StartupValidator(
-        HttpClient httpClient,
-        Func<string, CancellationToken, Task<string?>>? cliChecker = null)
+    public StartupValidator(HttpClient httpClient)
     {
         _httpClient = httpClient;
-        _cliChecker = cliChecker;
     }
 
     public async Task<StartupValidationResult> ValidateAsync(
@@ -36,7 +28,7 @@ public class StartupValidator : IStartupValidator
             CheckHttpServiceAsync("Execution Service", config.Tools.ExecutionService.BaseUrl, "/health/live", cancellationToken),
             CheckHttpServiceAsync("Market Data Service", config.Tools.MarketDataService.BaseUrl, "/health/live", cancellationToken),
             CheckBraveSearchAsync(config.Tools.BraveSearch.ApiKey, cancellationToken),
-            CheckBirdCliAsync(cancellationToken));
+            CheckHttpServiceAsync("Bird Server", config.Tools.Bird.BaseUrl, "/health", cancellationToken));
 
         var errors = results.Where(e => e != null).Select(e => e!).ToList();
         return new StartupValidationResult(errors.Count == 0, errors);
@@ -112,55 +104,6 @@ public class StartupValidator : IStartupValidator
         catch (Exception ex)
         {
             return $"Brave Search API is not reachable: {ex.Message}";
-        }
-    }
-
-    private async Task<string?> CheckBirdCliAsync(CancellationToken cancellationToken)
-    {
-        var checker = _cliChecker ?? DefaultCheckBirdCliAsync;
-        return await checker("bird", cancellationToken);
-    }
-
-    private static async Task<string?> DefaultCheckBirdCliAsync(string executable, CancellationToken cancellationToken)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(CheckTimeout);
-
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = executable,
-                    Arguments = "whoami",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            var stderr = process.StandardError.ReadToEndAsync(cts.Token);
-            await process.WaitForExitAsync(cts.Token);
-
-            if (process.ExitCode != 0)
-            {
-                var error = await stderr;
-                var detail = string.IsNullOrWhiteSpace(error) ? $"exit code {process.ExitCode}" : error.Trim();
-                return $"'{executable}' is not authenticated: {detail}";
-            }
-
-            return null;
-        }
-        catch (OperationCanceledException)
-        {
-            return $"'{executable}' CLI did not respond within {CheckTimeout.TotalSeconds}s";
-        }
-        catch (Exception ex)
-        {
-            return $"'{executable}' CLI is not available: {ex.Message}";
         }
     }
 }
