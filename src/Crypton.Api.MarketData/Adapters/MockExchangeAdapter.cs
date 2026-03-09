@@ -30,6 +30,7 @@ public class MockExchangeAdapter : IExchangeAdapter
     public string ExchangeName => "Mock";
     public bool IsConnected => _isConnected;
     public int ReconnectCount => 0;
+    public DateTime? LastConnectedAt => _isConnected ? DateTime.UtcNow : null;
     public TimeSpan CurrentReconnectDelay => TimeSpan.Zero;
     public CircuitBreakerState CircuitBreakerState => CircuitBreakerState.Closed;
 

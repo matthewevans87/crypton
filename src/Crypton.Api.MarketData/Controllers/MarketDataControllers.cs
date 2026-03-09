@@ -317,7 +317,9 @@ public class StatusController : ControllerBase
         return Ok(new ExchangeStatus
         {
             Exchange = _exchangeAdapter.ExchangeName,
-            IsConnected = _exchangeAdapter.IsConnected
+            IsConnected = _exchangeAdapter.IsConnected,
+            LastConnectedAt = _exchangeAdapter.LastConnectedAt,
+            ReconnectCount = _exchangeAdapter.ReconnectCount
         });
     }
 }

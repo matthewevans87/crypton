@@ -46,6 +46,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
     public string ExchangeName => "Kraken";
     public bool IsConnected => _isConnected;
     public int ReconnectCount => _reconnectCount;
+    public DateTime? LastConnectedAt => _lastConnectedAt;
     public TimeSpan CurrentReconnectDelay => _currentReconnectDelay;
     public CircuitBreakerState CircuitBreakerState => _circuitBreaker.State;
 
@@ -819,7 +820,7 @@ public class KrakenExchangeAdapter : IExchangeAdapter
                         _isConnected = false;
                         OnConnectionStateChanged?.Invoke(this, false);
                         _logger.LogWarning("Kraken WebSocket closed");
-                        return;
+                        break;
                     }
 
                     if (result.Count > 0)

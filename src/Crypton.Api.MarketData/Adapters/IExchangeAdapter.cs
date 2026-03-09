@@ -22,6 +22,7 @@ public interface IExchangeAdapter
     event EventHandler<bool>? OnConnectionStateChanged;
     bool IsConnected { get; }
     int ReconnectCount { get; }
+    DateTime? LastConnectedAt { get; }
     TimeSpan CurrentReconnectDelay { get; }
     CircuitBreakerState CircuitBreakerState { get; }
 }
