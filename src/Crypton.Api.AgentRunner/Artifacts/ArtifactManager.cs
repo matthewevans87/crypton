@@ -129,9 +129,14 @@ public class ArtifactManager
                 // Remove original directory after successful compression
                 Directory.Delete(cycleDir, true);
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip if compression fails
+                // Clean up any partial zip before surfacing the failure
+                if (File.Exists(zipPath))
+                    try { File.Delete(zipPath); } catch { /* best-effort cleanup */ }
+
+                throw new InvalidOperationException(
+                    $"Failed to compress cycle '{cycleId}' to '{zipPath}': {ex.Message}", ex);
             }
         }
     }

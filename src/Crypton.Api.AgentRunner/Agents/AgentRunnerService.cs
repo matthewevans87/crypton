@@ -1,25 +1,30 @@
-using AgentRunner.Agents;
 using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Logging;
 using AgentRunner.Mailbox;
 using AgentRunner.Telemetry;
 using AgentRunner.StateMachine;
-using AgentRunner.Tools;
 
 namespace AgentRunner.Agents;
 
+/// <summary>
+/// Lifecycle facade for the learning loop. Owns startup, shutdown, pause/resume,
+/// and the main dispatch loop. Delegates step execution to <see cref="CycleStepExecutor"/>,
+/// inter-cycle waiting to <see cref="CycleScheduler"/>, and restart backoff to
+/// <see cref="LoopRestartManager"/>.
+/// </summary>
 public class AgentRunnerService : IAgentRunnerLifecycle
 {
     private readonly LoopStateMachine _stateMachine;
     private readonly StatePersistence _persistence;
     private readonly ArtifactManager _artifactManager;
     private readonly MailboxManager _mailboxManager;
-    private readonly AgentContextBuilder _contextBuilder;
-    private readonly AgentInvoker _agentInvoker;
     private readonly AgentRunnerConfig _config;
     private readonly IEventLogger _logger;
     private readonly MetricsCollector _metrics;
+    private readonly CycleStepExecutor _stepExecutor;
+    private readonly CycleScheduler _scheduler;
+    private readonly LoopRestartManager _restartManager;
     private LoopHealthMonitor? _healthMonitor;
 
     private CycleContext? _currentCycle;
@@ -28,7 +33,7 @@ public class AgentRunnerService : IAgentRunnerLifecycle
     private int _restartCount;
     private bool _isRestarting;
     private string? _latestPreviousCycleId;
-    private DateTime _nextScheduledRunTime;
+    private LoopState _prePauseState = LoopState.Idle;
 
     public bool IsRunning => _runTask != null && !_runTask.IsCompleted;
 
@@ -46,7 +51,7 @@ public class AgentRunnerService : IAgentRunnerLifecycle
     public CycleContext? CurrentCycle => _currentCycle;
     public LoopHealthMonitor? HealthMonitor => _healthMonitor;
     public int RestartCount => _restartCount;
-    public DateTime NextScheduledRunTime => _nextScheduledRunTime;
+    public DateTime NextScheduledRunTime => _scheduler.NextScheduledRunTime;
 
     public AgentRunnerService(
         AgentRunnerConfig config,
@@ -54,23 +59,29 @@ public class AgentRunnerService : IAgentRunnerLifecycle
         StatePersistence persistence,
         ArtifactManager artifactManager,
         MailboxManager mailboxManager,
-        AgentContextBuilder contextBuilder,
-        AgentInvoker agentInvoker,
         IEventLogger logger,
-        MetricsCollector metrics)
+        MetricsCollector metrics,
+        CycleStepExecutor stepExecutor,
+        CycleScheduler scheduler,
+        LoopRestartManager restartManager)
     {
         _config = config;
         _stateMachine = stateMachine;
         _persistence = persistence;
         _artifactManager = artifactManager;
         _mailboxManager = mailboxManager;
-        _contextBuilder = contextBuilder;
-        _agentInvoker = agentInvoker;
         _logger = logger;
         _metrics = metrics;
+        _stepExecutor = stepExecutor;
+        _scheduler = scheduler;
+        _restartManager = restartManager;
 
         _stateMachine.StateTransition += OnStateTransition;
     }
+
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
 
     public async Task StartAsync()
     {
@@ -83,55 +94,48 @@ public class AgentRunnerService : IAgentRunnerLifecycle
         _logger.LogInfo("Agent Runner starting...");
 
         _healthMonitor = new LoopHealthMonitor(_stateMachine, _config, _logger);
-        _healthMonitor.HealthWarning += (s, e) => HealthWarning?.Invoke(this, e);
-        _healthMonitor.HealthCritical += (s, e) => HealthCritical?.Invoke(this, e);
+        _healthMonitor.HealthWarning += (_, e) => HealthWarning?.Invoke(this, e);
+        _healthMonitor.HealthCritical += (_, e) => HealthCritical?.Invoke(this, e);
 
         var loadedState = await _persistence.LoadStateAsync();
 
         if (loadedState.HasValue)
         {
-            var savedState = loadedState.Value.Item1;
-            var savedContext = loadedState.Value.Item2;
+            var (savedState, savedContext) = (loadedState.Value.Item1, loadedState.Value.Item2);
 
             if (savedContext != null)
             {
                 _restartCount = savedContext.RestartCount;
                 _currentCycle = savedContext;
+                // Reset transient-run counters so a resumed cycle starts fresh.
+                // CycleStartTime: the watchdog measures from this startup, not the original start.
+                // RetryCount: retries from a previous run are irrelevant; the new run gets the full budget.
+                _currentCycle.CycleStartTime = DateTime.UtcNow;
+                _currentCycle.RetryCount = 0;
             }
 
-            if (savedState != LoopState.Idle && savedContext != null)
+            // Only resume if the saved state is reachable from Idle. States like Failed or
+            // WaitingForNextCycle are not directly resumable — treat them as a fresh start.
+            if (savedState != LoopState.Idle && savedContext != null &&
+                _stateMachine.CanTransitionTo(savedState))
             {
                 _logger.LogInfo($"Resuming from state: {savedState}");
                 _stateMachine.TransitionTo(savedState);
+
+                // Restore the previous completed cycle reference so the Evaluate agent has context.
+                var prevId = _artifactManager.GetLatestCompletedCycleId();
+                if (prevId != null && prevId != savedContext.CycleId)
+                    _latestPreviousCycleId = prevId;
             }
             else
             {
-                var previousCycleId = _artifactManager.GetLatestCompletedCycleId();
-                if (previousCycleId != null)
-                {
-                    _latestPreviousCycleId = previousCycleId;
-                    _logger.LogInfo($"History found ({previousCycleId}), starting with Evaluate step");
-                    _stateMachine.TransitionTo(LoopState.Evaluate);
-                }
-                else
-                {
-                    _stateMachine.TransitionTo(LoopState.Plan);
-                }
+                _currentCycle = null; // Discard non-resumable context; HandleIdle will create a fresh cycle.
+                TransitionToStartState();
             }
         }
         else
         {
-            var previousCycleId = _artifactManager.GetLatestCompletedCycleId();
-            if (previousCycleId != null)
-            {
-                _latestPreviousCycleId = previousCycleId;
-                _logger.LogInfo($"History found ({previousCycleId}), starting with Evaluate step");
-                _stateMachine.TransitionTo(LoopState.Evaluate);
-            }
-            else
-            {
-                _stateMachine.TransitionTo(LoopState.Plan);
-            }
+            TransitionToStartState();
         }
 
         _runCts = new CancellationTokenSource();
@@ -150,19 +154,18 @@ public class AgentRunnerService : IAgentRunnerLifecycle
 
         _logger.LogInfo("Agent Runner stopping...");
 
+        // Set _isRestarting before cancelling to prevent HandleLoopExitAsync from
+        // spawning a new loop task after the token is cancelled.
+        _isRestarting = true;
         _runCts?.Cancel();
 
         if (_runTask != null)
         {
-            try
-            {
-                await _runTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
+            try { await _runTask; }
+            catch (OperationCanceledException) { }
         }
 
+        _isRestarting = false;
         await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
 
         _runTask = null;
@@ -171,124 +174,166 @@ public class AgentRunnerService : IAgentRunnerLifecycle
         _logger.LogInfo("Agent Runner stopped");
     }
 
-    private async Task RunLoopAsync(CancellationToken cancellationToken)
+    public void Pause(string? reason = null)
+    {
+        if (!_stateMachine.CanTransitionTo(LoopState.Paused))
+            return;
+
+        _prePauseState = _stateMachine.CurrentState;
+        _stateMachine.TransitionTo(LoopState.Paused);
+
+        if (_currentCycle != null)
+        {
+            _currentCycle.IsPaused = true;
+            _currentCycle.PausedAt = DateTime.UtcNow;
+            _currentCycle.PauseReason = reason;
+        }
+
+        _logger.LogInfo($"Agent Runner paused: {reason}");
+    }
+
+    public void Resume()
+    {
+        if (_stateMachine.CurrentState != LoopState.Paused)
+            return;
+
+        if (_currentCycle != null)
+        {
+            _currentCycle.IsPaused = false;
+            _currentCycle.PausedAt = null;
+            _currentCycle.PauseReason = null;
+        }
+
+        // Return to the state that was active when Pause() was called.
+        _stateMachine.TransitionTo(_prePauseState);
+        _prePauseState = LoopState.Idle;
+        _logger.LogInfo("Agent Runner resumed");
+    }
+
+    public async Task AbortAsync()
+    {
+        _logger.LogInfo("Agent Runner aborting...");
+
+        // Prevent HandleLoopExitAsync from spawning a new loop task after cancellation.
+        _isRestarting = true;
+        _runCts?.Cancel();
+
+        if (_runTask != null)
+        {
+            try { await _runTask; }
+            catch (OperationCanceledException) { }
+        }
+
+        // Drive the state machine back to Idle regardless of current state.
+        // Active step states must go through Failed first.
+        var current = _stateMachine.CurrentState;
+        if (current != LoopState.Idle)
+        {
+            if (current != LoopState.Failed &&
+                current != LoopState.WaitingForNextCycle &&
+                current != LoopState.Paused)
+            {
+                _stateMachine.TransitionTo(LoopState.Failed);
+            }
+            _stateMachine.TransitionTo(LoopState.Idle);
+        }
+
+        // Clear all in-memory cycle state so the next StartAsync() begins fresh.
+        _currentCycle = null;
+        _latestPreviousCycleId = null;
+        _restartCount = 0;
+        _isRestarting = false;
+        _prePauseState = LoopState.Idle;
+        _runTask = null;
+        _runCts = null;
+
+        await _persistence.ClearStateAsync();
+
+        _logger.LogInfo("Agent Runner aborted and reset to Idle");
+    }
+
+    public void ForceNewCycle()
+    {
+        if (_stateMachine.CurrentState == LoopState.WaitingForNextCycle)
+            _scheduler.ForceNextCycle();
+    }
+
+    public void InjectContext(string agentName, string content)
+    {
+        _mailboxManager.Deposit(agentName, new MailboxMessage
+        {
+            FromAgent = "operator",
+            ToAgent = agentName,
+            Content = content,
+            Type = MessageType.Forward
+        });
+        _logger.LogInfo($"Injected context to {agentName}");
+    }
+
+    // -------------------------------------------------------------------------
+    // Main loop
+    // -------------------------------------------------------------------------
+
+    private async Task RunLoopAsync(CancellationToken ct)
     {
         _logger.LogInfo($"RunLoopAsync started, current state: {_stateMachine.CurrentState}");
 
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            // Check for stalled loop
-            var health = _healthMonitor?.CheckHealth();
-
-            if (health?.IsCritical == true && !_isRestarting)
+            while (!ct.IsCancellationRequested)
             {
-                _logger.LogError("Critical stall detected, triggering recovery...");
-                var recoveryState = _latestPreviousCycleId != null ? LoopState.Evaluate : LoopState.Plan;
-                _stateMachine.TransitionTo(recoveryState);
-            }
-
-            if (_stateMachine.CurrentState == LoopState.WaitingForNextCycle)
-            {
-                await HandleNextCycleDelayAsync(cancellationToken);
-                continue;
-            }
-
-            // Check for forced cycle timeout (FR-007)
-            if (_currentCycle != null && _currentCycle.CycleStartTime != default)
-            {
-                var elapsed = DateTime.UtcNow - _currentCycle.CycleStartTime;
-                var maxDuration = TimeSpan.FromMinutes(_config.Cycle.MaxDurationMinutes);
-
-                if (elapsed >= maxDuration)
+                switch (_stateMachine.CurrentState)
                 {
-                    _logger.LogWarning($"Forced cycle timeout exceeded ({maxDuration.TotalMinutes} min). Transitioning to Evaluation.");
+                    case LoopState.Idle:
+                        HandleIdle();
+                        break;
 
-                    // Skip to evaluation if not already there
-                    if (_stateMachine.CurrentState != LoopState.Evaluate)
-                    {
-                        _stateMachine.TransitionTo(LoopState.Evaluate);
-                        await ExecuteStepAsync(cancellationToken);
+                    // Agent step states: execute the current step, then advance on success.
+                    case LoopState.Plan:
+                    case LoopState.Research:
+                    case LoopState.Analyze:
+                    case LoopState.Synthesize:
+                    case LoopState.Evaluate:
+                        CheckHealthAndRecoverIfCritical();
+                        if (ExceedsMaxCycleDuration(_currentCycle))
+                        {
+                            ForceTransitionToEvaluate();
+                            break;
+                        }
+                        await ExecuteCurrentStepAsync(ct);
                         await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
-                        continue;
-                    }
+                        break;
+
+                    case LoopState.WaitingForNextCycle:
+                        await HandleWaitingForNextCycleAsync(ct);
+                        break;
+
+                    case LoopState.Paused:
+                        await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                        break;
+
+                    case LoopState.Failed:
+                        await HandleLoopExitAsync(ct);
+                        return;
                 }
             }
-
-            var nextState = _stateMachine.GetNextRequiredState();
-
-            if (!_stateMachine.CanTransitionTo(nextState))
-            {
-                if (_stateMachine.IsTerminalState())
-                {
-                    _logger.LogInfo("Agent Runner in terminal state, waiting...");
-                    await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken);
-                    continue;
-                }
-                break;
-            }
-
-            var success = _stateMachine.TransitionTo(nextState);
-            if (!success)
-            {
-                _logger.LogError($"Failed to transition to {nextState}");
-                break;
-            }
-
-            await ExecuteStepAsync(cancellationToken);
-
-            await _persistence.SaveStateAsync(_stateMachine.CurrentState, _currentCycle);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Graceful shutdown via cancellation — do not restart.
+            return;
         }
 
-        // Loop exited - attempt auto-restart
-        await HandleLoopExitAsync(cancellationToken);
+        await HandleLoopExitAsync(ct);
     }
 
-    private async Task HandleNextCycleDelayAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Called when the state machine is at Idle (fresh start or post-restart). Creates a new cycle
+    /// directory and transitions to the first step: Evaluate if a prior completed cycle exists,
+    /// Plan otherwise.
+    /// </summary>
+    private void HandleIdle()
     {
-        // Close out the just-completed cycle
-        if (_currentCycle != null)
-        {
-            _latestPreviousCycleId = _currentCycle.CycleId;
-            _currentCycle.CycleEndTime = DateTime.UtcNow;
-            CycleCompleted?.Invoke(this, _currentCycle.CycleId);
-            _artifactManager.ArchiveOldCycles();
-        }
-
-        // Short-poll so live config changes to ScheduleIntervalMinutes take effect
-        var totalWaited = TimeSpan.Zero;
-        const int pollSeconds = 30;
-
-        while (true)
-        {
-            var targetInterval = TimeSpan.FromMinutes(_config.Cycle.ScheduleIntervalMinutes);
-            _nextScheduledRunTime = DateTime.UtcNow + (targetInterval - totalWaited);
-
-            if (totalWaited >= targetInterval)
-                break;
-
-            var remaining = targetInterval - totalWaited;
-            var tick = TimeSpan.FromSeconds(Math.Min(pollSeconds, remaining.TotalSeconds));
-
-            try
-            {
-                await Task.Delay(tick, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            totalWaited += tick;
-
-            // Re-evaluate configured interval on each tick to pick up live changes
-            if (totalWaited >= TimeSpan.FromMinutes(_config.Cycle.ScheduleIntervalMinutes))
-                break;
-        }
-
-        if (cancellationToken.IsCancellationRequested)
-            return;
-
-        // Start new cycle
         var newCycleId = _artifactManager.CreateCycleDirectory();
         _currentCycle = new CycleContext
         {
@@ -298,52 +343,197 @@ public class AgentRunnerService : IAgentRunnerLifecycle
             RestartCount = _restartCount
         };
 
-        if (_latestPreviousCycleId != null)
+        var firstStep = _latestPreviousCycleId != null ? LoopState.Evaluate : LoopState.Plan;
+        _stateMachine.TransitionTo(firstStep);
+    }
+
+    /// <summary>
+    /// Executes the agent step for the current state. On success, advances the state machine
+    /// to the next step via <see cref="LoopStateMachine.GetNextRequiredState"/>. On failure,
+    /// either retries or transitions to Failed.
+    /// </summary>
+    private async Task ExecuteCurrentStepAsync(CancellationToken ct)
+    {
+        var state = _stateMachine.CurrentState;
+
+        StepStarted?.Invoke(this, new StepStartedEventArgs
         {
-            _logger.LogInfo($"Starting Evaluate step for previous cycle {_latestPreviousCycleId}");
-            _stateMachine.TransitionTo(LoopState.Evaluate);
+            StepName = state.ToString(),
+            CycleId = _currentCycle?.CycleId,
+            StartedAt = DateTime.UtcNow
+        });
+
+        var result = await _stepExecutor.ExecuteAsync(
+            state,
+            _currentCycle!,
+            _latestPreviousCycleId,
+            token => TokenReceived?.Invoke(this, new TokenEventArgs
+            {
+                Token = token,
+                StepName = state.ToString()
+            }),
+            evt => AgentEventReceived?.Invoke(this, new AgentEventArgs
+            {
+                EventMessage = evt,
+                StepName = state.ToString()
+            }),
+            ct);
+
+        if (_currentCycle != null)
+        {
+            _currentCycle.Steps[state.ToString()] = new StepRecord
+            {
+                Step = state,
+                StartTime = result.StartTime,
+                EndTime = result.EndTime,
+                Outcome = result.Outcome,
+                ErrorMessage = result.ErrorMessage
+            };
+            _currentCycle.LastStepOutcome = result.Outcome;
+        }
+
+        StepCompleted?.Invoke(this, new StepCompletedEventArgs
+        {
+            StepName = state.ToString(),
+            CycleId = _currentCycle?.CycleId,
+            Success = result.Outcome == StepOutcome.Success,
+            ErrorMessage = result.ErrorMessage,
+            Duration = result.EndTime - result.StartTime,
+            CompletedAt = result.EndTime
+        });
+
+        if (result.Outcome is StepOutcome.Failed or StepOutcome.Timeout)
+        {
+            var maxRetries = GetMaxRetriesForState(state);
+
+            if (_currentCycle != null && _currentCycle.RetryCount < maxRetries)
+            {
+                _currentCycle.RetryCount++;
+                _logger.LogWarning(
+                    $"Step {state} failed, retrying ({_currentCycle.RetryCount}/{maxRetries})");
+
+                var backoffMinutes = Math.Pow(2, _currentCycle.RetryCount) * 5;
+                await Task.Delay(TimeSpan.FromMinutes(backoffMinutes), ct);
+                return; // State unchanged: same step executes again on the next loop iteration.
+            }
+
+            _logger.LogError($"Step {state} exhausted retries");
+            _stateMachine.TransitionTo(LoopState.Failed);
+            ErrorOccurred?.Invoke(this, new Exception($"Step {state} failed: {result.Outcome}"));
+            return;
+        }
+
+        // Success: advance to the next step in the pipeline.
+        // GetNextRequiredState returns: Plan→Research, Research→Analyze, Analyze→Synthesize,
+        // Synthesize→WaitingForNextCycle, Evaluate→Plan.
+        var nextState = _stateMachine.GetNextRequiredState();
+        _stateMachine.TransitionTo(nextState);
+    }
+
+    private async Task HandleWaitingForNextCycleAsync(CancellationToken ct)
+    {
+        var (nextState, newCycleId) = await _scheduler.WaitAsync(
+            _currentCycle,
+            _latestPreviousCycleId,
+            cycleId => CycleCompleted?.Invoke(this, cycleId),
+            ct);
+
+        if (ct.IsCancellationRequested)
+            return;
+
+        if (_currentCycle != null)
+            _latestPreviousCycleId = _currentCycle.CycleId;
+
+        _currentCycle = new CycleContext
+        {
+            CycleId = newCycleId,
+            CycleStartTime = DateTime.UtcNow,
+            CurrentState = nextState,
+            RestartCount = _restartCount
+        };
+
+        // Use the scheduler's decision: Evaluate if there is a completed prior cycle, Plan otherwise.
+        // The loop will then directly EXECUTE this state (not advance past it), which is the
+        // correct behaviour — Evaluate runs before Plan on cycles 2+.
+        _stateMachine.TransitionTo(nextState);
+    }
+
+    /// <summary>
+    /// Unconditionally navigates to the Evaluate state via valid state machine paths.
+    /// Used by both the cycle-duration timeout and the health-stall recovery.
+    /// After this call, the loop will execute Evaluate on its next agent-step iteration.
+    /// </summary>
+    private void ForceTransitionToEvaluate()
+    {
+        _logger.LogWarning(
+            $"Forcing transition to Evaluate (max duration: {_config.Cycle.MaxDurationMinutes} min).");
+
+        var cur = _stateMachine.CurrentState;
+        if (cur == LoopState.Evaluate) return;
+
+        // All agent-step states support → Failed; WaitingForNextCycle and Paused do not.
+        if (!_stateMachine.CanTransitionTo(LoopState.Failed))
+        {
+            if (!_stateMachine.CanTransitionTo(LoopState.Idle))
+                _stateMachine.TransitionTo(LoopState.Plan); // Paused → Plan → ... not ideal but safe
         }
         else
         {
-            _stateMachine.TransitionTo(LoopState.Plan);
+            _stateMachine.TransitionTo(LoopState.Failed);
         }
+
+        if (_stateMachine.CurrentState != LoopState.Idle)
+            _stateMachine.TransitionTo(LoopState.Idle);
+
+        _stateMachine.TransitionTo(LoopState.Evaluate);
     }
 
-    private async Task HandleLoopExitAsync(CancellationToken cancellationToken)
+    private void CheckHealthAndRecoverIfCritical()
     {
-        if (cancellationToken.IsCancellationRequested || _isRestarting)
+        var health = _healthMonitor?.CheckHealth();
+        if (health?.IsCritical != true || _isRestarting) return;
+
+        _logger.LogError("Critical health stall detected, triggering recovery to Evaluate.");
+        ForceTransitionToEvaluate();
+    }
+
+    private async Task HandleLoopExitAsync(CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested || _isRestarting)
             return;
 
         _isRestarting = true;
         _restartCount++;
 
         if (_currentCycle != null)
-        {
             _currentCycle.RestartCount = _restartCount;
-        }
 
-        if (_restartCount >= _config.Resilience.MaxRestartAttempts)
+        var shouldRestart = await _restartManager.ShouldRestartAsync(_restartCount, ct);
+
+        if (!shouldRestart)
         {
-            _logger.LogError($"Exceeded max restart attempts ({_config.Resilience.MaxRestartAttempts}). Giving up.");
-            _stateMachine.TransitionTo(LoopState.Failed);
-            ErrorOccurred?.Invoke(this, new Exception($"Loop exited after {_restartCount} restart attempts"));
+            if (_stateMachine.CurrentState != LoopState.Failed)
+                _stateMachine.TransitionTo(LoopState.Failed);
+            ErrorOccurred?.Invoke(this,
+                new Exception($"Loop exited after {_restartCount} restart attempts"));
             _isRestarting = false;
             return;
         }
 
-        var delay = Math.Min(
-            _config.Resilience.BaseRestartDelayMinutes * Math.Pow(2, _restartCount - 1),
-            _config.Resilience.MaxRestartDelayMinutes);
-
-        _logger.LogWarning($"Loop exited. Restarting in {delay} minutes (attempt {_restartCount}/{_config.Resilience.MaxRestartAttempts})");
-
-        await Task.Delay(TimeSpan.FromMinutes(delay), cancellationToken);
-
-        if (!cancellationToken.IsCancellationRequested)
+        if (!ct.IsCancellationRequested)
         {
             _healthMonitor?.SetRestartCount(_restartCount);
-            var restartState = _latestPreviousCycleId != null ? LoopState.Evaluate : LoopState.Plan;
-            _stateMachine.TransitionTo(restartState);
+
+            // Clear the stale cycle context; HandleIdle will create a fresh one.
+            _currentCycle = null;
+
+            // Drive to Idle so the loop restarts cleanly via HandleIdle.
+            if (_stateMachine.CurrentState != LoopState.Idle)
+            {
+                if (_stateMachine.CurrentState != LoopState.Failed)
+                    _stateMachine.TransitionTo(LoopState.Failed);
+                _stateMachine.TransitionTo(LoopState.Idle);
+            }
 
             _runCts = new CancellationTokenSource();
             _runTask = RunLoopAsync(_runCts.Token);
@@ -352,385 +542,46 @@ public class AgentRunnerService : IAgentRunnerLifecycle
         _isRestarting = false;
     }
 
-    private async Task ExecuteStepAsync(CancellationToken cancellationToken)
+    private static bool ExceedsMaxCycleDuration(CycleContext? cycle, double maxDurationMinutes)
     {
-        var state = _stateMachine.CurrentState;
-        _logger.LogInfo($"Executing step: {state}");
-
-        var stepRecord = new StepRecord
-        {
-            Step = state,
-            StartTime = DateTime.UtcNow
-        };
-
-        StepStarted?.Invoke(this, new StepStartedEventArgs
-        {
-            StepName = state.ToString(),
-            CycleId = _currentCycle?.CycleId,
-            StartedAt = stepRecord.StartTime
-        });
-
-        try
-        {
-            var result = await ExecuteAgentAsync(state, cancellationToken);
-
-            stepRecord.Outcome = result.Success ? StepOutcome.Success : StepOutcome.Failed;
-            stepRecord.ErrorMessage = result.Error;
-
-            if (result.Success)
-            {
-                var artifactName = GetArtifactNameForState(state);
-                _artifactManager.SaveArtifact(_currentCycle!.CycleId, artifactName, result.Output ?? "");
-
-                // Validate the artifact
-                var validationResult = ValidateArtifact(state, result.Output ?? "");
-                if (!validationResult.IsValid)
-                {
-                    _logger.LogWarning($"Artifact validation failed for {artifactName}: {string.Join(", ", validationResult.Errors)}");
-                    stepRecord.Outcome = StepOutcome.Failed;
-                    stepRecord.ErrorMessage = $"Validation failed: {string.Join("; ", validationResult.Errors)}";
-                    result.Success = false;
-                    result.Error = stepRecord.ErrorMessage;
-                }
-                else if (validationResult.Warnings.Any())
-                {
-                    _logger.LogWarning($"Artifact warnings for {artifactName}: {string.Join(", ", validationResult.Warnings)}");
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            stepRecord.Outcome = StepOutcome.Timeout;
-            stepRecord.ErrorMessage = "Step timed out";
-            _logger.LogError($"Step {state} timed out");
-        }
-        catch (Exception ex)
-        {
-            stepRecord.Outcome = StepOutcome.Failed;
-            stepRecord.ErrorMessage = ex.Message;
-            _logger.LogError($"Step {state} failed: {ex.Message}");
-        }
-
-        stepRecord.EndTime = DateTime.UtcNow;
-
-        if (_currentCycle != null)
-        {
-            _currentCycle.Steps[state.ToString()] = stepRecord;
-            _currentCycle.LastStepOutcome = stepRecord.Outcome;
-        }
-
-        await HandleStepCompletionAsync(state, stepRecord.Outcome, cancellationToken);
-
-        StepCompleted?.Invoke(this, new StepCompletedEventArgs
-        {
-            StepName = state.ToString(),
-            CycleId = _currentCycle?.CycleId,
-            Success = stepRecord.Outcome == StepOutcome.Success,
-            ErrorMessage = stepRecord.ErrorMessage,
-            Duration = stepRecord.Duration,
-            CompletedAt = stepRecord.EndTime ?? DateTime.UtcNow
-        });
+        if (cycle == null || cycle.CycleStartTime == default)
+            return false;
+        return DateTime.UtcNow - cycle.CycleStartTime >= TimeSpan.FromMinutes(maxDurationMinutes);
     }
 
-    private async Task<AgentInvocationResult> ExecuteAgentAsync(LoopState state, CancellationToken cancellationToken)
+    private bool ExceedsMaxCycleDuration(CycleContext? cycle) =>
+        ExceedsMaxCycleDuration(cycle, _config.Cycle.MaxDurationMinutes);
+
+    private int GetMaxRetriesForState(LoopState state) => state switch
     {
-        if (_currentCycle == null)
+        LoopState.Plan => _config.Agents.Plan.MaxRetries,
+        LoopState.Research => _config.Agents.Research.MaxRetries,
+        LoopState.Analyze => _config.Agents.Analyze.MaxRetries,
+        LoopState.Synthesize => _config.Agents.Synthesis.MaxRetries,
+        LoopState.Evaluate => _config.Agents.Evaluation.MaxRetries,
+        _ => 3
+    };
+
+    /// <summary>
+    /// Loads prior-cycle history from disk into <see cref="_latestPreviousCycleId"/>.
+    /// Called on a fresh start (no resumable persisted state). Does NOT create a cycle directory;
+    /// that is deferred to <see cref="HandleIdle"/> so restarts also go through the same path.
+    /// </summary>
+    private void TransitionToStartState()
+    {
+        var previousCycleId = _artifactManager.GetLatestCompletedCycleId();
+        if (previousCycleId != null)
         {
-            _currentCycle = new CycleContext
-            {
-                CycleId = _artifactManager.CreateCycleDirectory(),
-                CycleStartTime = DateTime.UtcNow,
-                CurrentState = state
-            };
+            _latestPreviousCycleId = previousCycleId;
+            _logger.LogInfo($"Prior completed cycle found — will Evaluate before Plan: {previousCycleId}");
         }
-
-        _currentCycle.CurrentState = state;
-
-        AgentContext context = state switch
-        {
-            LoopState.Plan => _contextBuilder.BuildPlanAgentContext(_currentCycle.CycleId),
-            LoopState.Research => _contextBuilder.BuildResearchAgentContext(_currentCycle.CycleId),
-            LoopState.Analyze => _contextBuilder.BuildAnalysisAgentContext(_currentCycle.CycleId),
-            LoopState.Synthesize => _contextBuilder.BuildSynthesisAgentContext(_currentCycle.CycleId),
-            LoopState.Evaluate => _contextBuilder.BuildEvaluationAgentContext(_currentCycle.CycleId, _latestPreviousCycleId),
-            _ => throw new InvalidOperationException($"No agent context for state: {state}")
-        };
-
-        var result = await _agentInvoker.InvokeAsync(
-            context,
-            cancellationToken,
-            onToken: token => TokenReceived?.Invoke(this, new TokenEventArgs
-            {
-                Token = token,
-                StepName = state.ToString()
-            }),
-            onEvent: evt => AgentEventReceived?.Invoke(this, new AgentEventArgs
-            {
-                EventMessage = evt,
-                StepName = state.ToString()
-            }));
-
-        if (!result.Success)
-        {
-            _logger.LogError($"Agent {state} failed: {result.Error}");
-        }
-        else
-        {
-            _logger.LogInfo($"Agent {state} output (first 200 chars): {(result.Output?.Length > 200 ? result.Output[..200] + "..." : result.Output)}");
-        }
-
-        await HandleMailboxMessagesAsync(state, result);
-
-        return result;
-    }
-
-    private async Task HandleMailboxMessagesAsync(LoopState state, AgentInvocationResult result)
-    {
-        if (!result.Success || string.IsNullOrEmpty(result.Output))
-            return;
-
-        var (forwardAgent, backwardAgent) = GetMailboxRouting(state);
-
-        if (!string.IsNullOrEmpty(forwardAgent))
-        {
-            var forwardMessage = new MailboxMessage
-            {
-                FromAgent = state.ToString(),
-                ToAgent = forwardAgent,
-                Content = ExtractMailboxContent(result.Output, forwardAgent),
-                Type = MessageType.Forward
-            };
-            _mailboxManager.Deposit(forwardAgent, forwardMessage);
-        }
-
-        if (!string.IsNullOrEmpty(backwardAgent))
-        {
-            var feedbackMessage = new MailboxMessage
-            {
-                FromAgent = state.ToString(),
-                ToAgent = backwardAgent,
-                Content = ExtractFeedbackContent(result.Output),
-                Type = MessageType.Feedback
-            };
-            _mailboxManager.Deposit(backwardAgent, feedbackMessage);
-        }
-
-        if (state == LoopState.Evaluate)
-        {
-            var broadcastContent = ExtractBroadcastContent(result.Output);
-            _mailboxManager.Broadcast("evaluation", broadcastContent);
-        }
-
-        await Task.CompletedTask;
-    }
-
-    private (string? Forward, string? Backward) GetMailboxRouting(LoopState state)
-    {
-        return state switch
-        {
-            LoopState.Plan => ("research", null),
-            LoopState.Research => ("analysis", "plan"),
-            LoopState.Analyze => ("synthesis", "research"),
-            LoopState.Synthesize => ("evaluation", "analysis"),
-            LoopState.Evaluate => (null, null),
-            _ => (null, null)
-        };
-    }
-
-    private string GetArtifactNameForState(LoopState state)
-    {
-        return state switch
-        {
-            LoopState.Plan => "plan.md",
-            LoopState.Research => "research.md",
-            LoopState.Analyze => "analysis.md",
-            LoopState.Synthesize => "strategy.json",
-            LoopState.Evaluate => "evaluation.md",
-            _ => throw new InvalidOperationException($"No artifact for state: {state}")
-        };
-    }
-
-    private string ExtractMailboxContent(string output, string targetAgent)
-    {
-        var pattern = new System.Text.RegularExpressions.Regex(
-            $@"<mailbox_to_{targetAgent}>(.*?)</mailbox_to_{targetAgent}>",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
-
-        var match = pattern.Match(output);
-        return match.Success ? match.Groups[1].Value.Trim() : "No forward message";
-    }
-
-    private string ExtractFeedbackContent(string output)
-    {
-        var pattern = new System.Text.RegularExpressions.Regex(
-            @"<feedback>(.*?)</feedback>",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
-
-        var match = pattern.Match(output);
-        return match.Success ? match.Groups[1].Value.Trim() : "No feedback";
-    }
-
-    private string ExtractBroadcastContent(string output)
-    {
-        var pattern = new System.Text.RegularExpressions.Regex(
-            @"<broadcast>(.*?)</broadcast>",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
-
-        var match = pattern.Match(output);
-        return match.Success ? match.Groups[1].Value.Trim() : "Broadcast message";
-    }
-
-    private async Task HandleStepCompletionAsync(LoopState state, StepOutcome outcome, CancellationToken cancellationToken)
-    {
-        if (outcome == StepOutcome.Failed || outcome == StepOutcome.Timeout)
-        {
-            var maxRetries = GetMaxRetriesForState(state);
-
-            if (_currentCycle != null && _currentCycle.RetryCount < maxRetries)
-            {
-                _currentCycle.RetryCount++;
-                _logger.LogWarning($"Step {state} failed, retrying ({_currentCycle.RetryCount}/{maxRetries})");
-
-                var backoffMinutes = Math.Pow(2, _currentCycle.RetryCount) * 5;
-                await Task.Delay(TimeSpan.FromMinutes(backoffMinutes), cancellationToken);
-
-                return;
-            }
-
-            _logger.LogError($"Step {state} exhausted retries");
-            _stateMachine.TransitionTo(LoopState.Failed);
-            ErrorOccurred?.Invoke(this, new Exception($"Step {state} failed: {outcome}"));
-        }
-
-        if (state == LoopState.Evaluate)
-        {
-            // Evaluation is Step 0 of the new cycle; after completing, proceed to Plan
-            _stateMachine.TransitionTo(LoopState.Plan);
-        }
-    }
-
-    private int GetMaxRetriesForState(LoopState state)
-    {
-        return state switch
-        {
-            LoopState.Plan => _config.Agents.Plan.MaxRetries,
-            LoopState.Research => _config.Agents.Research.MaxRetries,
-            LoopState.Analyze => _config.Agents.Analyze.MaxRetries,
-            LoopState.Synthesize => _config.Agents.Synthesis.MaxRetries,
-            LoopState.Evaluate => _config.Agents.Evaluation.MaxRetries,
-            _ => 3
-        };
+        // State stays at Idle. RunLoopAsync's HandleIdle call creates the cycle directory
+        // and transitions to Evaluate (if history exists) or Plan (if not).
     }
 
     private void OnStateTransition(object? sender, StateTransitionEventArgs e)
     {
         _logger.LogInfo($"State transition: {e.FromState} -> {e.ToState}");
         StateChanged?.Invoke(this, e.ToState);
-    }
-
-    public void Pause(string? reason = null)
-    {
-        if (_stateMachine.CanTransitionTo(LoopState.Paused))
-        {
-            _stateMachine.TransitionTo(LoopState.Paused);
-
-            if (_currentCycle != null)
-            {
-                _currentCycle.IsPaused = true;
-                _currentCycle.PausedAt = DateTime.UtcNow;
-                _currentCycle.PauseReason = reason;
-            }
-
-            _logger.LogInfo($"Agent Runner paused: {reason}");
-        }
-    }
-
-    public void Resume()
-    {
-        if (_stateMachine.CurrentState == LoopState.Paused)
-        {
-            if (_currentCycle != null)
-            {
-                _currentCycle.IsPaused = false;
-                _currentCycle.PausedAt = null;
-                _currentCycle.PauseReason = null;
-            }
-
-            var nextState = _stateMachine.GetNextRequiredState();
-            _stateMachine.TransitionTo(nextState);
-
-            _logger.LogInfo("Agent Runner resumed");
-        }
-    }
-
-    public void Abort()
-    {
-        _logger.LogInfo("Agent Runner aborting current cycle");
-        _runCts?.Cancel();
-
-        if (_stateMachine.CurrentState != LoopState.Paused)
-        {
-            _stateMachine.TransitionTo(LoopState.Failed);
-        }
-    }
-
-    public void ForceNewCycle()
-    {
-        if (_stateMachine.CurrentState == LoopState.WaitingForNextCycle)
-        {
-            if (_currentCycle != null)
-            {
-                _latestPreviousCycleId = _currentCycle.CycleId;
-                _currentCycle.CycleEndTime = DateTime.UtcNow;
-                CycleCompleted?.Invoke(this, _currentCycle.CycleId);
-                _artifactManager.ArchiveOldCycles();
-            }
-
-            var newCycleId = _artifactManager.CreateCycleDirectory();
-            _currentCycle = new CycleContext
-            {
-                CycleId = newCycleId,
-                CycleStartTime = DateTime.UtcNow,
-                CurrentState = LoopState.Idle,
-                RestartCount = _restartCount
-            };
-
-            if (_latestPreviousCycleId != null)
-            {
-                _stateMachine.TransitionTo(LoopState.Evaluate);
-            }
-            else
-            {
-                _stateMachine.TransitionTo(LoopState.Plan);
-            }
-        }
-    }
-
-    public void InjectContext(string agentName, string content)
-    {
-        var message = new MailboxMessage
-        {
-            FromAgent = "operator",
-            ToAgent = agentName,
-            Content = content,
-            Type = MessageType.Forward
-        };
-
-        _mailboxManager.Deposit(agentName, message);
-        _logger.LogInfo($"Injected context to {agentName}");
-    }
-
-    private ArtifactValidationResult ValidateArtifact(LoopState state, string content)
-    {
-        try
-        {
-            var validator = ArtifactValidators.ForState(state);
-            return validator.Validate(content);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error validating artifact for {state}: {ex.Message}");
-            return ArtifactValidationResult.Failure($"Validation error: {ex.Message}");
-        }
     }
 }

@@ -76,16 +76,21 @@ var statePersistence = new StatePersistence("state.json");
 var contextBuilder = new AgentContextBuilder(artifactManager, mailboxManager, toolRegistry, config);
 var agentInvoker = new AgentInvoker(config, toolRegistry.Executor);
 var metricsCollector = new MetricsCollector();
+var mailboxRouter = new MailboxRouter(mailboxManager);
+var cycleStepExecutor = new CycleStepExecutor(contextBuilder, agentInvoker, artifactManager, mailboxRouter, logger);
+var cycleScheduler = new CycleScheduler(config, artifactManager, logger);
+var loopRestartManager = new LoopRestartManager(config, logger);
 var agentRunnerService = new AgentRunnerService(
     config,
     stateMachine,
     statePersistence,
     artifactManager,
     mailboxManager,
-    contextBuilder,
-    agentInvoker,
     logger,
-    metricsCollector);
+    metricsCollector,
+    cycleStepExecutor,
+    cycleScheduler,
+    loopRestartManager);
 var startupValidator = new StartupValidator(new HttpClient());
 var serviceAvailabilityState = new ServiceAvailabilityState();
 var startupCoordinator = new AgentRunnerStartupCoordinator(
@@ -109,7 +114,13 @@ builder.Services.AddSingleton(toolRegistry);
 builder.Services.AddSingleton(stateMachine);
 builder.Services.AddSingleton(statePersistence);
 builder.Services.AddSingleton(contextBuilder);
+builder.Services.AddSingleton<IAgentContextBuilder>(contextBuilder);
 builder.Services.AddSingleton(agentInvoker);
+builder.Services.AddSingleton<IAgentInvoker>(agentInvoker);
+builder.Services.AddSingleton(mailboxRouter);
+builder.Services.AddSingleton(cycleStepExecutor);
+builder.Services.AddSingleton(cycleScheduler);
+builder.Services.AddSingleton(loopRestartManager);
 builder.Services.AddSingleton(agentRunnerService);
 builder.Services.AddSingleton<IAgentRunnerLifecycle>(agentRunnerService);
 builder.Services.AddSingleton(metricsCollector);

@@ -32,7 +32,9 @@ public class StatePersistence
         };
 
         var json = JsonSerializer.Serialize(state, JsonOptions);
-        await File.WriteAllTextAsync(_stateFilePath, json);
+        var tempPath = _stateFilePath + ".tmp";
+        await File.WriteAllTextAsync(tempPath, json);
+        File.Move(tempPath, _stateFilePath, overwrite: true);
     }
 
     public async Task<(LoopState State, CycleContext? Context)?> LoadStateAsync()

@@ -78,6 +78,11 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
 
             // Set up FileSystemWatcher
             var dir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+                _logger.LogInformation("Created directory for strategy file: {Dir}", dir);
+            }
             var file = Path.GetFileName(path);
 
             _watcher = new FileSystemWatcher(dir, file)

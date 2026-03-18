@@ -2,11 +2,17 @@ using System.Text;
 using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
 using AgentRunner.Mailbox;
+using AgentRunner.StateMachine;
 using AgentRunner.Tools;
 
 namespace AgentRunner.Agents;
 
-public class AgentContextBuilder
+public interface IAgentContextBuilder
+{
+    AgentContext BuildContext(LoopState state, string cycleId, string? previousCycleId = null);
+}
+
+public class AgentContextBuilder : IAgentContextBuilder
 {
     private readonly ArtifactManager _artifactManager;
     private readonly MailboxManager _mailboxManager;
@@ -25,162 +31,116 @@ public class AgentContextBuilder
         _config = config;
     }
 
-    public AgentContext BuildPlanAgentContext(string cycleId, string? previousCycleId = null)
+    // Maps each agent state to its static context definition.
+    // Evaluation is the only special case: it reads input artifacts from previousCycleId, not cycleId.
+    private record AgentContextDefinition(
+        string AgentName,
+        string PromptFile,
+        string TemplateFile,
+        string[] InputArtifacts,
+        string[] AvailableTools,
+        bool IncludeAgentMemory = true,
+        bool IncludeRecentEvaluations = false,
+        int RecentEvaluationCount = 0);
+
+    private static readonly Dictionary<LoopState, AgentContextDefinition> Definitions = new()
     {
-        var identity = LoadAgentIdentity("plan");
-        var toolGuide = LoadToolGuide();
-        var mailbox = _mailboxManager.GetMessages("plan", _config.Storage.MaxMailboxMessages);
-        var memory = _artifactManager.ReadMemory("plan");
-        var sharedMemory = _artifactManager.ReadSharedMemory();
-        var recentEvaluations = _artifactManager.GetRecentEvaluations(7);
-        var outputTemplate = LoadOutputTemplate("plan.md");
+        [LoopState.Plan] = new(
+            AgentName: "Plan",
+            PromptFile: "plan_agent.md",
+            TemplateFile: "plan.md",
+            InputArtifacts: [],
+            AvailableTools: ["web_search", "web_fetch", "bird", "technical_indicators"],
+            IncludeRecentEvaluations: true,
+            RecentEvaluationCount: 7),
 
-        return new AgentContext
-        {
-            AgentName = "Plan",
-            CycleId = cycleId,
-            Identity = identity,
-            ToolGuide = toolGuide,
-            MailboxMessages = mailbox,
-            Memory = memory,
-            SharedMemory = sharedMemory,
-            RecentEvaluations = recentEvaluations,
-            OutputTemplate = outputTemplate,
-            AvailableTools = new[] { "web_search", "web_fetch", "bird", "technical_indicators" }
-        };
-    }
+        [LoopState.Research] = new(
+            AgentName: "Research",
+            PromptFile: "research_agent.md",
+            TemplateFile: "research.md",
+            InputArtifacts: ["plan.md"],
+            AvailableTools: ["web_search", "web_fetch", "bird", "technical_indicators"]),
 
-    public AgentContext BuildResearchAgentContext(string cycleId)
-    {
-        var identity = LoadAgentIdentity("research");
-        var toolGuide = LoadToolGuide();
-        var mailbox = _mailboxManager.GetMessages("research", _config.Storage.MaxMailboxMessages);
-        var plan = _artifactManager.ReadArtifact(cycleId, "plan.md");
-        var memory = _artifactManager.ReadMemory("research");
-        var sharedMemory = _artifactManager.ReadSharedMemory();
-        var outputTemplate = LoadOutputTemplate("research.md");
+        [LoopState.Analyze] = new(
+            AgentName: "Analysis",
+            PromptFile: "analysis_agent.md",
+            TemplateFile: "analysis.md",
+            InputArtifacts: ["research.md"],
+            AvailableTools: ["current_position", "technical_indicators"]),
 
-        return new AgentContext
-        {
-            AgentName = "Research",
-            CycleId = cycleId,
-            Identity = identity,
-            ToolGuide = toolGuide,
-            MailboxMessages = mailbox,
-            InputArtifacts = new Dictionary<string, string>
-            {
-                ["plan.md"] = plan ?? ""
-            },
-            Memory = memory,
-            SharedMemory = sharedMemory,
-            OutputTemplate = outputTemplate,
-            AvailableTools = new[] { "web_search", "web_fetch", "bird", "technical_indicators" }
-        };
-    }
+        [LoopState.Synthesize] = new(
+            AgentName: "Synthesis",
+            PromptFile: "synthesis_agent.md",
+            TemplateFile: "strategy.json",
+            InputArtifacts: ["analysis.md"],
+            AvailableTools: ["current_position"]),
 
-    public AgentContext BuildAnalysisAgentContext(string cycleId)
-    {
-        var identity = LoadAgentIdentity("analysis");
-        var toolGuide = LoadToolGuide();
-        var mailbox = _mailboxManager.GetMessages("analysis", _config.Storage.MaxMailboxMessages);
-        var research = _artifactManager.ReadArtifact(cycleId, "research.md");
-        var memory = _artifactManager.ReadMemory("analysis");
-        var sharedMemory = _artifactManager.ReadSharedMemory();
-        var outputTemplate = LoadOutputTemplate("analysis.md");
-
-        return new AgentContext
-        {
-            AgentName = "Analysis",
-            CycleId = cycleId,
-            Identity = identity,
-            ToolGuide = toolGuide,
-            MailboxMessages = mailbox,
-            InputArtifacts = new Dictionary<string, string>
-            {
-                ["research.md"] = research ?? ""
-            },
-            Memory = memory,
-            SharedMemory = sharedMemory,
-            OutputTemplate = outputTemplate,
-            AvailableTools = new[] { "current_position", "technical_indicators" }
-        };
-    }
-
-    public AgentContext BuildSynthesisAgentContext(string cycleId)
-    {
-        var identity = LoadAgentIdentity("synthesis");
-        var toolGuide = LoadToolGuide();
-        var mailbox = _mailboxManager.GetMessages("synthesis", _config.Storage.MaxMailboxMessages);
-        var analysis = _artifactManager.ReadArtifact(cycleId, "analysis.md");
-        var memory = _artifactManager.ReadMemory("synthesis");
-        var sharedMemory = _artifactManager.ReadSharedMemory();
-        var outputTemplate = LoadOutputTemplate("strategy.json");
-
-        return new AgentContext
-        {
-            AgentName = "Synthesis",
-            CycleId = cycleId,
-            Identity = identity,
-            ToolGuide = toolGuide,
-            MailboxMessages = mailbox,
-            InputArtifacts = new Dictionary<string, string>
-            {
-                ["analysis.md"] = analysis ?? ""
-            },
-            Memory = memory,
-            SharedMemory = sharedMemory,
-            OutputTemplate = outputTemplate,
-            AvailableTools = new[] { "current_position" }
-        };
-    }
+        [LoopState.Evaluate] = new(
+            AgentName: "Evaluation",
+            PromptFile: "evaluation_agent.md",
+            TemplateFile: "evaluation.md",
+            InputArtifacts: ["strategy.json", "analysis.md"],
+            AvailableTools: ["current_position"],
+            IncludeAgentMemory: false,
+            IncludeRecentEvaluations: true,
+            RecentEvaluationCount: 3),
+    };
 
     /// <summary>
-    /// Builds the context for the Evaluation agent.
-    /// Evaluation runs as Step 0 of the NEW cycle, so it reads artifacts from the PREVIOUS cycle.
+    /// Builds the agent context for the given loop state. For the Evaluation step,
+    /// <paramref name="previousCycleId"/> identifies the cycle whose artifacts are assessed;
+    /// the resulting evaluation artifact is saved under <paramref name="cycleId"/>.
     /// </summary>
-    /// <param name="currentCycleId">The ID of the cycle being started (evaluation output is saved here).</param>
-    /// <param name="previousCycleId">The ID of the cycle whose artifacts are being evaluated. If null, falls back to currentCycleId.</param>
-    public AgentContext BuildEvaluationAgentContext(string currentCycleId, string? previousCycleId = null)
+    public AgentContext BuildContext(LoopState state, string cycleId, string? previousCycleId = null)
     {
-        var sourceCycleId = previousCycleId ?? currentCycleId;
-        var identity = LoadAgentIdentity("evaluation");
+        if (!Definitions.TryGetValue(state, out var def))
+            throw new InvalidOperationException($"No agent context definition for state: {state}");
+
+        // Evaluation reads its inputs from the previous cycle; all others use the current cycle.
+        var sourceCycleId = (state == LoopState.Evaluate)
+            ? (previousCycleId ?? cycleId)
+            : cycleId;
+
+        var identity = LoadAgentIdentity(def.PromptFile);
         var toolGuide = LoadToolGuide();
-        var mailbox = _mailboxManager.GetMessages("evaluation", _config.Storage.MaxMailboxMessages);
-        var strategy = _artifactManager.ReadArtifact(sourceCycleId, "strategy.json");
-        var analysis = _artifactManager.ReadArtifact(sourceCycleId, "analysis.md");
+        var mailbox = _mailboxManager.GetMessages(def.AgentName.ToLowerInvariant(),
+            _config.Storage.MaxMailboxMessages);
         var sharedMemory = _artifactManager.ReadSharedMemory();
-        var recentEvaluations = _artifactManager.GetRecentEvaluations(3);
-        var outputTemplate = LoadOutputTemplate("evaluation.md");
+        var outputTemplate = LoadOutputTemplate(def.TemplateFile);
+
+        var inputArtifacts = def.InputArtifacts
+            .ToDictionary(name => name, name => _artifactManager.ReadArtifact(sourceCycleId, name) ?? "");
+
+        if (state == LoopState.Evaluate)
+            inputArtifacts["evaluated_cycle_id"] = sourceCycleId;
 
         return new AgentContext
         {
-            AgentName = "Evaluation",
-            CycleId = currentCycleId,
+            AgentName = def.AgentName,
+            CycleId = cycleId,
             Identity = identity,
             ToolGuide = toolGuide,
             MailboxMessages = mailbox,
-            InputArtifacts = new Dictionary<string, string>
-            {
-                ["strategy.json"] = strategy ?? "",
-                ["analysis.md"] = analysis ?? "",
-                ["evaluated_cycle_id"] = sourceCycleId
-            },
+            Memory = def.IncludeAgentMemory
+                ? _artifactManager.ReadMemory(def.AgentName.ToLowerInvariant())
+                : null,
             SharedMemory = sharedMemory,
-            RecentEvaluations = recentEvaluations,
+            RecentEvaluations = def.IncludeRecentEvaluations
+                ? _artifactManager.GetRecentEvaluations(def.RecentEvaluationCount)
+                : [],
+            InputArtifacts = inputArtifacts,
             OutputTemplate = outputTemplate,
-            AvailableTools = new[] { "current_position" }
+            AvailableTools = def.AvailableTools,
         };
     }
 
-    private string LoadAgentIdentity(string agentName)
+    private string LoadAgentIdentity(string promptFile)
     {
         var baseDir = AppContext.BaseDirectory;
-        var path = Path.Combine(baseDir, "agent_prompts", $"{agentName}_agent.md");
+        var path = Path.Combine(baseDir, "agent_prompts", promptFile);
         if (File.Exists(path))
-        {
             return File.ReadAllText(path);
-        }
-        return $"No identity file found for {agentName} agent.";
+        return $"No identity file found: {promptFile}.";
     }
 
     private string LoadOutputTemplate(string templateName)

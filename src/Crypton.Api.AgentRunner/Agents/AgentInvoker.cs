@@ -5,7 +5,16 @@ using AgentRunner.Tools;
 
 namespace AgentRunner.Agents;
 
-public class AgentInvoker
+public interface IAgentInvoker
+{
+    Task<AgentInvocationResult> InvokeAsync(
+        AgentContext context,
+        CancellationToken cancellationToken = default,
+        Action<string>? onToken = null,
+        Action<string>? onEvent = null);
+}
+
+public class AgentInvoker : IAgentInvoker
 {
     private readonly AgentRunnerConfig _config;
     private readonly ToolExecutor _toolExecutor;
@@ -17,7 +26,7 @@ public class AgentInvoker
         _toolExecutor = toolExecutor;
         _httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(Math.Max(config.Ollama.TimeoutSeconds, 30))
+            Timeout = TimeSpan.FromSeconds(config.Ollama.TimeoutSeconds)
         };
     }
 

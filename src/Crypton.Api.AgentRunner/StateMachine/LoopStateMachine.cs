@@ -28,7 +28,7 @@ public class LoopStateMachine
             { LoopState.Analyze,            new List<LoopState> { LoopState.Synthesize, LoopState.Failed, LoopState.Paused } },
             { LoopState.Synthesize,         new List<LoopState> { LoopState.WaitingForNextCycle, LoopState.Failed, LoopState.Paused } },
             { LoopState.WaitingForNextCycle, new List<LoopState> { LoopState.Evaluate, LoopState.Plan, LoopState.Idle, LoopState.Paused } },
-            { LoopState.Paused,             new List<LoopState> { LoopState.Plan, LoopState.Evaluate, LoopState.Idle } },
+            { LoopState.Paused,             new List<LoopState> { LoopState.Plan, LoopState.Research, LoopState.Analyze, LoopState.Synthesize, LoopState.Evaluate, LoopState.WaitingForNextCycle, LoopState.Idle } },
             { LoopState.Failed,             new List<LoopState> { LoopState.Idle } }
         };
     }

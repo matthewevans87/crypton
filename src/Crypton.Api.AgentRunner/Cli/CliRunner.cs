@@ -98,15 +98,7 @@ public static class CliRunner
         if (state == LoopState.Evaluate)
             Console.WriteLine($"[CLI] Prev Cycle: {prevCycleId ?? "(none)"}");
 
-        AgentContext context = state switch
-        {
-            LoopState.Plan => contextBuilder.BuildPlanAgentContext(cycleId),
-            LoopState.Research => contextBuilder.BuildResearchAgentContext(cycleId),
-            LoopState.Analyze => contextBuilder.BuildAnalysisAgentContext(cycleId),
-            LoopState.Synthesize => contextBuilder.BuildSynthesisAgentContext(cycleId),
-            LoopState.Evaluate => contextBuilder.BuildEvaluationAgentContext(cycleId, prevCycleId),
-            _ => throw new InvalidOperationException($"No context builder for {state}")
-        };
+        AgentContext context = contextBuilder.BuildContext(state, cycleId, prevCycleId);
 
         var systemPrompt = context.ToSystemPrompt();
         var userPrompt = context.ToUserPrompt();
