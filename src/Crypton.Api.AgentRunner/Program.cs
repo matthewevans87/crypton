@@ -56,8 +56,10 @@ var config = effectiveConfiguration.Get<AgentRunnerConfig>()
 
 var logger = new EventLogger(
     Path.Combine(config.Logging.OutputPath, "agent_runner.log"),
+    Path.Combine(config.Storage.BasePath, config.Storage.CyclesPath),
     config.Logging.MaxFileSizeMb,
-    config.Logging.MaxFileCount);
+    config.Logging.MaxFileCount,
+    config.Logging.CapturePrompts);
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -74,7 +76,7 @@ var toolRegistry = new ToolRegistry(config);
 var stateMachine = new LoopStateMachine();
 var statePersistence = new StatePersistence("state.json");
 var contextBuilder = new AgentContextBuilder(artifactManager, mailboxManager, toolRegistry, config);
-var agentInvoker = new AgentInvoker(config, toolRegistry.Executor);
+var agentInvoker = new AgentInvoker(config, toolRegistry.Executor, logger);
 var metricsCollector = new MetricsCollector();
 var mailboxRouter = new MailboxRouter(mailboxManager);
 var cycleStepExecutor = new CycleStepExecutor(contextBuilder, agentInvoker, artifactManager, mailboxRouter, logger);

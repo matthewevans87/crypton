@@ -131,4 +131,11 @@ public class LoggingConfig
     public string OutputPath { get; set; } = "./logs";
     public int MaxFileSizeMb { get; set; } = 20;
     public int MaxFileCount { get; set; } = 5;
+    /// <summary>
+    /// When true (default), AgentInvoker writes a prompt snapshot, tool call journal, and
+    /// invocation manifest to the cycle directory for every agent run. Disable in production
+    /// if disk space is a concern (prompts can be 20–30 kB each).
+    /// Override via env var: AGENTRUNNER__LOGGING__CAPTUREPROMPTS
+    /// </summary>
+    public bool CapturePrompts { get; set; } = true;
 }

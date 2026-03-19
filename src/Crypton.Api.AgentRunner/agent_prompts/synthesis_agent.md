@@ -134,6 +134,26 @@ AND(rsi(14, BTC/USD) < 40, NOT(price(BTC/USD) >= 70000))
 | `bollinger_lower(ASSET)`  | Lower Bollinger Band (20-period)            |
 | `price(ASSET)`            | Live mid price (no indicator lookup needed) |
 
+### Valid DSL condition examples
+
+```json
+"entry_condition": "AND(rsi(14, BTC/USD) < 35, price(BTC/USD) < 65000)"
+"entry_condition": "OR(price(BTC/USD) crosses_below 64000, rsi(14, BTC/USD) crosses_below 30)"
+"invalidation_condition": "price(BTC/USD) >= 70500"
+"invalidation_condition": "AND(macd_histogram(ETH/USD) > 0, price(ETH/USD) > 3200)"
+"entry_condition": "bollinger_lower(BTC/USD) >= 64000"
+```
+
+### Invalid DSL condition examples (will cause strategy rejection)
+
+```json
+"entry_condition": "BTC is below 65000"                  // ❌ natural language — not evaluable
+"entry_condition": {"indicator": "rsi", "value": 35}     // ❌ object — must be a string
+"entry_condition": "rsi < 35"                            // ❌ missing asset argument
+"invalidation_condition": "price(BTC) >= 70500"          // ❌ wrong asset format — must be BTC/USD
+"entry_condition": "RSI(14, BTC/USD) < 35"               // ❌ wrong case — function names are lowercase
+```
+
 ---
 
 ## Procedure
@@ -165,7 +185,13 @@ Before committing to individual positions, establish the overall risk envelope:
 - **`portfolio_risk.max_per_position_pct`:** What is the largest single position as a fraction of portfolio?
 - **`portfolio_risk.safe_mode_triggers`:** Array of trigger conditions — one or more of `'consecutive_losses'`, `'max_drawdown'`, `'manual'`.
 
+**Posture constraints:**
+- If posture is `flat` or `exit_all`, the `positions` array must be empty (`[]`). Do not include any position objects — only the `posture_rationale` explaining why no new positions are being opened.
+- Posture `exit_all` differs from `flat`: `exit_all` instructs the Execution Service to close all currently open positions; `flat` simply means no new positions are opened while existing ones are managed normally.
+
 ### Step 5 — Define positions
+
+**Allocation coherence check (complete before writing any position):** The sum of all `allocation_pct` values across all positions must be ≤ `portfolio_risk.max_total_exposure_pct`. If posture is `flat` or `exit_all`, skip this step — no positions should be defined.
 
 For each asset with a recommended direction in the Synthesis Briefing, define a position object:
 

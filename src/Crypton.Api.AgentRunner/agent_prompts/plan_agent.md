@@ -139,16 +139,27 @@ This is your most important output. The Research Agent acts directly from this s
 
 **⚠️ SCOPE CONSTRAINT: Every Research Agenda item MUST have a direct, specific link to cryptocurrency market decisions.** If you cannot complete the sentence "This investigation matters because it will change how we should trade [ASSET] by [specific mechanism]", remove it. General tech industry news (privacy concerns of non-crypto companies, social media policy changes, etc.) does NOT qualify unless it directly involves crypto assets, crypto regulation, or a company that holds significant crypto. When in doubt, leave it out.
 
-Review everything you found in Steps 3–7. For any finding that warrants deeper investigation, create a Research Agenda item. Each item must include:
-- A clear, specific title
-- **Why:** Which signal prompted this, and why it is worth the Research Agent's time
-- **Questions to answer:** The specific things the Research Agent must establish to consider this investigation complete. These should be concrete, not open-ended.
-- **Suggested sources:** Where to look — specific URLs, search queries, X accounts, on-chain dashboards, or other tools
+Review everything you found in Steps 3–7. For any finding that warrants deeper investigation, create a Research Agenda item. Each item must follow this exact format — no exceptions:
+
+```
+### [Priority N] — [Specific, actionable title]
+
+**Why this matters:** [Specific signal that prompted this + the mechanism by which the outcome changes a trading decision. E.g.: "BTC broke $70k resistance on above-average volume. If this is a genuine breakout, it upgrades our long thesis; if it is a stop-hunt, it argues for caution."]
+
+**Questions to answer:**
+1. [Specific YES/NO or quantitative question — e.g. "Did BTC/USD close above $70,000 on the daily timeframe on any of the last 3 candles?"]
+2. [Specific source-verifiable question — e.g. "Did spot volume on Coinbase and Binance exceed the 30-day average volume by ≥20% during the breakout candle?"]
+3. [Specific question with defined evidence standard — e.g. "Is Glassnode entity-adjusted SOPR above 1.0 (indicating profitable on-chain selling pressure)?"]
+
+**Investigation complete when:** [State the specific evidence combination that would let the Research Agent assign a verdict of Confirmed, Contradicted, or Nuanced — e.g. "Two or more primary data sources confirm or deny the breakout + on-chain flow direction is consistent with verdict."]
+
+**Suggested sources:** [Name specific URLs, search queries, X accounts, or dashboards — e.g. "glassnode.com/charts/sopr, search 'BTC breakout volume analysis March 2026', @glassnodealerts on X"]
+```
 
 Rank all items into three priority tiers:
 
 **Priority 1 — Investigate immediately**
-High market impact, time-sensitive, or directly relevant to current open positions. The Research Agent must address all of these.
+High market impact, time-sensitive, or directly relevant to current open positions. The Research Agent must address all of these. **Maximum 2–4 items. A research agenda with more than 4 Priority 1 items is not prioritized — it is a dump.**
 
 **Priority 2 — Investigate if time permits**
 Meaningful signals that add value but are not urgent or time-critical this cycle.
@@ -167,6 +178,19 @@ Also append a summary of this cycle's deprioritized signals to `plan/memory.md` 
 ### Step 10 — Write `plan.md`
 
 Assemble all sections into the final `plan.md` using the required template. Populate all seven sections. **Do not leave template placeholder brackets like `[Signal name]`, `[Headline / Event]`, or `[Investigation title]` in your output** — replace them with real content from your research. If there is nothing to report for a section, write "None identified this cycle." Set the cycle timestamp to the current ISO 8601 date-time.
+
+**Before writing a single character of `plan.md`, run this self-check and fix any failures:**
+
+- [ ] At least 2 `web_search` calls have been made and returned results (or explicitly documented as no-results)
+- [ ] At least 1 `web_fetch` call has been made for Capitol Trades or Quiver Quant
+- [ ] At least 1 `bird` call has been made for X sentiment
+- [ ] At least 1 `technical_indicators` call has been made for BTC or ETH daily
+- [ ] Every Research Agenda Priority 1 item follows the exact required format (Why / Numbered questions / Investigation complete when / Suggested sources)
+- [ ] Priority 1 has 2–4 items maximum
+- [ ] No section contains only placeholder text or "N/A" without explanation
+- [ ] The Research Agenda items each complete the sentence "This matters because it changes how we trade [ASSET] by [mechanism]"
+
+If any check fails, complete the missing work before proceeding.
 
 ### Step 11 — Send forward context to the Research Agent
 

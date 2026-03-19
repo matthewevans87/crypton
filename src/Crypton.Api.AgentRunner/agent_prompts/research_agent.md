@@ -86,9 +86,33 @@ Work through each Research Agenda item from `plan.md` in priority order. For eac
 
 **d) List specific findings.** Write each key fact as a discrete bullet point. Each finding should be specific and attributable to a source.
 
-**e) Cite sources.** For each source consulted, record the name/URL and a quality assessment: Primary (official, on-chain, exchange data), Secondary (reputable reporting), or Unverified (social media, anonymous sources).
+**e) Cite sources inline.** Every finding that claims a specific fact must include a source citation immediately after it, using this exact format: `[Source: {Name or URL}, {Date or "undated"}]`. A finding without this inline citation is an opinion; opinions are not useful here. Do not batch citations at the end of a section — cite each fact at the point it appears.
 
-**f) Note open questions.** If a question from the Research Agenda could not be answered, state it explicitly and note whether it is answerable with more time or currently unknowable.
+Example of correct source citation:
+> BTC spot ETF net inflows totalled $712M on March 18, 2026, the highest single-day figure since January. `[Source: farside.co.uk/bitcoin-etf-flow, 2026-03-18]`
+
+Example of incorrect (no inline citation):
+> BTC spot ETF saw large inflows recently. (Sources: Farside, Bloomberg)
+
+**f) Format each investigation finding as follows:**
+
+```
+### [Priority N] — [Title from Research Agenda]
+
+**Verdict:** [Confirmed / Contradicted / Nuanced / Inconclusive]
+**Confidence:** [High / Medium / Low]
+
+**Summary:** [2–3 sentences. State what you found and what it means for the analytical picture.]
+
+**Key findings:**
+- [Specific fact with inline citation]
+- [Specific fact with inline citation]
+...
+
+**Open questions:** [Questions that remain unresolved from this investigation, if any]
+```
+
+**g) Note open questions** (in the Open Questions section at the end of the document). If a question from the Research Agenda could not be answered, state it explicitly and note whether it is answerable with more time or currently unknowable.
 
 ### Step 6 — Record additional findings (→ Additional Findings section)
 
@@ -106,16 +130,27 @@ List any questions that could not be resolved this cycle and should be considere
 
 ### Step 9 — Write the Executive Summary
 
-Now that all findings are in place, write the Executive Summary: 3–5 sentences that capture:
-- The single most important finding from this cycle
-- Whether the dominant signals from `plan.md` were confirmed, contradicted, or complicated
-- The overall character of the market environment as revealed by your research
+Now that all findings are in place, write the Executive Summary. **Maximum 200 words.** It must contain exactly these three elements:
+1. **The single most important finding from this cycle** — state it specifically, with a number or fact if one exists (not "BTC looks bullish" but "BTC broke $70k on 40% above-average volume and the daily close confirmed the breakout")
+2. **Whether the dominant signals from `plan.md` were confirmed, contradicted, or complicated** — name which P1 agenda items resolved and how
+3. **The overall character of the market environment** — one sentence that the Analysis Agent can use as a starting premise
 
-This is the first thing the Analysis Agent reads. Make it count.
+Write the executive summary after completing all investigation sections, not before. Do not exceed 200 words.
 
 ### Step 10 — Update `research/memory.md`
 
 Append notes from this cycle covering: dead ends, unreliable sources encountered, leads that should be revisited, and any standing patterns you are tracking.
+
+**Before writing `research.md`, run this self-check and fix any failures:**
+
+- [ ] Every Priority 1 Research Agenda item has a section in Investigation Findings with: Verdict, Confidence, Summary, and at least one bullet point with an inline citation `[Source: ..., date]`
+- [ ] No finding that states a specific fact is missing its inline source citation
+- [ ] Executive Summary is ≤200 words and names specific facts (not general impressions)
+- [ ] Executive Summary identifies which P1 agenda items were resolved and how
+- [ ] No section heading uses placeholder text from the template
+- [ ] Open Questions section lists any P1 questions that could not be answered
+
+If any check fails, complete the missing work before writing the document.
 
 ### Step 11 — Send feedback to the Plan Agent
 

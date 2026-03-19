@@ -74,14 +74,15 @@ Then note any execution issues: missed triggers, order failures, unexpected slip
 
 This is the most important diagnostic section of the evaluation. The Learning Loop improves only if it can correctly trace why outcomes occurred — specifically, whether the analytical framework was correct.
 
-For each key claim in `analysis.md`, compare the prediction against what actually happened:
-- **Market direction prediction:** Did the market move as predicted?
-- **Per-asset theses:** Did each asset move as the thesis predicted? Did it reach the predicted targets or stop levels?
-- **Flagged risks:** Did the risks that were flagged materialize? Did any risks materialize that were not flagged?
+For each key claim in `analysis.md`, compare the prediction against what actually happened using the following mandatory table format:
 
-For each claim: was it accurate, partially accurate, or wrong? If wrong, what actually caused the divergence?
+| Claim                                                                | Actual Outcome                         | Verdict                                 | Calibration Note                                      |
+| -------------------------------------------------------------------- | -------------------------------------- | --------------------------------------- | ----------------------------------------------------- |
+| [Exact claim from analysis.md, including direction and target level] | [What actually happened, with numbers] | Correct / Partially Correct / Incorrect | [What would make this claim more accurate next cycle] |
 
-Identify the single most significant analytical error of the cycle and state it plainly. This is the primary signal the Plan Agent needs to improve the next cycle's research agenda.
+Include at minimum: the Market Direction Prediction, every Per-Asset Thesis, and every Flagged Risk listed in the Risk Matrix. If a flagged risk did not materialize, note it — this is a calibration success that should be recorded.
+
+After the table, identify the single most significant analytical error of the cycle and state it plainly. This is the primary signal the Plan Agent needs to improve the next cycle's research agenda.
 
 ### Step 7 — Assess the strategy specification (→ Strategy Assessment section)
 
@@ -101,9 +102,11 @@ Be direct. "The strategy lost because the macro analysis underestimated the impa
 
 ### Step 9 — Write recommendations (→ Recommendations for Next Cycle section)
 
-Write direct, actionable recommendations for each downstream agent:
+Write direct, actionable recommendations for each downstream agent. **Every recommendation must name the specific agent it applies to: Plan Agent, Research Agent, Analysis Agent, or Synthesis Agent.** Do not write generic recommendations that could apply to any agent.
 
 **For the Plan Agent:** What should the next research agenda prioritize? Were there signals this cycle that the Plan Agent missed or underweighted? Were there signals the Plan Agent found but the Research Agent failed to properly investigate?
+
+**For the Research Agent:** Were key claims in `research.md` unverified, unsourced, or contradicted by what actually happened? Was coverage of the Plan Agent's agenda items complete?
 
 **For the Analysis Agent:** Were there systematic analytical errors? Consistent optimism or pessimism bias? Inadequate attention to tail risks? Overconfidence in technical analysis when fundamental factors dominated?
 
@@ -114,11 +117,16 @@ Write direct, actionable recommendations for each downstream agent:
 ### Step 10 — Assign performance rating (→ Performance Rating section)
 
 Assign a rating (A through F) based on the following scale:
-- **A:** Strategy performed as intended and produced a positive return
-- **B:** Strategy partially succeeded or broke even; logic was sound
-- **C:** Negative return but within all risk parameters; a coherent loss
-- **D:** Significant loss or material execution failure; risk management tested
-- **F:** Catastrophic loss, risk management breach, or unrecoverable position
+
+| Grade | Return Threshold                   | Risk Compliance        | Logic Quality                  | Meaning                                    |
+| ----- | ---------------------------------- | ---------------------- | ------------------------------ | ------------------------------------------ |
+| **A** | Positive return                    | All limits respected   | Thesis played out as predicted | Strategy performed as intended             |
+| **B** | ≥ −0.5% (break-even to small loss) | All limits respected   | Sound reasoning, minor gaps    | Coherent near-miss; good construction      |
+| **C** | ≥ −2%                              | All limits respected   | Identifiable analytical gap    | Normal loss within risk parameters         |
+| **D** | ≥ −5% OR any limit breached        | Minor breach tolerated | Material analytical error      | Significant loss or execution failure      |
+| **F** | < −5% OR major risk limit breach   | Breached               | Framework failure              | Catastrophic loss or unmanageable position |
+
+A grade must reflect the **combination** of return, risk compliance, and logic quality. A strategy that produces a positive return via luck (the thesis was wrong but price moved favorably) should not receive A — cap it at C and note the coincidence. A strategy that loses 1% because a well-calibrated tail-risk materialised may merit B.
 
 State the overall verdict in one phrase (e.g., "Strategy failed — macro thesis was invalidated by unexpected Fed commentary").
 

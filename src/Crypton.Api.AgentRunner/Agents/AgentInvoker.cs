@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using AgentRunner.Configuration;
+using AgentRunner.Logging;
 using AgentRunner.Tools;
 
 namespace AgentRunner.Agents;
@@ -18,17 +20,29 @@ public class AgentInvoker : IAgentInvoker
 {
     private readonly AgentRunnerConfig _config;
     private readonly ToolExecutor _toolExecutor;
+    private readonly IEventLogger _logger;
     private readonly HttpClient _httpClient;
 
-    public AgentInvoker(AgentRunnerConfig config, ToolExecutor toolExecutor)
+    public AgentInvoker(AgentRunnerConfig config, ToolExecutor toolExecutor, IEventLogger logger)
     {
         _config = config;
         _toolExecutor = toolExecutor;
+        _logger = logger;
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(config.Ollama.TimeoutSeconds)
         };
     }
+
+    private AgentSettings GetSettingsForAgent(string agentName) => agentName.ToLower() switch
+    {
+        "plan" => _config.Agents.Plan,
+        "research" => _config.Agents.Research,
+        "analysis" => _config.Agents.Analyze,
+        "synthesis" => _config.Agents.Synthesis,
+        "evaluation" => _config.Agents.Evaluation,
+        _ => _config.Agents.Plan
+    };
 
     /// <summary>
     /// Invokes the agent for the given context.
@@ -45,12 +59,22 @@ public class AgentInvoker : IAgentInvoker
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
 
+        var settings = GetSettingsForAgent(context.AgentName);
+        var maxIterations = GetMaxIterationsForAgent(context.AgentName);
+        var sw = Stopwatch.StartNew();
+
+        // Initialise with a sentinel so the finally block always has a value to log.
+        AgentInvocationResult finalResult = new() { Success = false, Error = "Unknown internal error" };
+
         try
         {
             // Split into system message (identity + tool guide) and user message (task + BEGIN trigger).
             // This ensures the model treats its identity as stable role context, not a document to summarize.
             var systemPrompt = context.ToSystemPrompt();
             var userPrompt = context.ToUserPrompt();
+
+            // Capture full prompts to the cycle directory so runs can be audited and replayed.
+            _logger.LogPromptSnapshot(context.AgentName, context.CycleId, systemPrompt, userPrompt);
 
             var conversationHistory = new List<ConversationMessage>
             {
@@ -67,7 +91,6 @@ public class AgentInvoker : IAgentInvoker
                 .Select(t => (object)new { type = "function", function = t.ToOpenAIFunction() })
                 .ToArray();
 
-            var maxIterations = GetMaxIterationsForAgent(context.AgentName);
             for (int iteration = 0; iteration < maxIterations; iteration++)
             {
                 onEvent?.Invoke($"[iter {iteration + 1}/{maxIterations}] Calling LLM...");
@@ -92,7 +115,7 @@ public class AgentInvoker : IAgentInvoker
                 if (!toolCalls.Any())
                 {
                     onEvent?.Invoke($"[iter {iteration + 1}] No tool calls — final response.");
-                    return new AgentInvocationResult
+                    finalResult = new AgentInvocationResult
                     {
                         Success = true,
                         Output = llmResult.Content,
@@ -100,12 +123,14 @@ public class AgentInvoker : IAgentInvoker
                         ToolResults = allToolResults,
                         Iterations = iteration + 1
                     };
+                    return finalResult; // finally still executes
                 }
 
                 onEvent?.Invoke($"[iter {iteration + 1}] {toolCalls.Count} tool call(s) detected.");
                 allToolCalls.AddRange(toolCalls);
 
-                var executedTools = await ExecuteToolsAsync(toolCalls, cts.Token, onEvent);
+                var executedTools = await ExecuteToolsAsync(
+                    toolCalls, context.AgentName, context.CycleId, iteration + 1, cts.Token, onEvent);
                 allToolResults.AddRange(executedTools);
 
                 foreach (var call in toolCalls)
@@ -124,33 +149,41 @@ public class AgentInvoker : IAgentInvoker
                 }
             }
 
-            var finalOutput = conversationHistory.LastOrDefault(m => m.Role == "assistant")?.Content ?? "";
+            var lastOutput = conversationHistory.LastOrDefault(m => m.Role == "assistant")?.Content ?? "";
             onEvent?.Invoke($"[max iterations reached ({maxIterations})] Returning last assistant response.");
 
-            return new AgentInvocationResult
+            finalResult = new AgentInvocationResult
             {
                 Success = true,
-                Output = finalOutput,
+                Output = lastOutput,
                 ToolCalls = allToolCalls,
                 ToolResults = allToolResults,
                 Iterations = maxIterations
             };
+            return finalResult; // finally still executes
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new AgentInvocationResult
-            {
-                Success = false,
-                Error = "Agent execution timed out"
-            };
+            finalResult = new AgentInvocationResult { Success = false, Error = "Agent execution timed out" };
+            return finalResult;
         }
         catch (Exception ex)
         {
-            return new AgentInvocationResult
-            {
-                Success = false,
-                Error = ex.Message
-            };
+            finalResult = new AgentInvocationResult { Success = false, Error = ex.Message };
+            return finalResult;
+        }
+        finally
+        {
+            sw.Stop();
+            _logger.LogInvocationManifest(context.AgentName, context.CycleId, new InvocationManifest(
+                settings.Model,
+                settings.Temperature,
+                _config.Ollama.NumCtx,
+                finalResult.Iterations,
+                maxIterations,
+                sw.ElapsedMilliseconds,
+                finalResult.Success,
+                finalResult.Error));
         }
     }
 
@@ -195,15 +228,7 @@ public class AgentInvoker : IAgentInvoker
         Action<string>? onToken = null,
         Action<string>? onEvent = null)
     {
-        var settings = agentName.ToLower() switch
-        {
-            "plan" => _config.Agents.Plan,
-            "research" => _config.Agents.Research,
-            "analysis" => _config.Agents.Analyze,
-            "synthesis" => _config.Agents.Synthesis,
-            "evaluation" => _config.Agents.Evaluation,
-            _ => _config.Agents.Plan
-        };
+        var settings = GetSettingsForAgent(agentName);
 
         // Serialize conversation; assistant messages may carry tool_calls from a previous turn.
         var messages = conversation.Select<ConversationMessage, object>(m =>
@@ -376,6 +401,9 @@ public class AgentInvoker : IAgentInvoker
 
     private async Task<List<ToolResult>> ExecuteToolsAsync(
         List<ToolCall> calls,
+        string agentName,
+        string cycleId,
+        int iteration,
         CancellationToken cancellationToken,
         Action<string>? onEvent = null)
     {
@@ -383,15 +411,24 @@ public class AgentInvoker : IAgentInvoker
 
         foreach (var call in calls)
         {
-            onEvent?.Invoke($"[tool] → {call.ToolName}({JsonSerializer.Serialize(call.Parameters)})");
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var paramsJson = JsonSerializer.Serialize(call.Parameters);
+            onEvent?.Invoke($"[tool] → {call.ToolName}({paramsJson})");
+            var sw = Stopwatch.StartNew();
             var result = await _toolExecutor.ExecuteAsync(call, cancellationToken);
             sw.Stop();
 
+            var resultJson = result.Success
+                ? JsonSerializer.Serialize(result.Data)
+                : $"Error: {result.Error}";
+
+            // Journal the full parameters and result for post-run analysis.
+            _logger.LogToolCallJournal(
+                agentName, cycleId, iteration,
+                call.ToolName, paramsJson, resultJson, sw.ElapsedMilliseconds);
+
             if (result.Success)
             {
-                var preview = JsonSerializer.Serialize(result.Data);
-                var truncated = preview.Length > 200 ? preview[..200] + "..." : preview;
+                var truncated = resultJson.Length > 200 ? resultJson[..200] + "..." : resultJson;
                 onEvent?.Invoke($"[tool] ← {call.ToolName} OK ({sw.Elapsed.TotalSeconds:F1}s): {truncated}");
             }
             else

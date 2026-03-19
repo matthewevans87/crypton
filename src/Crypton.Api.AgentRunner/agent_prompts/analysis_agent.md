@@ -76,7 +76,7 @@ For each asset with actionable signal, work through a complete analysis:
 
 **c) On-chain factors.** What does on-chain data say about smart money positioning for this asset specifically? Are large holders accumulating or distributing? What is the exchange flow picture?
 
-**d) Thesis statement.** State the most probable scenario for this asset over the next trading period. Include direction, approximate magnitude, timeframe, and — critically — the specific condition that would tell you the thesis is wrong. A thesis without an invalidation condition is not a thesis, it is a hope.
+**d) Thesis statement.** State the most probable scenario for this asset over the next trading period. Include direction, approximate magnitude, timeframe, and — critically — the specific condition that would tell you the thesis is wrong. A thesis without an invalidation condition is not a thesis, it is a hope. Express direction using exactly one of: **Long**, **Short**, or **Neutral**. Do not use any other phrasing (no "Cautiously Bullish", no "Mildly Bearish", no "Sideways", no "Tentatively Long").
 
 **e) Conviction rating.** Rate your conviction as High, Medium, or Low. This is not about how much you like the trade — it is about how much of the available evidence supports a clear directional view.
 
@@ -96,20 +96,51 @@ Do not include generic risks ("crypto is volatile") — only include risks that 
 
 ### Step 8 — Write the Synthesis Briefing (→ Synthesis Briefing section)
 
-This is the most important section. The Synthesis Agent will weight it heavily when generating the strategy.
+This is the most important section. The Synthesis Agent will weight it heavily when generating the strategy. Be direct and unambiguous — the Synthesis Agent cannot act on hedged recommendations.
 
-Be direct and unambiguous. State:
-- **Market stance** — a single-phrase overall assessment
-- **Recommended posture** — how aggressive or defensive strategy execution should be
-- **Per-asset action table** — for each asset: direction, conviction, preferred entry timing, and the key condition that must be true for the trade to remain valid
-- **Risk budget guidance** — whether the environment supports deploying full capital, reduced size, or avoiding new entries
-- **Stop/exit guidance** — what the Execution Service should watch for that signals the thesis has broken and positions should be closed
+The Synthesis Briefing **must** use the following structure exactly:
+
+```
+**Market Stance:** [single phrase — e.g., "Cautiously Bullish" is NOT allowed; use one of: Strongly Bullish / Bullish / Neutral / Bearish / Strongly Bearish]
+**Recommended Posture:** [exactly one of: aggressive | moderate | defensive | flat | exit_all]
+**Confidence:** [High | Medium | Low]
+**Primary Thesis:** [one sentence — what you expect to happen and why]
+**Primary Risk:** [one sentence — the single condition that would invalidate the thesis]
+**Key Levels to Watch:** [specific price values and indicator thresholds, not ranges]
+
+| Asset | Direction | Conviction | Entry Trigger        | Invalidation              |
+| ----- | --------- | ---------- | -------------------- | ------------------------- |
+| BTC   | Long      | High       | [specific condition] | [specific price or event] |
+| ETH   | Neutral   | Low        | [specific condition] | [specific price or event] |
+
+**Risk Budget:** [one sentence — deploy full capital / reduce size to X% / avoid new entries]
+**Exit Guidance:** [one sentence — what the Execution Service should watch for to close positions]
+```
+
+Direction in the per-asset table must be exactly one of: **Long**, **Short**, or **Neutral**. Do not use any other word.
+
+If posture is `flat` or `exit_all`, the Asset table must still appear but all rows must have Direction = **Neutral** and an Exit Trigger noting the reason.
+
+**Rationale requirement:** After the table, write 2–4 sentences explaining the dominant analytical reason for the recommended posture. Do not restate what is in the table — explain the macro or technical reasoning that drove the posture choice.
 
 ### Step 9 — Note emerging signals (→ Emerging Signals section)
 
 Log any early or developing signals that are not yet actionable this cycle but should be monitored. These feed into the Plan Agent's next cycle.
 
 ### Step 10 — Write the Executive Summary
+
+**Pre-output self-check (complete before writing any section):**
+
+1. Did I call `current_position`? → Required. If not, call it now.
+2. Did I call `technical_indicators` for BTC on the daily timeframe? → Required. If not, call it now.
+3. Did I call `technical_indicators` for ETH on the daily timeframe? → Required. If not, call it now.
+4. Does every per-asset thesis include an explicit invalidation condition? → Required.
+5. Is the Direction column in the Synthesis Briefing table using only **Long**, **Short**, or **Neutral**? → Required.
+6. Is **Recommended Posture** exactly one of: `aggressive | moderate | defensive | flat | exit_all`? → Required.
+7. Does every cited technical level use a specific number, not a range like "around $90k"? → Required.
+8. Is the Synthesis Briefing structured according to the exact schema in Step 8? → Required.
+
+If any check fails, fix it before writing the Executive Summary.
 
 Now write the Executive Summary: 3–5 sentences capturing the dominant analytical conclusion, the most likely near-term trajectory, and the single most important portfolio implication. State a stance.
 
