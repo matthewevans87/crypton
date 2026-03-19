@@ -49,6 +49,9 @@ builder.Services.AddSignalR();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton(dashboardConfig);
 
+builder.Services.AddSingleton<ISystemHealthChecker, SystemHealthChecker>();
+builder.Services.AddHostedService<SystemHealthBroadcaster>();
+
 builder.Services.AddSingleton<IMarketDataServiceClient>(sp =>
 {
     var httpClient = sp.GetRequiredService<HttpClient>();
@@ -141,7 +144,7 @@ marketDataClient.OnTrade += (sender, trade) =>
     _ = dashboardHubContext.Clients.All.TradeOccurred(dashboardTrade);
 };
 
-// ExecutionService: forward position changes to DashboardHub.PositionUpdated
+// ExecutionService: forward position changes and closed events to DashboardHub
 executionServiceClient.OnPositionUpdate += (sender, posJson) =>
 {
     try
@@ -161,6 +164,36 @@ executionServiceClient.OnPositionUpdate += (sender, posJson) =>
     catch (Exception ex)
     {
         logger.LogWarning(ex, "Failed to map ExecutionService PositionUpdate to DashboardHub");
+    }
+};
+
+executionServiceClient.OnPositionClosed += (sender, positionId) =>
+{
+    _ = dashboardHubContext.Clients.All.PositionClosed(positionId);
+};
+
+// Strategy-change detection: when strategy_id changes in a StatusUpdate, fetch and broadcast.
+string? _lastStrategyId = null;
+executionServiceClient.OnStatusUpdate += async (sender, payload) =>
+{
+    try
+    {
+        var strategyId = payload.TryGetProperty("strategy_id", out var si) && si.ValueKind != JsonValueKind.Null
+            ? si.GetString() : null;
+        if (strategyId != null && strategyId != _lastStrategyId)
+        {
+            _lastStrategyId = strategyId;
+            var (statusCode, body) = await executionServiceClient.GetStrategyAsync();
+            if (statusCode == 200)
+            {
+                using var doc = JsonDocument.Parse(body);
+                _ = dashboardHubContext.Clients.All.StrategyUpdated(doc.RootElement.Clone());
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to fetch/broadcast strategy update");
     }
 };
 

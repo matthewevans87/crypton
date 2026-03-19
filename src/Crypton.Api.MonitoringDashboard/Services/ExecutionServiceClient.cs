@@ -7,6 +7,7 @@ public interface IExecutionServiceClient
 {
     event EventHandler<JsonElement>? OnStatusUpdate;
     event EventHandler<JsonElement>? OnPositionUpdate;
+    event EventHandler<string>? OnPositionClosed;
     bool IsConnected { get; }
 
     Task ConnectAsync(CancellationToken cancellationToken = default);
@@ -33,6 +34,7 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
 
     public event EventHandler<JsonElement>? OnStatusUpdate;
     public event EventHandler<JsonElement>? OnPositionUpdate;
+    public event EventHandler<string>? OnPositionClosed;
 
     public bool IsConnected => _isConnected;
 
@@ -86,6 +88,13 @@ public class ExecutionServiceClient : IExecutionServiceClient, IAsyncDisposable
             {
                 _logger.LogDebug("Received ExecutionService PositionUpdate");
                 OnPositionUpdate?.Invoke(this, payload);
+            });
+
+            _connection.On<JsonElement>("PositionClosed", payload =>
+            {
+                var positionId = payload.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "";
+                _logger.LogDebug("Received ExecutionService PositionClosed: {PositionId}", positionId);
+                OnPositionClosed?.Invoke(this, positionId);
             });
 
             _connection.Closed += async error =>

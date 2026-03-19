@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using MonitoringDashboard.Models;
+using System.Text.Json;
 
 namespace MonitoringDashboard.Hubs;
 
@@ -30,6 +31,7 @@ public interface IDashboardClient
 {
     Task PortfolioUpdated(PortfolioSummary summary);
     Task PositionUpdated(Position position);
+    Task PositionClosed(string positionId);
     Task PriceUpdated(PriceTicker ticker);
     Task OrderBookUpdated(OrderBook orderBook);
     Task TradeOccurred(MarketTrade trade);
@@ -37,8 +39,9 @@ public interface IDashboardClient
     Task ToolCallStarted(ToolCall toolCall);
     Task ToolCallCompleted(ToolCall toolCall);
     Task ReasoningUpdated(ReasoningStep step);
-    Task StrategyUpdated(Strategy strategy);
+    Task StrategyUpdated(JsonElement strategy);
     Task CycleCompleted(CyclePerformance performance);
     Task EvaluationCompleted(EvaluationSummary evaluation);
+    Task SystemHealthUpdated(SystemStatus status);
     Task ErrorOccurred(string error);
 }

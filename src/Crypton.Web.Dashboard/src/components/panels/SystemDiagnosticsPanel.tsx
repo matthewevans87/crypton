@@ -43,8 +43,58 @@ function formatMetricValue(value: unknown): string {
     return String(value);
 }
 
+const CTL_BTN_BASE: React.CSSProperties = {
+    background: 'none',
+    border: '1px solid var(--border-default)',
+    borderRadius: '2px',
+    padding: '0 6px',
+    lineHeight: '18px',
+    fontSize: '11px',
+    fontFamily: 'var(--font-mono)',
+    cursor: 'pointer',
+    color: 'var(--text-secondary)',
+    whiteSpace: 'nowrap',
+};
+
+const CTL_BTN_DISABLED: React.CSSProperties = {
+    ...CTL_BTN_BASE,
+    opacity: 0.4,
+    cursor: 'default',
+};
+
+function CtlButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled: boolean }) {
+    return (
+        <button onClick={onClick} disabled={disabled} style={disabled ? CTL_BTN_DISABLED : CTL_BTN_BASE}>
+            {children}
+        </button>
+    );
+}
+
+const CTL_INPUT_STYLE: React.CSSProperties = {
+    background: 'var(--bg-main)',
+    color: 'var(--text-primary)',
+    border: '1px solid var(--border-default)',
+    borderRadius: '2px',
+    padding: '0 6px',
+    lineHeight: '18px',
+    fontSize: '11px',
+    fontFamily: 'var(--font-mono)',
+    width: '160px',
+};
+
+function CtlInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+    return (
+        <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            style={CTL_INPUT_STYLE}
+        />
+    );
+}
+
 /** A single service card showing status, detail, and key metrics. */
-function ServiceCard({ svc }: { svc: ServiceHealth }) {
+function ServiceCard({ svc, children }: { svc: ServiceHealth; children?: React.ReactNode }) {
     const color = STATUS_COLOR[svc.status];
     const metricEntries = Object.entries(svc.metrics).filter(
         ([key, val]) => val !== null && val !== undefined && key !== 'alerts'
@@ -253,6 +303,21 @@ function ServiceCard({ svc }: { svc: ServiceHealth }) {
                     ))}
                 </div>
             )}
+
+            {/* Per-service operator controls */}
+            {children && (
+                <div
+                    style={{
+                        borderTop: '1px solid var(--border-subtle)',
+                        padding: '6px 12px 8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px',
+                    }}
+                >
+                    {children}
+                </div>
+            )}
         </div>
     );
 }
@@ -330,7 +395,12 @@ export function SystemDiagnosticsPanel() {
                     {overallStatus}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {lastRefresh && (
+                    {controlMessage && (
+                        <span style={{ fontSize: '11px', color: runningAction ? 'var(--color-warning)' : 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                            {runningAction ? `${runningAction}…` : controlMessage}
+                        </span>
+                    )}
+                    {lastRefresh && !controlMessage && (
                         <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
                             refreshed {lastRefresh}
                         </span>
@@ -354,108 +424,41 @@ export function SystemDiagnosticsPanel() {
                 </div>
             </div>
 
-            {/* Operator controls */}
-            <div
-                style={{
-                    border: '1px solid var(--border-default)',
-                    borderRadius: '6px',
-                    padding: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    backgroundColor: 'var(--bg-panel)',
-                }}
-            >
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>Operator Controls</div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto auto', gap: '6px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>AgentRunner</span>
-                    <input
-                        value={agentReason}
-                        onChange={(e) => setAgentReason(e.target.value)}
-                        placeholder='degrade reason'
-                        style={{
-                            minWidth: '180px',
-                            background: 'var(--bg-main)',
-                            color: 'var(--text-primary)',
-                            border: '1px solid var(--border-default)',
-                            borderRadius: '4px',
-                            padding: '4px 6px',
-                            fontSize: '11px',
-                        }}
-                    />
-                    <button onClick={() => runControl('Agent start', () => api.agent.start())} disabled={!!runningAction}>Start</button>
-                    <button onClick={() => runControl('Agent recover', () => api.agent.recover())} disabled={!!runningAction}>Recover</button>
-                    <button
-                        onClick={() => runControl('Agent degrade', () => api.agent.degrade(agentReason.trim()))}
-                        disabled={!!runningAction || !agentReason.trim()}
-                    >
-                        Degrade
-                    </button>
-                    <button onClick={() => runControl('Agent pause', () => api.agent.pause('manual operator action'))} disabled={!!runningAction}>Pause</button>
-                    <button onClick={() => runControl('Agent resume', () => api.agent.resume())} disabled={!!runningAction}>Resume</button>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto', gap: '6px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>ExecutionService</span>
-                    <input
-                        value={executionReason}
-                        onChange={(e) => setExecutionReason(e.target.value)}
-                        placeholder='degrade reason'
-                        style={{
-                            minWidth: '180px',
-                            background: 'var(--bg-main)',
-                            color: 'var(--text-primary)',
-                            border: '1px solid var(--border-default)',
-                            borderRadius: '4px',
-                            padding: '4px 6px',
-                            fontSize: '11px',
-                        }}
-                    />
-                    <input
-                        value={operatorNote}
-                        onChange={(e) => setOperatorNote(e.target.value)}
-                        placeholder='operator note'
-                        style={{
-                            minWidth: '180px',
-                            background: 'var(--bg-main)',
-                            color: 'var(--text-primary)',
-                            border: '1px solid var(--border-default)',
-                            borderRadius: '4px',
-                            padding: '4px 6px',
-                            fontSize: '11px',
-                        }}
-                    />
-                    <button
-                        onClick={() => runControl('Execution degrade', () => api.execution.degrade(executionReason.trim()))}
-                        disabled={!!runningAction || !executionReason.trim()}
-                    >
-                        Degrade
-                    </button>
-                    <button onClick={() => runControl('Execution recover', () => api.execution.recover())} disabled={!!runningAction}>Recover</button>
-                    <button
-                        onClick={() => runControl('Execution promote live', () => api.execution.promoteToLive(operatorNote.trim()))}
-                        disabled={!!runningAction}
-                    >
-                        Promote Live
-                    </button>
-                    <button
-                        onClick={() => runControl('Execution demote paper', () => api.execution.demoteToPaper(operatorNote.trim()))}
-                        disabled={!!runningAction}
-                    >
-                        Demote Paper
-                    </button>
-                    <button onClick={() => runControl('Execution reload strategy', () => api.execution.reloadStrategy())} disabled={!!runningAction}>Reload</button>
-                </div>
-
-                <div style={{ fontSize: '11px', color: runningAction ? 'var(--color-warning)' : 'var(--text-tertiary)' }}>
-                    {runningAction ? `${runningAction} in progress...` : (controlMessage ?? 'Use controls for manual degraded-mode operations.')}
-                </div>
-            </div>
-
-            {/* Service cards */}
+            {/* Service cards with embedded operator controls */}
             {systemHealth.map((svc) => (
-                <ServiceCard key={svc.name} svc={svc} />
+                <ServiceCard key={svc.name} svc={svc}>
+                    {svc.name === 'AgentRunner' && (
+                        <>
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <CtlButton onClick={() => runControl('Agent start', () => api.agent.start())} disabled={!!runningAction}>start</CtlButton>
+                                <CtlButton onClick={() => runControl('Agent recover', () => api.agent.recover())} disabled={!!runningAction}>recover</CtlButton>
+                                <CtlButton onClick={() => runControl('Agent pause', () => api.agent.pause('manual operator action'))} disabled={!!runningAction}>pause</CtlButton>
+                                <CtlButton onClick={() => runControl('Agent resume', () => api.agent.resume())} disabled={!!runningAction}>resume</CtlButton>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <CtlInput value={agentReason} onChange={setAgentReason} placeholder='degrade reason' />
+                                <CtlButton onClick={() => runControl('Agent degrade', () => api.agent.degrade(agentReason.trim()))} disabled={!!runningAction || !agentReason.trim()}>degrade</CtlButton>
+                            </div>
+                        </>
+                    )}
+                    {svc.name === 'ExecutionService' && (
+                        <>
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <CtlButton onClick={() => runControl('Execution recover', () => api.execution.recover())} disabled={!!runningAction}>recover</CtlButton>
+                                <CtlButton onClick={() => runControl('Execution reload strategy', () => api.execution.reloadStrategy())} disabled={!!runningAction}>reload strategy</CtlButton>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <CtlInput value={executionReason} onChange={setExecutionReason} placeholder='degrade reason' />
+                                <CtlButton onClick={() => runControl('Execution degrade', () => api.execution.degrade(executionReason.trim()))} disabled={!!runningAction || !executionReason.trim()}>degrade</CtlButton>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <CtlInput value={operatorNote} onChange={setOperatorNote} placeholder='operator note' />
+                                <CtlButton onClick={() => runControl('Execution promote live', () => api.execution.promoteToLive(operatorNote.trim()))} disabled={!!runningAction}>promote live</CtlButton>
+                                <CtlButton onClick={() => runControl('Execution demote paper', () => api.execution.demoteToPaper(operatorNote.trim()))} disabled={!!runningAction}>demote paper</CtlButton>
+                            </div>
+                        </>
+                    )}
+                </ServiceCard>
             ))}
         </div>
     );

@@ -16,6 +16,7 @@ If you only need a subset, read the relevant section(s) based on what you're wor
 | Margins, padding, gaps, grid | **Spacing System** |
 | Panels, tabs, grid, viewport | **Layout Architecture** |
 | Data rows, indicators, chips, bars | **Component Patterns** |
+| Action buttons, inline inputs, operator controls | **Component Patterns > Action Controls** |
 | Transitions, keyframes, flash | **Animation & Motion** |
 | Inline styles, CSS variables, classes | **Styling Approach** |
 | Currency, percentages, durations | **Number Formatting** |

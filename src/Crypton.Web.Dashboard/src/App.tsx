@@ -152,6 +152,21 @@ function App() {
       onPortfolioUpdated: (summary: PortfolioSummary) => {
         setPortfolioData({ summary });
       },
+      onPositionUpdated: (position: Position) => {
+        const currentPositions = useDashboardStore.getState().portfolio.positions || [];
+        const idx = currentPositions.findIndex((p) => p.id === position.id);
+        if (idx >= 0) {
+          const updated = [...currentPositions];
+          updated[idx] = position;
+          setPortfolioData({ positions: updated });
+        } else {
+          setPortfolioData({ positions: [...currentPositions, position] });
+        }
+      },
+      onPositionClosed: (positionId: string) => {
+        const currentPositions = useDashboardStore.getState().portfolio.positions || [];
+        setPortfolioData({ positions: currentPositions.filter((p) => p.id !== positionId) });
+      },
       onAgentStateChanged: (state) => {
         const prevState = useDashboardStore.getState().agent.state;
         if (state.isRunning && prevState?.currentState !== state.currentState) {
@@ -185,9 +200,16 @@ function App() {
       onCycleCompleted: (cycle) => {
         setPerformanceData({ currentCycle: cycle });
       },
+      onSystemHealthUpdated: (services) => {
+        setSystemHealth(services);
+      },
       onConnected: () => {
         setConnectionStatus('connected');
-        poller.disable();
+        // Stop polling for data that is now pushed via SignalR.
+        // Positions polling remains active to keep unrealized PnL up to date.
+        poller.stop('marketData');
+        poller.stop('strategy');
+        poller.stop('systemHealth');
       },
       onDisconnected: () => {
         setConnectionStatus('disconnected');

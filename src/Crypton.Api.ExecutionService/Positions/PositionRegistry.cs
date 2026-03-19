@@ -27,6 +27,13 @@ public sealed class PositionRegistry
     /// </summary>
     public event Func<OpenPosition, Task>? OnPositionChanged;
 
+    /// <summary>
+    /// Raised after a position is removed from the registry (closed or externally removed).
+    /// The argument is the position ID that was removed.
+    /// Fired outside internal locks.
+    /// </summary>
+    public event Func<string, Task>? OnPositionClosed;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true,
@@ -177,6 +184,8 @@ public sealed class PositionRegistry
 
         if (OnPositionChanged is not null)
             _ = OnPositionChanged(closedPos);
+        if (OnPositionClosed is not null)
+            _ = OnPositionClosed(positionId);
 
         return trade;
     }
@@ -199,12 +208,15 @@ public sealed class PositionRegistry
     /// <summary>Remove a position by ID (used when reconciliation finds it closed externally).</summary>
     public bool RemovePosition(string positionId)
     {
+        bool removed;
         lock (_lock)
         {
-            var removed = _positions.Remove(positionId);
+            removed = _positions.Remove(positionId);
             if (removed) PersistPositions();
-            return removed;
         }
+        if (removed && OnPositionClosed is not null)
+            _ = OnPositionClosed(positionId);
+        return removed;
     }
 
     private void PersistPositions()

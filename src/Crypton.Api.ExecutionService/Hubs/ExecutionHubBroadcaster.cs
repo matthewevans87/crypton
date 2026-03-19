@@ -65,6 +65,7 @@ public sealed class ExecutionHubBroadcaster : IHostedService, IDisposable
         // Subscribe to events and position changes
         _eventLogger.OnEventLogged += OnEventLoggedAsync;
         _positions.OnPositionChanged += OnPositionChangedAsync;
+        _positions.OnPositionClosed += OnPositionClosedAsync;
 
         return Task.CompletedTask;
     }
@@ -73,6 +74,7 @@ public sealed class ExecutionHubBroadcaster : IHostedService, IDisposable
     {
         _eventLogger.OnEventLogged -= OnEventLoggedAsync;
         _positions.OnPositionChanged -= OnPositionChangedAsync;
+        _positions.OnPositionClosed -= OnPositionClosedAsync;
 
         _cts?.Cancel();
 
@@ -142,6 +144,16 @@ public sealed class ExecutionHubBroadcaster : IHostedService, IDisposable
                 .SendAsync("PositionUpdate", position);
         }
         catch (Exception ex) { _logger.LogWarning(ex, "Position broadcast error"); }
+    }
+
+    private async Task OnPositionClosedAsync(string positionId)
+    {
+        try
+        {
+            await _hub.Clients.Group(ExecutionHub.PositionsGroup)
+                .SendAsync("PositionClosed", new { id = positionId });
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "PositionClosed broadcast error"); }
     }
 
     public void Dispose() => _cts?.Dispose();

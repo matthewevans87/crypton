@@ -7,7 +7,9 @@ import type {
   ReasoningStep, 
   Strategy, 
   CyclePerformance, 
-  EvaluationSummary 
+  EvaluationSummary,
+  Position,
+  ServiceHealth,
 } from '../types';
 import { messageQueue } from './messageQueue';
 import { batchUpdates } from '../utils/throttle';
@@ -17,6 +19,8 @@ const DEFAULT_HUB_PATH = '/hubs/dashboard';
 
 type EventHandlers = {
   onPortfolioUpdated?: (data: PortfolioSummary) => void;
+  onPositionUpdated?: (data: Position) => void;
+  onPositionClosed?: (positionId: string) => void;
   onPriceUpdated?: (data: PriceTicker) => void;
   onAgentStateChanged?: (data: AgentState) => void;
   onToolCallUpdated?: (data: ToolCall) => void;
@@ -24,6 +28,7 @@ type EventHandlers = {
   onStrategyUpdated?: (data: Strategy) => void;
   onCycleCompleted?: (data: CyclePerformance) => void;
   onEvaluationCompleted?: (data: EvaluationSummary) => void;
+  onSystemHealthUpdated?: (services: ServiceHealth[]) => void;
   onError?: (error: string) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
@@ -77,17 +82,14 @@ export const signalRService = {
       handlers.onPortfolioUpdated?.(data);
     });
 
-    hubConnection.on('PositionUpdated', (data: { asset: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number }) => {
+    hubConnection.on('PositionUpdated', (data: Position) => {
       emitRaw('PositionUpdated', data);
-      handlers.onPortfolioUpdated?.({
-        totalValue: data.currentPrice * data.quantity,
-        unrealizedPnL: 0,
-      } as unknown as PortfolioSummary);
+      handlers.onPositionUpdated?.(data);
     });
 
-    hubConnection.on('PositionClosed', (data: { asset: string }) => {
-      emitRaw('PositionClosed', data);
-      console.log('Position closed:', data.asset);
+    hubConnection.on('PositionClosed', (positionId: string) => {
+      emitRaw('PositionClosed', positionId);
+      handlers.onPositionClosed?.(positionId);
     });
 
     hubConnection.on('PriceUpdated', (data: PriceTicker) => {
@@ -143,6 +145,11 @@ export const signalRService = {
     hubConnection.on('EvaluationCompleted', (data: EvaluationSummary) => {
       emitRaw('EvaluationCompleted', data);
       handlers.onEvaluationCompleted?.(data);
+    });
+
+    hubConnection.on('SystemHealthUpdated', (data: { services: ServiceHealth[] }) => {
+      emitRaw('SystemHealthUpdated', data);
+      if (data?.services) handlers.onSystemHealthUpdated?.(data.services);
     });
 
     hubConnection.on('ErrorOccurred', (error: string) => {
