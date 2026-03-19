@@ -223,6 +223,10 @@ public sealed class StrategyService : IHostedService, IDisposable, IStrategyServ
         string? previousId;
         lock (_lock)
         {
+            // Idempotency: same content is already active — nothing to swap.
+            if (strategy.Id == _activeStrategyId)
+                return null;
+
             previousId = _activeStrategyId;
             _activeStrategy = strategy;
             _activeStrategyId = strategy.Id;
