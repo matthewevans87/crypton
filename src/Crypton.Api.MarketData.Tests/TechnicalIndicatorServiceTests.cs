@@ -28,6 +28,8 @@ public class TechnicalIndicatorServiceTests
         var ohlcv = GenerateOhlcvData(30, 50000m);
         _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = 50000m });
 
         var result = await _service.CalculateAsync("BTC/USD", "1h");
 
@@ -72,6 +74,8 @@ public class TechnicalIndicatorServiceTests
         var ohlcv = GenerateOhlcvData(50, 50000m);
         _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = 50000m });
 
         var result = await _service.CalculateAsync("BTC/USD", "1h");
 
@@ -86,6 +90,8 @@ public class TechnicalIndicatorServiceTests
         var ohlcv = GenerateOhlcvData(30, 50000m);
         _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = 50000m });
 
         var result = await _service.CalculateAsync("BTC/USD", "1h");
 
@@ -117,6 +123,8 @@ public class TechnicalIndicatorServiceTests
 
         _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = basePrice });
 
         var result = await _service.CalculateAsync("BTC/USD", "1h");
 
@@ -146,6 +154,8 @@ public class TechnicalIndicatorServiceTests
 
         _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = basePrice });
 
         var result = await _service.CalculateAsync("BTC/USD", "1h");
 
@@ -164,17 +174,50 @@ public class TechnicalIndicatorServiceTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task CalculateAsync_PopulatesCurrentPrice_FromTicker()
+    {
+        var ohlcv = GenerateOhlcvData(30, 50000m);
+        _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PriceTicker { Price = 51234.56m, High24h = 52000m, Low24h = 49500m, Volume24h = 1500m });
+
+        var result = await _service.CalculateAsync("BTC/USD", "1h");
+
+        Assert.NotNull(result);
+        Assert.Equal(51234.56m, result.CurrentPrice);
+        Assert.Equal(52000m, result.High24h);
+        Assert.Equal(49500m, result.Low24h);
+        Assert.Equal(1500m, result.Volume24h);
+    }
+
+    [Fact]
+    public async Task CalculateAsync_NullTicker_ReturnsNull()
+    {
+        var ohlcv = GenerateOhlcvData(30, 50000m);
+        _mockAdapter.Setup(a => a.GetOhlcvAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ohlcv);
+        _mockAdapter.Setup(a => a.GetPriceAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PriceTicker?)null);
+
+        var result = await _service.CalculateAsync("BTC/USD", "1h");
+
+        // Null ticker means CurrentPrice is null — validator rejects the model
+        Assert.Null(result);
+    }
+
     private static List<Ohlcv> GenerateOhlcvData(int count, decimal basePrice)
     {
         var result = new List<Ohlcv>();
         var random = new Random(42);
-        
+
         for (int i = count - 1; i >= 0; i--)
         {
             var volatility = basePrice * 0.02m;
             var change = (decimal)(random.NextDouble() * (double)volatility - (double)volatility / 2);
             var close = basePrice + change;
-            
+
             result.Add(new Ohlcv
             {
                 Timestamp = DateTime.UtcNow.AddHours(-i),
@@ -184,10 +227,10 @@ public class TechnicalIndicatorServiceTests
                 Close = close,
                 Volume = (decimal)(random.NextDouble() * 10000)
             });
-            
+
             basePrice = close;
         }
-        
+
         return result;
     }
 }

@@ -84,6 +84,10 @@ public class TechnicalIndicator
 {
     public string Symbol { get; set; } = string.Empty;
     public string Timeframe { get; set; } = string.Empty;
+    public decimal? CurrentPrice { get; set; }
+    public decimal? High24h { get; set; }
+    public decimal? Low24h { get; set; }
+    public decimal? Volume24h { get; set; }
     public decimal? Rsi { get; set; }
     public decimal? Macd { get; set; }
     public decimal? MacdSignal { get; set; }

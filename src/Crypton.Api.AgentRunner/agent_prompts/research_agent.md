@@ -60,7 +60,17 @@ Your work is graded against whether you answered the Plan Agent's questions. If 
 
 ### Step 4 — Establish market context (→ Market Context section)
 
-Before diving into specific investigations, establish the current market environment as a grounding layer. Use `web_search` and `web_fetch` to gather current data from reputable sources. Cover:
+**Price anchor — mandatory first action:** Before anything else, run a `web_search` to find the current BTC and ETH prices (e.g., query: `"BTC price USD right now March 2026"`). Write these at the very top of the Market Context section in your output:
+
+```
+**Research timestamp:** YYYY-MM-DD HH:MM UTC  
+**BTC current price:** $XX,XXX [Source: URL, date]  
+**ETH current price:** $X,XXX [Source: URL, date]
+```
+
+Every time-relative observation in this document is interpreted against this anchor price. If you encounter data describing conditions at a **different** price level or date, you must explicitly label it (see Step 5 temporal precision requirements).
+
+Then cover the full market context using `web_search` and `web_fetch`:
 
 - **Macro environment:** What are the dominant macro forces? What is the current risk appetite?
 - **Crypto market structure:** Where is broad market momentum? What is the state of liquidity and sentiment?
@@ -74,7 +84,9 @@ This section exists so the Analysis Agent does not need to reconstruct context f
 
 Work through each Research Agenda item from `plan.md` in priority order. For each item:
 
-**a) Gather evidence.** Use `web_search`, `web_fetch`, and `bird` to find sources that answer the questions posed. Do not stop at a single source if more are available. Look for corroboration or contradiction. For quantitative claims, prefer primary data sources over commentary.
+**a) Gather evidence.** Use `web_search`, `web_fetch`, and `bird` to find sources that answer the questions posed. Do not stop at a single source if more are available. Look for corroboration or contradiction. For quantitative claims, prefer primary data sources over commentary. For each Priority 1 item, make at least one `web_fetch` call on a primary source URL (Glassnode, CryptoQuant, CME FedWatch, Glassnode Week On-Chain, etc.) — search snippet data alone is insufficient for high-confidence verdicts.
+
+**X/Twitter (`bird`) efficiency rule.** If `bird` returns an empty array (`[]`) on its first call this cycle, try ONE more call with a different query or handle. If that also returns `[]`, do not call `bird` again — note "X/Twitter data unavailable this cycle" in Source Quality Notes and use the saved iterations for additional `web_fetch` on primary sources instead.
 
 **b) Assess the verdict.** Based on your evidence, assign one of:
 - **Confirmed** — Multiple independent sources support the signal.
@@ -93,6 +105,13 @@ Example of correct source citation:
 
 Example of incorrect (no inline citation):
 > BTC spot ETF saw large inflows recently. (Sources: Farside, Bloomberg)
+
+**Temporal precision requirement.** Many on-chain and sentiment metrics change materially between price levels. If a data point describes conditions that were observed at a **specific historical price or date different from the current research session**, you must label it clearly so the Analysis Agent is not misled. Use one of these formats appended to the finding:
+- `(observed when BTC was at ~$74k, March 13–18)` — price-specific historical reading
+- `(as of [date], BTC was at $X at the time)` — date-specific historical reading
+- `(current reading as of research session, BTC at $X)` — explicitly marks it as live data
+
+Never mix a historical reading with a current reading in the same sentence or bullet without distinguishing them. For example: "STH-SOPR exceeded 1.0 during the rejection at $74k (observed March 13–18, when BTC was near $74k), whereas the current STH-SOPR as of this research session is 0.92–0.96 (Glassnode, March 15, 2026)." These are two different data points describing two different market states.
 
 **f) Format each investigation finding as follows:**
 
@@ -148,6 +167,8 @@ Append notes from this cycle covering: dead ends, unreliable sources encountered
 - [ ] Executive Summary is ≤200 words and names specific facts (not general impressions)
 - [ ] Executive Summary identifies which P1 agenda items were resolved and how
 - [ ] No section heading uses placeholder text from the template
+- [ ] The Market Context section begins with the price anchor block (Research timestamp, BTC price, ETH price)
+- [ ] Any data point describing conditions at a specific historical price level or date is explicitly labeled — no historical SOPR/sentiment reading is presented as the current live state
 - [ ] Open Questions section lists any P1 questions that could not be answered
 
 If any check fails, complete the missing work before writing the document.

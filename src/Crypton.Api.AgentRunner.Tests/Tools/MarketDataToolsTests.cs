@@ -19,7 +19,7 @@ public class CurrentPositionToolTests
     [Fact]
     public async Task ExecuteAsync_WithValidResponse_ReturnsSuccess()
     {
-        var response = new { totalValue = 50000m, balances = new[] { new { asset = "BTC", available = 1.5m } } };
+        var response = new { availableCapital = 10000m, positions = Array.Empty<object>(), totalValue = 50000m, balances = new[] { new { asset = "BTC", available = 1.5m } } };
         _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
         var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
@@ -27,7 +27,9 @@ public class CurrentPositionToolTests
         var result = await tool.ExecuteAsync(new Dictionary<string, object>());
 
         Assert.True(result.Success);
-        Assert.NotNull(result.Data);
+        var data = Assert.IsType<PortfolioSummaryResponse>(result.Data);
+        Assert.Equal(10000m, data.AvailableCapital);
+        Assert.NotNull(data.Positions);
     }
 
     [Fact]
@@ -46,7 +48,7 @@ public class CurrentPositionToolTests
     [Fact]
     public async Task ExecuteAsync_WithCaching_ReturnsCachedResult()
     {
-        var response = new { totalValue = 50000m };
+        var response = new { availableCapital = 10000m, positions = Array.Empty<object>(), totalValue = 50000m };
         _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
         var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
@@ -61,7 +63,7 @@ public class CurrentPositionToolTests
     [Fact]
     public async Task ExecuteAsync_WithUrlTrailingSlash_HandlesCorrectly()
     {
-        var response = new { totalValue = 50000m };
+        var response = new { availableCapital = 10000m, positions = Array.Empty<object>(), totalValue = 50000m };
         _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
 
         var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004/", 60);
@@ -69,6 +71,21 @@ public class CurrentPositionToolTests
         var result = await tool.ExecuteAsync(new Dictionary<string, object>());
 
         Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MissingRequiredFields_ReturnsError()
+    {
+        var response = new { totalValue = 50000m, balances = Array.Empty<object>() };
+        _mockHandler.SetupResponse("http://localhost:5004/portfolio/summary", response);
+
+        var tool = new CurrentPositionTool(_httpClient, "http://localhost:5004", 60);
+
+        var result = await tool.ExecuteAsync(new Dictionary<string, object>());
+
+        Assert.False(result.Success);
+        Assert.Contains("validation failed", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("availableCapital", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -86,7 +103,7 @@ public class TechnicalIndicatorsToolTests
     [Fact]
     public async Task ExecuteAsync_WithValidParameters_ReturnsSuccess()
     {
-        var response = new { rsi = 65.5m, macd = 150.0m };
+        var response = new { currentPrice = 65000m, rsi = 65.5m, macd = 150.0m, symbol = "BTC/USD", timeframe = "1h" };
         _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=BTC/USD&timeframe=1h", response);
 
         var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002", 60);
@@ -98,7 +115,8 @@ public class TechnicalIndicatorsToolTests
         });
 
         Assert.True(result.Success);
-        Assert.NotNull(result.Data);
+        var data = Assert.IsType<TechnicalIndicatorsResponse>(result.Data);
+        Assert.Equal(65000m, data.CurrentPrice);
     }
 
     [Fact]
@@ -166,7 +184,7 @@ public class TechnicalIndicatorsToolTests
     [Fact]
     public async Task ExecuteAsync_WithCaching_ReturnsCachedResult()
     {
-        var response = new { rsi = 65.5m };
+        var response = new { currentPrice = 65000m, rsi = 65.5m, symbol = "BTC/USD", timeframe = "1h" };
         _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=BTC/USD&timeframe=1h", response);
 
         var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002", 60);
@@ -189,7 +207,7 @@ public class TechnicalIndicatorsToolTests
     [Fact]
     public async Task ExecuteAsync_WithDifferentAssets_QueriesCorrectly()
     {
-        var response = new { rsi = 70.0m };
+        var response = new { currentPrice = 3200m, rsi = 70.0m, symbol = "ETH/USD", timeframe = "4h" };
         _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=ETH/USD&timeframe=4h", response);
 
         var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002", 60);
@@ -206,7 +224,7 @@ public class TechnicalIndicatorsToolTests
     [Fact]
     public async Task ExecuteAsync_WithUrlTrailingSlash_HandlesCorrectly()
     {
-        var response = new { rsi = 65.5m };
+        var response = new { currentPrice = 65000m, rsi = 65.5m, symbol = "BTC/USD", timeframe = "1h" };
         _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=BTC/USD&timeframe=1h", response);
 
         var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002/", 60);
@@ -219,6 +237,44 @@ public class TechnicalIndicatorsToolTests
 
         Assert.True(result.Success);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_MissingCurrentPrice_ReturnsError()
+    {
+        var response = new { rsi = 65.5m, macd = 150.0m, symbol = "BTC/USD", timeframe = "1h" };
+        _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=BTC/USD&timeframe=1h", response);
+
+        var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002", 60);
+
+        var result = await tool.ExecuteAsync(new Dictionary<string, object>
+        {
+            ["asset"] = "BTC",
+            ["timeframe"] = "1h"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("validation failed", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("currentPrice", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NullCurrentPrice_ReturnsError()
+    {
+        var response = new { currentPrice = (decimal?)null, rsi = 65.5m, symbol = "BTC/USD", timeframe = "1h" };
+        _mockHandler.SetupResponse("http://localhost:5002/api/indicators?symbol=BTC/USD&timeframe=1h", response);
+
+        var tool = new TechnicalIndicatorsTool(_httpClient, "http://localhost:5002", 60);
+
+        var result = await tool.ExecuteAsync(new Dictionary<string, object>
+        {
+            ["asset"] = "BTC",
+            ["timeframe"] = "1h"
+        });
+
+        Assert.False(result.Success);
+        Assert.Contains("validation failed", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("currentPrice", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public class MockHttpMessageHandler : HttpMessageHandler
@@ -229,7 +285,7 @@ public class MockHttpMessageHandler : HttpMessageHandler
 
     public void SetupResponse<T>(string url, T response)
     {
-        _responses[url] = response;
+        _responses[url] = response!;
     }
 
     public void SetupError(string url, HttpStatusCode statusCode)

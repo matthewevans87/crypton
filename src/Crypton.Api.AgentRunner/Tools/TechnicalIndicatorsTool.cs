@@ -4,6 +4,9 @@ namespace AgentRunner.Tools;
 
 public class TechnicalIndicatorsTool : Tool
 {
+    private static readonly TechnicalIndicatorsResponseValidator Validator = new();
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private readonly HttpClient _httpClient;
     private readonly string _marketDataServiceUrl;
     private readonly Dictionary<string, (DateTime Timestamp, object Data)> _cache = new();
@@ -75,7 +78,6 @@ public class TechnicalIndicatorsTool : Tool
         {
             return new ToolResult { Success = true, Data = cached.Data };
         }
-
         try
         {
             // Normalise asset: map aliases (XBT → BTC), strip /USD suffix, URL-encode
@@ -109,7 +111,15 @@ public class TechnicalIndicatorsTool : Tool
                 return new ToolResult { Success = false, Error = $"Market Data Service error: {response.StatusCode}" };
             }
 
-            var data = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+            var data = await response.Content.ReadFromJsonAsync<TechnicalIndicatorsResponse>(JsonOptions, cancellationToken)
+                ?? new TechnicalIndicatorsResponse();
+
+            var validation = Validator.Validate(data);
+            if (!validation.IsValid)
+            {
+                var errors = string.Join("; ", validation.Errors.Select(e => e.ErrorMessage));
+                return new ToolResult { Success = false, Error = $"Market Data Service response validation failed: {errors}" };
+            }
 
             _cache[cacheKey] = (DateTime.UtcNow, data);
 

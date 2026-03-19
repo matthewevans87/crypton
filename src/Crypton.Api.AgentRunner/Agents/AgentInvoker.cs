@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using AgentRunner.Configuration;
 using AgentRunner.Logging;
 using AgentRunner.Tools;
+
+[assembly: InternalsVisibleTo("Crypton.Api.AgentRunner.Tests")]
 
 namespace AgentRunner.Agents;
 
@@ -137,7 +140,7 @@ public class AgentInvoker : IAgentInvoker
                 {
                     var result = executedTools.First(r => r.CallId == call.Id);
                     var resultContent = result.Success
-                        ? JsonSerializer.Serialize(result.Data)
+                        ? CompactJson(JsonSerializer.Serialize(result.Data))
                         : $"Error: {result.Error}";
 
                     // role=tool is the correct Ollama format for returning function results.
@@ -398,6 +401,24 @@ public class AgentInvoker : IAgentInvoker
             ToolName = tc.Name,
             Parameters = tc.Arguments.ToDictionary(kvp => kvp.Key, kvp => (object)kvp.Value)
         }).ToList();
+
+    /// <summary>
+    /// Re-serializes a JSON string with no indentation to strip whitespace before sending to the LLM.
+    /// Falls back to the original string if parsing fails (e.g. plain text tool results).
+    /// </summary>
+    internal static string CompactJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = false });
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
 
     private async Task<List<ToolResult>> ExecuteToolsAsync(
         List<ToolCall> calls,

@@ -167,12 +167,12 @@ Fetch or compute technical indicator data for a specified asset and timeframe. R
 ### Returns
 
 A structured object containing:
-- `asset`, `timeframe`, `as_of` — metadata
-- `price` — current price, 24h high/low, 24h volume
-- For each requested indicator:
-  - Current value(s)
-  - A brief trend summary (e.g., `"RSI declining from 68 to 54 over 5 candles — momentum weakening"`)
-  - Key signal level if relevant (e.g., MACD crossover datetime, Bollinger Band width vs. 30-day mean)
+- `symbol`, `timeframe`, `lastUpdated` — metadata
+- `currentPrice`, `high24h`, `low24h`, `volume24h` — live ticker price (from Kraken spot)
+- `rsi` — RSI(14)
+- `macd`, `macdSignal`, `macdHistogram` — MACD(12,26,9)
+- `bollingerUpper`, `bollingerMiddle`, `bollingerLower` — Bollinger Bands(20,2)
+- `signal` — overall RSI signal: `"overbought"` (RSI > 70), `"oversold"` (RSI < 30), or `"neutral"`
 
 ### Example
 

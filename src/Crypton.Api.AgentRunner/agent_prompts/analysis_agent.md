@@ -56,6 +56,8 @@ Read `research.md` in full. Then call `current_position` to load the current por
 
 You may make additional calls for other timeframes or assets from the research findings (up to 7 more calls). Once you have BTC and ETH daily data, you have enough to write the document. Do NOT continue making tool calls after your budget is exhausted. The endpoint does not return ATR separately — do not request it.
 
+Use `currentPrice` from each `technical_indicators` response as your price reference for all level analysis in the Market Overview and per-asset sections. If a tool call returns an error, do not continue — report the error verbatim and stop.
+
 Hold all of this in mind simultaneously. The synthesis you are about to perform requires you to reason across all of it.
 
 ### Step 4 — Build the market overview (→ Market Overview section)
@@ -75,6 +77,12 @@ For each asset with actionable signal, work through a complete analysis:
 **b) Fundamental and news factors.** What narrative or fundamental factors are specifically moving this asset? Are there upcoming catalysts (events, protocol changes, ETF flows, regulatory decisions) that could act as triggers?
 
 **c) On-chain factors.** What does on-chain data say about smart money positioning for this asset specifically? Are large holders accumulating or distributing? What is the exchange flow picture?
+
+**Data recency discipline.** `research.md` often contains on-chain readings (SOPR, funding rates, exchange whale ratio, etc.) that were recorded at a specific price level or date during the research session. When using these metrics, distinguish exactly:
+- **Current reading** (valid at the research session price anchor, e.g., BTC at $71.7k): use this for your present-state analysis.
+- **Historical observation** (made when BTC was at a different price, e.g., "STH-SOPR exceeded 1.0 when price tested $74k on March 13"): treat this as a past event, not the current state.
+
+Mixing these produces incorrect theses. Example of the error to avoid: "STH-SOPR is above 1.0" when research shows this was true at $74k but the *current* STH-SOPR at $71.7k is 0.92–0.96 (capitulation zone) — these are opposite signals.
 
 **d) Thesis statement.** State the most probable scenario for this asset over the next trading period. Include direction, approximate magnitude, timeframe, and — critically — the specific condition that would tell you the thesis is wrong. A thesis without an invalidation condition is not a thesis, it is a hope. Express direction using exactly one of: **Long**, **Short**, or **Neutral**. Do not use any other phrasing (no "Cautiously Bullish", no "Mildly Bearish", no "Sideways", no "Tentatively Long").
 
@@ -119,9 +127,30 @@ The Synthesis Briefing **must** use the following structure exactly:
 
 Direction in the per-asset table must be exactly one of: **Long**, **Short**, or **Neutral**. Do not use any other word.
 
-If posture is `flat` or `exit_all`, the Asset table must still appear but all rows must have Direction = **Neutral** and an Exit Trigger noting the reason.
+If posture is `flat` or `exit_all`, the Asset table must still appear but all rows must have Direction = **Neutral** and an Entry Trigger of "N/A — flat posture".
 
 **Rationale requirement:** After the table, write 2–4 sentences explaining the dominant analytical reason for the recommended posture. Do not restate what is in the table — explain the macro or technical reasoning that drove the posture choice.
+
+**Concrete example of a correctly completed Synthesis Briefing:**
+
+```
+**Market Stance:** Bearish
+**Recommended Posture:** defensive
+**Confidence:** Medium
+**Primary Thesis:** BTC will test the $65k–$67k miner capitulation zone over the next 5–7 days as Fed hold probability (95%) removes near-term upside catalysts and short-term holders continue profit-taking at the $74k resistance wall.
+**Primary Risk:** A daily close above $74,836 on above-average volume would invalidate the distribution thesis and signal a transition to bullish momentum.
+**Key Levels to Watch:** $74,836 BTC resistance (Bollinger upper); $69,921 BTC Bollinger middle; $65,006 BTC Bollinger lower / miner cost basis; $2,302 ETH resistance
+
+| Asset | Direction | Conviction | Entry Trigger                                                     | Invalidation                                                  |
+| ----- | --------- | ---------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
+| BTC   | Neutral   | Medium     | Enter Short only on confirmed breakdown below $69,500 daily close | Daily close above $74,836 with volume >120% of 30-day average |
+| ETH   | Neutral   | Low        | N/A — flat posture; wait for BTC directional confirmation         | N/A                                                           |
+
+**Risk Budget:** Avoid new entries; maintain full cash reserves ($10k) until BTC resolves above $74.5k or below $65k.
+**Exit Guidance:** If a short is opened, close if BTC closes above $74,836; if a long is opened, close if BTC closes below $63,500.
+
+*Rationale:* The dominant reason for a defensive posture is the convergence of macro headwinds and confirmed resistance. With 95% probability of Fed holding through April and STH-SOPR currently at 0.92–0.96 (capitulation zone as of March 19), entering longs or shorts before a directional resolution risks being stopped out by normal range-bound volatility. The bearish bias reflects that the macro tailwind that would be required for a genuine breakout (Fed pivot or rate cut catalyst) has been explicitly removed by the March FOMC meeting.
+```
 
 ### Step 9 — Note emerging signals (→ Emerging Signals section)
 

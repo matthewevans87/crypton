@@ -334,6 +334,7 @@ public class AgentContext
         sb.AppendLine("- Follow the procedure in your identity instructions step by step.");
         sb.AppendLine("- **IMPORTANT — No preamble or postamble.** When writing your output document, start the document IMMEDIATELY on the first line. Do NOT include sentences like 'Based on the data gathered...' or 'Here is the draft of...' before the document. Your entire response should be the document itself.");
         sb.AppendLine("- **Replace all template placeholders.** The Output Template contains example placeholder text like `[Signal name]`, `[Headline / Event]`, `<!-- date -->`, etc. Replace every placeholder with real content from your research. If there is nothing to report for a section, write 'None identified this cycle.' Do NOT copy placeholder brackets literally into your output.");
+        sb.AppendLine("- **STOP at the end of your document.** The '---' separator above and the text 'BEGIN your work now.' are system triggers, NOT part of your output document. Do NOT copy the phrase 'BEGIN your work now.' anywhere in your output. Your document must end at its natural conclusion (e.g., the Emerging Signals section for analysis.md, or the last mailbox step).");
 
         // Agent-specific guidance
         if (AgentName == "Synthesis")

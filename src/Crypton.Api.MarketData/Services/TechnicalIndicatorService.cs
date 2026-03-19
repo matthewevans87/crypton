@@ -1,5 +1,4 @@
-using MarketDataService.Models;
-
+using FluentValidation;
 using MarketDataService.Adapters;
 using MarketDataService.Models;
 
@@ -12,6 +11,8 @@ public interface ITechnicalIndicatorService
 
 public class TechnicalIndicatorService : ITechnicalIndicatorService
 {
+    private static readonly TechnicalIndicatorValidator Validator = new();
+
     private readonly IExchangeAdapter _exchangeAdapter;
     private readonly IMarketDataCache _cache;
 
@@ -30,28 +31,34 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
         }
 
         var ohlcv = await _exchangeAdapter.GetOhlcvAsync(symbol, timeframe, 100, cancellationToken);
-        
+
         if (ohlcv == null || ohlcv.Count < 26)
         {
             return null;
         }
 
+        var ticker = await _exchangeAdapter.GetPriceAsync(symbol, cancellationToken);
+
         var closes = ohlcv.Select(x => x.Close).ToList();
-        
+
         var indicator = new TechnicalIndicator
         {
             Symbol = symbol,
             Timeframe = timeframe,
-            LastUpdated = DateTime.UtcNow
+            LastUpdated = DateTime.UtcNow,
+            CurrentPrice = ticker?.Price,
+            High24h = ticker?.High24h,
+            Low24h = ticker?.Low24h,
+            Volume24h = ticker?.Volume24h
         };
 
         indicator.Rsi = CalculateRsi(closes, 14);
-        
+
         var (macd, signal, histogram) = CalculateMacd(closes, 12, 26, 9);
         indicator.Macd = macd;
         indicator.MacdSignal = signal;
         indicator.MacdHistogram = histogram;
-        
+
         var (upper, middle, lower) = CalculateBollingerBands(closes, 20, 2);
         indicator.BollingerUpper = upper;
         indicator.BollingerMiddle = middle;
@@ -67,8 +74,14 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
                 indicator.Signal = "neutral";
         }
 
+        var validation = Validator.Validate(indicator);
+        if (!validation.IsValid)
+        {
+            return null;
+        }
+
         _cache.SetTechnicalIndicator(indicator);
-        
+
         return indicator;
     }
 
@@ -104,7 +117,7 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
 
         var rs = avgGain / avgLoss;
         var rsi = 100 - (100 / (1 + rs));
-        
+
         return Math.Round(rsi, 2);
     }
 
@@ -115,9 +128,9 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
 
         var fastEma = CalculateEma(closes, fastPeriod);
         var slowEma = CalculateEma(closes, slowPeriod);
-        
+
         var macdLine = fastEma - slowEma;
-        
+
         var macdValues = new List<decimal>();
         for (int i = slowPeriod - 1; i < closes.Count; i++)
         {
@@ -128,7 +141,7 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
 
         var signalLine = CalculateEma(macdValues, signalPeriod);
         var histogram = macdLine - signalLine;
-        
+
         return (Math.Round(macdLine, 2), Math.Round(signalLine, 2), Math.Round(histogram, 2));
     }
 
@@ -136,15 +149,15 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
     {
         if (values.Count < period)
             return values.LastOrDefault();
-            
+
         var multiplier = 2m / (period + 1);
         var ema = values.Take(period).Average();
-        
+
         for (int i = period; i < values.Count; i++)
         {
             ema = (values[i] - ema) * multiplier + ema;
         }
-        
+
         return ema;
     }
 
@@ -155,13 +168,13 @@ public class TechnicalIndicatorService : ITechnicalIndicatorService
 
         var recentCloses = closes.TakeLast(period).ToList();
         var middle = recentCloses.Average();
-        
+
         var variance = recentCloses.Sum(x => (x - middle) * (x - middle)) / period;
         var stdDev = (decimal)Math.Sqrt((double)variance);
-        
+
         var upper = middle + (stdDev * standardDeviations);
         var lower = middle - (stdDev * standardDeviations);
-        
+
         return (Math.Round(upper, 2), Math.Round(middle, 2), Math.Round(lower, 2));
     }
 }

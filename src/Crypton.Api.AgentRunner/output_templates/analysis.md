@@ -94,20 +94,24 @@ Key levels:
 
 ## Synthesis Briefing
 
-*A direct, unambiguous brief for the Synthesis Agent. This section consolidates the key conclusions into actionable inputs for strategy generation.*
+*Required structure — follow this exactly. The Synthesis Agent reads this section directly to make strategy decisions.*
 
-**Market stance:** [Strongly Bullish / Bullish / Neutral / Bearish / Strongly Bearish]  
-**Recommended posture:** [Aggressive / Moderate / Defensive / Flat / Exit all]
+**Market Stance:** [Strongly Bullish / Bullish / Neutral / Bearish / Strongly Bearish]
+**Recommended Posture:** [aggressive | moderate | defensive | flat | exit_all]
+**Confidence:** [High | Medium | Low]
+**Primary Thesis:** [One sentence — what you expect to happen and why]
+**Primary Risk:** [One sentence — the single condition that would invalidate the thesis]
+**Key Levels to Watch:** [Specific price values and indicator thresholds, not ranges — e.g., "$74,500 BTC resistance; $65,000 BTC support; RSI 50 flip"]
 
-**Assets with actionable signal:**
+| Asset | Direction                | Conviction            | Entry Trigger                                 | Invalidation              |
+| ----- | ------------------------ | --------------------- | --------------------------------------------- | ------------------------- |
+| BTC   | [Long / Short / Neutral] | [High / Medium / Low] | [specific condition, or "N/A — flat posture"] | [specific price or event] |
+| ETH   | [Long / Short / Neutral] | [High / Medium / Low] | [specific condition, or "N/A — flat posture"] | [specific price or event] |
 
-| Asset   | Direction            | Conviction     | Entry timing                                           | Key condition                                  |
-| ------- | -------------------- | -------------- | ------------------------------------------------------ | ---------------------------------------------- |
-| [Asset] | [Long/Short/Neutral] | [High/Med/Low] | [Immediate / On pullback to $X / On breakout above $X] | [What must be true for this trade to be valid] |
+**Risk Budget:** [One sentence — deploy full capital / reduce size to X% / avoid new entries]
+**Exit Guidance:** [One sentence — what the Execution Service should watch for to close open positions]
 
-**Risk budget guidance:** [1–2 sentences. Given current conditions, should the strategy deploy full capital, reduced size, or avoid new entries? Any specific exposure caps to consider?]
-
-**Stop/exit guidance:** [1–2 sentences. What invalidation conditions should the Execution Service be watching for that would indicate the thesis has broken down?]
+*Rationale:* [2–4 sentences explaining the dominant macro or technical reason for the posture. Do not restate the table — explain the underlying logic.]
 
 ---
 
