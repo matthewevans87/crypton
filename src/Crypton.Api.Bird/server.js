@@ -55,6 +55,16 @@ function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
+    const authToken = process.env.BIRD_AUTH_TOKEN;
+    const ct0 = process.env.BIRD_CT0;
+    if (!authToken || !ct0) {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: "unavailable",
+        reason: "BIRD_AUTH_TOKEN and/or BIRD_CT0 environment variables are not set. Run 'make extract-tokens' in Crypton.Api.Bird/ to provision credentials."
+      }));
+      return;
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end('{"status":"ok"}');
     return;

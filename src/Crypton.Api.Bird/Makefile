@@ -12,7 +12,7 @@ WORK_DIR     := $(CURDIR)
 # Resolve bird's library path for token extraction
 BIRD_LIB     := $(shell dirname $(BIRD_PATH))/../lib/node_modules/@steipete/bird/dist/lib/cookies.js
 
-.PHONY: install uninstall status extract-tokens
+.PHONY: install uninstall start stop restart status extract-tokens
 
 extract-tokens:
 	@echo "Extracting auth tokens from browser via bird library..."
@@ -57,8 +57,8 @@ install:
 	@echo 'Environment="PATH=$(NPM_BIN_DIR):/usr/local/bin:/usr/bin:/bin"' >> /tmp/$(SERVICE_FILE)
 	@echo 'Environment="BIRD_HOST=0.0.0.0"' >> /tmp/$(SERVICE_FILE)
 	@echo 'Environment="BIRD_PORT=11435"' >> /tmp/$(SERVICE_FILE)
-	@echo 'Environment="AUTH_TOKEN=$(AUTH_TOKEN)"' >> /tmp/$(SERVICE_FILE)
-	@echo 'Environment="CT0=$(CT0)"' >> /tmp/$(SERVICE_FILE)
+	@echo 'Environment="BIRD_AUTH_TOKEN=$(AUTH_TOKEN)"' >> /tmp/$(SERVICE_FILE)
+	@echo 'Environment="BIRD_CT0=$(CT0)"' >> /tmp/$(SERVICE_FILE)
 	@echo 'WorkingDirectory=$(WORK_DIR)' >> /tmp/$(SERVICE_FILE)
 	@echo 'ExecStart=$(NODE_PATH) server.js' >> /tmp/$(SERVICE_FILE)
 	@echo 'Restart=on-failure' >> /tmp/$(SERVICE_FILE)
@@ -78,6 +78,18 @@ uninstall:
 	sudo systemctl daemon-reload
 	-sudo ufw delete allow from 172.16.0.0/12 to any port 11435 proto tcp
 	@echo "$(SERVICE_NAME) uninstalled."
+
+start:
+	sudo systemctl start $(SERVICE_NAME)
+	@echo "$(SERVICE_NAME) started."
+
+stop:
+	sudo systemctl stop $(SERVICE_NAME)
+	@echo "$(SERVICE_NAME) stopped."
+
+restart:
+	sudo systemctl restart $(SERVICE_NAME)
+	@echo "$(SERVICE_NAME) restarted."
 
 status:
 	@systemctl status $(SERVICE_NAME) --no-pager || true

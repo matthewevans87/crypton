@@ -202,7 +202,7 @@ public class BirdToolTests
     // ── Empty output ──────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ExecuteAsync_EmptyStdout_ReturnsEmptyArray()
+    public async Task ExecuteAsync_EmptyStdout_ReturnsNoResultsDiagnostic()
     {
         SetupBirdResponse(_mockHandler, "http://localhost:11435/execute", 0, "");
 
@@ -213,7 +213,39 @@ public class BirdToolTests
         }, CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.Equal("[]", result.Data?.ToString());
+        // No results: returns a diagnostic hint rather than the opaque "[]"
+        Assert.Contains("No results", result.Data?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyJsonArrayStdout_ReturnsNoResultsDiagnostic()
+    {
+        SetupBirdResponse(_mockHandler, "http://localhost:11435/execute", 0, "[]");
+
+        var tool = CreateTool();
+        var result = await tool.ExecuteAsync(new Dictionary<string, object>
+        {
+            ["query"] = "bitcoin"
+        }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Contains("No results", result.Data?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyResultWithStderr_SurfacesStderrWarning()
+    {
+        SetupBirdResponse(_mockHandler, "http://localhost:11435/execute", 0, "[]", "Token expired or invalid");
+
+        var tool = CreateTool();
+        var result = await tool.ExecuteAsync(new Dictionary<string, object>
+        {
+            ["query"] = "bitcoin"
+        }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        // Stderr is surfaced as a warning note instead of being silently discarded
+        Assert.Contains("Token expired or invalid", result.Data?.ToString());
     }
 
     // ── URL trailing slash handling ───────────────────────────────────────────

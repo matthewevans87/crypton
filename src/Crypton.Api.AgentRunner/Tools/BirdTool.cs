@@ -125,9 +125,14 @@ public class BirdTool : Tool
                 return (false, null, error);
             }
 
-            if (string.IsNullOrWhiteSpace(stdout))
+            // Surface stderr even on exit code 0 — the bird CLI can write auth/rate-limit
+            // warnings to stderr while still returning exit code 0 with an empty result.
+            var stderrNote = string.IsNullOrWhiteSpace(stderr) ? null : $"[bird warning: {stderr.Trim()}]";
+
+            if (string.IsNullOrWhiteSpace(stdout) || stdout.Trim() == "[]")
             {
-                return (true, "[]", null);
+                var emptyNote = stderrNote ?? "No results returned (possible auth token expiry — run 'make extract-tokens' in Crypton.Api.Bird/)";
+                return (true, emptyNote, null);
             }
 
             try

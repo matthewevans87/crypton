@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentRunner.Agents;
 using AgentRunner.Artifacts;
 using AgentRunner.Configuration;
+using AgentRunner.Startup;
 using AgentRunner.StateMachine;
 
 namespace AgentRunner.Cli;
@@ -13,10 +14,11 @@ namespace AgentRunner.Cli;
 /// Usage:
 ///   dotnet run -- --cli run-step --step plan [--cycle-id 20250101_120000] [--verbose]
 ///   dotnet run -- --cli run-step --step evaluate [--cycle-id 20250101_120000] [--prev-cycle-id 20250101_060000] [--verbose]
-///   dotnet run -- --cli run-cycle [--from plan|evaluate] [--verbose]
+///   dotnet run -- --cli run-cycle [--from plan|evaluate] [--verbose] [--force]
 ///   dotnet run -- --cli status
 ///
 /// Prints full prompts and LLM responses to stdout when --verbose is set.
+/// --force skips service availability checks (tools may fail at runtime).
 /// </summary>
 public static class CliRunner
 {
@@ -27,9 +29,11 @@ public static class CliRunner
         AgentRunnerConfig config,
         ArtifactManager artifactManager,
         AgentContextBuilder contextBuilder,
-        AgentInvoker agentInvoker)
+        AgentInvoker agentInvoker,
+        IStartupValidator startupValidator)
     {
         var verbose = args.Contains("--verbose");
+        var force = args.Contains("--force");
         var command = GetArg(args, "--cli") ?? "help";
 
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -38,10 +42,10 @@ public static class CliRunner
         Console.WriteLine($"{'═',-60}");
         Console.ResetColor();
 
-        // Confirm Ollama is reachable before doing real work
+        // Check all required services before doing real work
         if (command is "run-step" or "run-cycle")
         {
-            await CheckOllamaAsync(config.Ollama.BaseUrl);
+            await RunStartupChecksAsync(config, startupValidator, force);
         }
 
         switch (command)
@@ -280,10 +284,12 @@ public static class CliRunner
                 --cycle-id <id>         Cycle directory to use (default: creates new)
                 --prev-cycle-id <id>    Source cycle for evaluate step (default: latest completed)
                 --verbose               Print full prompts and responses
+                --force                 Skip service availability checks (tools may fail at runtime)
 
               run-cycle  Run a full cycle (all steps in order)
                 --from <plan|evaluate>  Start from evaluate if history exists (default: plan)
                 --verbose               Print full prompts and responses
+                --force                 Skip service availability checks (tools may fail at runtime)
 
               status     Show recent cycle history and artifact summary
 
@@ -292,50 +298,49 @@ public static class CliRunner
               dotnet run -- --cli run-step --step plan --env-file ~/.config/crypton/.env --verbose
               dotnet run -- --cli run-step --step evaluate --prev-cycle-id 20250601_120000
               dotnet run -- --cli run-cycle --from evaluate --verbose
+              dotnet run -- --cli run-cycle --from evaluate --force
               dotnet run -- --cli status
             """);
     }
 
     // -------------------------------------------------------------------------
-    // Ollama connectivity check
+    // Service availability checks
     // -------------------------------------------------------------------------
 
-    private static async Task CheckOllamaAsync(string baseUrl)
+    private static async Task RunStartupChecksAsync(AgentRunnerConfig config, IStartupValidator validator, bool force)
     {
-        Console.Write($"  Checking Ollama at {baseUrl} ... ");
-        try
+        Console.WriteLine("  Checking service availability...");
+        var result = await validator.ValidateAsync(config);
+
+        if (result.IsValid)
         {
-            var resp = await _http.GetAsync(baseUrl.TrimEnd('/') + "/api/tags");
-            if (resp.IsSuccessStatusCode)
-            {
-                var json = await resp.Content.ReadAsStringAsync();
-                var doc = JsonDocument.Parse(json);
-                var models = doc.RootElement.GetProperty("models")
-                    .EnumerateArray()
-                    .Select(m => m.GetProperty("name").GetString())
-                    .ToList();
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"OK  ({models.Count} model(s))");
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine($"  Models: {string.Join(", ", models.Take(5))}");
-                Console.ResetColor();
-            }
-            else
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine($"HTTP {resp.StatusCode} — continuing");
-                Console.ResetColor();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine();
-            Console.Error.WriteLine($"  ERROR: Cannot reach Ollama: {ex.Message}");
-            Console.Error.WriteLine($"  Ensure Ollama is running: ollama serve");
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("  All services healthy.");
             Console.ResetColor();
-            Environment.Exit(1);
         }
+        else
+        {
+            foreach (var error in result.Errors)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"  ✗ {error}");
+                Console.ResetColor();
+            }
+
+            if (!force)
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine("  One or more services are unavailable. Aborting.");
+                Console.Error.WriteLine("  Fix the services above, or re-run with --force to proceed anyway");
+                Console.Error.WriteLine("  (tool calls to unavailable services will fail at runtime).");
+                Environment.Exit(1);
+            }
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("  --force: continuing despite service failures.");
+            Console.ResetColor();
+        }
+
         Console.WriteLine();
     }
 

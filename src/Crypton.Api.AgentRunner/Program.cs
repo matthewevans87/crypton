@@ -105,7 +105,7 @@ var startupCoordinator = new AgentRunnerStartupCoordinator(
 // Run a single step or full cycle with verbose console output, then exit.
 if (args.Contains("--cli"))
 {
-    await CliRunner.RunAsync(args, config, artifactManager, contextBuilder, agentInvoker);
+    await CliRunner.RunAsync(args, config, artifactManager, contextBuilder, agentInvoker, startupValidator);
     return;
 }
 

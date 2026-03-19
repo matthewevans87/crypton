@@ -9,6 +9,11 @@ Crypton is an automated cryptocurrency portfolio management system consisting of
 - **Market Data Service** (`src/Crypton.Api.MarketData`) — Kraken market data adapter. Streams live prices, order book, and computes technical indicators. Exposes REST + SignalR.
 - **Monitoring Dashboard Service** (`src/Crypton.Api.MonitoringDashboard`) — BFF for the Svelte web frontend. Aggregates telemetry from all services.
 - **Dashboard UI** (`src/Crypton.Web.Dashboard`) — A web interface for a human operator. Surfaces system state and Kraken exchange data. Enables the operator to send commands to the Crypton system.
+- **Bird Server** (`src/Crypton.Api.Bird`) — Thin Node.js HTTP wrapper around the [`@steipete/bird`](https://github.com/steipete/bird) CLI. Provides the Agent Runner's `bird` tool with access to X/Twitter data. Listens on `localhost:11435`.
+  - `POST /execute { args: string }` — runs `bird <args>` and returns `{ stdout, stderr, exitCode }`.
+  - `GET /health` — returns `200 OK` if the server is running **and** `BIRD_AUTH_TOKEN`/`BIRD_CT0` env vars are set; returns `503` if credentials are missing, which causes the Agent Runner startup validator to abort the cycle.
+  - Managed as a systemd service via `src/Crypton.Api.Bird/Makefile`. Key targets: `make extract-tokens` (pulls OAuth tokens from the local browser), `make install` (installs the systemd unit), `make start/stop/restart/status`.
+  - Auth tokens (`BIRD_AUTH_TOKEN`, `BIRD_CT0`) must be present in `~/.config/crypton/.env`. Run `make extract-tokens` to refresh them when X/Twitter sessions expire.
 
 Shared configuration helpers live in `Crypton.Configuration`.
 
