@@ -258,6 +258,10 @@ public class AgentContext
         sb.AppendLine(Identity);
         sb.AppendLine();
 
+        sb.AppendLine("# Current Date and Time");
+        sb.AppendLine(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"));
+        sb.AppendLine();
+
         sb.AppendLine("# Tool Reference");
         sb.AppendLine(ToolGuide);
 
