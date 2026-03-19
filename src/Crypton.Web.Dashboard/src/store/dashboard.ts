@@ -46,9 +46,7 @@ export type PanelType =
   | 'price-chart'
   | 'technical-indicators'
   | 'agent-state'
-  | 'reasoning-trace'
-  | 'tool-calls'
-  | 'tool-call-detail'
+  | 'agent-trace'
   | 'cycle-performance'
   | 'daily-loss-limit'
   | 'cycle-history'
@@ -160,9 +158,7 @@ const defaultTabs: Tab[] = [
     panels: [
       { id: 'agent-state', type: 'agent-state' },
       { id: 'loop-state', type: 'loop-state' },
-      { id: 'reasoning-trace', type: 'reasoning-trace' },
-      { id: 'tool-calls', type: 'tool-calls' },
-      { id: 'tool-call-detail', type: 'tool-call-detail' },
+      { id: 'agent-trace', type: 'agent-trace' },
       { id: 'evaluation-rating', type: 'evaluation-rating' },
       { id: 'ws-feed-agentrunner', type: 'ws-feed-agentrunner' },
     ],

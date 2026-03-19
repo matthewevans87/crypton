@@ -66,9 +66,7 @@ const PANEL_COMMANDS: { type: PanelType; label: string; description: string }[] 
   // Agent Runner
   { type: 'agent-state', label: 'Agent: State', description: 'Current agent state, progress, and active tool' },
   { type: 'loop-state', label: 'Agent: Loop', description: 'Step timeline, cycle interval, next cycle time' },
-  { type: 'reasoning-trace', label: 'Agent: Reasoning Trace', description: 'Live agent thinking stream' },
-  { type: 'tool-calls', label: 'Agent: Tool Calls', description: 'List of tool invocations' },
-  { type: 'tool-call-detail', label: 'Agent: Tool Call Detail', description: 'Input/output of selected tool' },
+  { type: 'agent-trace', label: 'Agent: Trace', description: 'Unified reasoning + tool call timeline with expandable payloads' },
   { type: 'evaluation-rating', label: 'Agent: Evaluation Rating', description: 'A-F rating with trend from latest evaluation' },
   { type: 'ws-feed-agentrunner', label: 'Agent: WS Feed', description: 'Raw SignalR events from the agent runner service' },
   // Execution Service

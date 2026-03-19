@@ -195,7 +195,7 @@ App
 | Tab id        | Panels                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------ |
 | `main`        | portfolio-summary, strategy-overview, **agent-state**, cycle-performance, price-ticker-btc, price-ticker-eth |
-| `analysis`    | loop-state, reasoning-trace, tool-calls, technical-indicators, open-positions, holdings                      |
+| `analysis`    | loop-state, agent-trace, technical-indicators, open-positions, holdings                                      |
 | `diagnostics` | **system-status**, system-diagnostics, connection-health, error-log                                          |
 
 ### Panel `data-testid` inventory

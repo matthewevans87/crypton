@@ -8,14 +8,12 @@ import { PriceChartPanel } from '../panels/PriceChartPanel';
 import { CyclePerformancePanel } from '../panels/CyclePerformancePanel';
 import { HoldingsPanel } from '../panels/HoldingsPanel';
 import { OpenPositionsPanel } from '../panels/OpenPositionsPanel';
-import { ReasoningTracePanel } from '../panels/ReasoningTracePanel';
-import { ToolCallsPanel } from '../panels/ToolCallsPanel';
+import { AgentTracePanel } from '../panels/AgentTracePanel';
 import { LoopStatePanel } from '../panels/LoopStatePanel';
 import { TechnicalIndicatorsPanel } from '../panels/TechnicalIndicatorsPanel';
 import { DailyLossLimitPanel } from '../panels/DailyLossLimitPanel';
 import { EvaluationRatingPanel } from '../panels/EvaluationRatingPanel';
 import { CycleHistoryPanel } from '../panels/CycleHistoryPanel';
-import { ToolCallDetailPanel } from '../panels/ToolCallDetailPanel';
 import { CycleDetailPanel } from '../panels/CycleDetailPanel';
 import { SystemDiagnosticsPanel } from '../panels/SystemDiagnosticsPanel';
 import { SystemStatusPanel } from '../panels/SystemStatusPanel';
@@ -48,9 +46,7 @@ const PANEL_COMPONENTS: Record<string, React.FC<{ config?: Record<string, unknow
   'loop-state': LoopStatePanel,
   'cycle-history': CycleHistoryPanel,
   'evaluation-rating': EvaluationRatingPanel,
-  'reasoning-trace': ReasoningTracePanel,
-  'tool-calls': ToolCallsPanel,
-  'tool-call-detail': ToolCallDetailPanel,
+  'agent-trace': AgentTracePanel,
   'cycle-detail': CycleDetailPanel,
   'system-diagnostics': SystemDiagnosticsPanel,
   'system-status': SystemStatusPanel,
