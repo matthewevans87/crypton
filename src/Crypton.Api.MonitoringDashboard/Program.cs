@@ -279,6 +279,22 @@ agentRunnerClient.OnStepStarted += (sender, payload) =>
     catch (Exception ex) { logger.LogWarning(ex, "AgentRunner StepStarted mapping error"); }
 };
 
+agentRunnerClient.OnStepCompleted += (sender, payload) =>
+{
+    try
+    {
+        var stepName = payload.TryGetProperty("step_name", out var sn) ? sn.GetString() : null;
+        _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
+        {
+            CurrentState = stepName ?? "Idle",
+            ActiveAgent = null,
+            IsRunning = false,
+            StateStartedAt = DateTime.UtcNow,
+        });
+    }
+    catch (Exception ex) { logger.LogWarning(ex, "AgentRunner StepCompleted mapping error"); }
+};
+
 agentRunnerClient.OnTokenReceived += (sender, payload) =>
 {
     try
