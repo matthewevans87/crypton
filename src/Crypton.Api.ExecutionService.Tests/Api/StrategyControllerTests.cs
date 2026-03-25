@@ -96,7 +96,7 @@ public sealed class StrategyControllerTests
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
         ok.StatusCode.Should().Be(200);
 
-        var strategyId = ok.Value!.GetType().GetProperty("strategy_id")!.GetValue(ok.Value);
+        var strategyId = ok.Value!.GetType().GetProperty("StrategyId")!.GetValue(ok.Value);
         strategyId.Should().Be("abc123def456abcd");
     }
 

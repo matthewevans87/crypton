@@ -70,7 +70,7 @@ export const signalRService = {
     hubConnection = new signalR.HubConnectionBuilder()
       .withUrl(url)
       .withAutomaticReconnect([0, 1000, 5000, 10000, 30000])
-      .configureLogging(signalR.LogLevel.Warning)
+      .configureLogging(signalR.LogLevel.Critical)
       .build();
 
     hubConnection.on('PortfolioUpdated', (data: PortfolioSummary) => {
@@ -189,12 +189,15 @@ export const signalRService = {
       console.log('SignalR reconnected');
     });
 
-    hubConnection.start()
+    const connection = hubConnection;
+    connection.start()
       .then(() => {
+        if (hubConnection !== connection) return; // stale — a newer connection took over
         handlers.onConnected?.();
         console.log('SignalR connected');
       })
       .catch((err) => {
+        if (hubConnection !== connection) return; // stale — intentional cleanup or remount
         console.error('SignalR connection failed:', err);
         handlers.onError?.(err.message);
       });

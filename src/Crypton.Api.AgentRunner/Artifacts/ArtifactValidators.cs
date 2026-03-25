@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AgentRunner.StateMachine;
 
@@ -17,10 +18,10 @@ public class ArtifactValidationResult
     public List<string> Warnings { get; set; } = new();
 
     public static ArtifactValidationResult Success() => new() { IsValid = true };
-    public static ArtifactValidationResult Failure(params string[] errors) => new() 
-    { 
-        IsValid = false, 
-        Errors = errors.ToList() 
+    public static ArtifactValidationResult Failure(params string[] errors) => new()
+    {
+        IsValid = false,
+        Errors = errors.ToList()
     };
 }
 
@@ -41,7 +42,7 @@ public class PlanArtifactValidator : IArtifactValidator
 {
     public string ArtifactType => "plan.md";
 
-    private static readonly string[] RequiredSections = 
+    private static readonly string[] RequiredSections =
     {
         "## 1. Meta-Signals",
         "## 2. Macro Market Conditions",
@@ -98,8 +99,8 @@ public class ResearchArtifactValidator : IArtifactValidator
         if (content.Length < 500)
             result.Warnings.Add("Research content seems unusually short");
 
-        var hasVerdicts = content.Contains("Confirmed") || 
-                          content.Contains("Contradicted") || 
+        var hasVerdicts = content.Contains("Confirmed") ||
+                          content.Contains("Contradicted") ||
                           content.Contains("Inconclusive");
         if (!hasVerdicts)
             result.Warnings.Add("No verdicts (Confirmed/Contradicted/Inconclusive) found");
@@ -180,7 +181,7 @@ public class StrategyArtifactValidator : IArtifactValidator
         try
         {
             var strategy = JsonSerializer.Deserialize<StrategySchema>(content, JsonOptions);
-            
+
             if (string.IsNullOrEmpty(strategy?.Mode))
             {
                 result.Errors.Add("Missing required field: mode");
@@ -192,14 +193,14 @@ public class StrategyArtifactValidator : IArtifactValidator
                 result.IsValid = false;
             }
 
-            if (string.IsNullOrEmpty(strategy?.ValidUntil))
+            if (string.IsNullOrEmpty(strategy?.ValidityWindow))
             {
-                result.Errors.Add("Missing required field: validUntil");
+                result.Errors.Add("Missing required field: validityWindow");
                 result.IsValid = false;
             }
-            else if (!DateTime.TryParse(strategy.ValidUntil, out _))
+            else if (!DateTime.TryParse(strategy.ValidityWindow, out _))
             {
-                result.Errors.Add($"Invalid validUntil format: {strategy.ValidUntil}");
+                result.Errors.Add($"Invalid validityWindow format: {strategy.ValidityWindow}");
                 result.IsValid = false;
             }
 
@@ -209,23 +210,23 @@ public class StrategyArtifactValidator : IArtifactValidator
                 result.IsValid = false;
             }
 
-            if (strategy?.Risk == null)
+            if (strategy?.PortfolioRisk == null)
             {
-                result.Errors.Add("Missing required field: risk");
+                result.Errors.Add("Missing required field: portfolioRisk");
                 result.IsValid = false;
             }
             else
             {
-                if (strategy.Risk.MaxDrawdown < 0 || strategy.Risk.MaxDrawdown > 1)
-                    result.Errors.Add("risk.maxDrawdown must be between 0 and 1");
-                if (strategy.Risk.DailyLossLimit < 0 || strategy.Risk.DailyLossLimit > 1)
-                    result.Errors.Add("risk.dailyLossLimit must be between 0 and 1");
-                if (strategy.Risk.MaxExposure < 0 || strategy.Risk.MaxExposure > 1)
-                    result.Errors.Add("risk.maxExposure must be between 0 and 1");
-                if (strategy.Risk.MaxPositionSize < 0 || strategy.Risk.MaxPositionSize > 1)
-                    result.Errors.Add("risk.maxPositionSize must be between 0 and 1");
+                if (strategy.PortfolioRisk.MaxDrawdownPct < 0 || strategy.PortfolioRisk.MaxDrawdownPct > 1)
+                    result.Errors.Add("portfolioRisk.maxDrawdownPct must be between 0 and 1");
+                if (strategy.PortfolioRisk.DailyLossLimitUsd < 0)
+                    result.Errors.Add("portfolioRisk.dailyLossLimitUsd must be non-negative");
+                if (strategy.PortfolioRisk.MaxTotalExposurePct < 0 || strategy.PortfolioRisk.MaxTotalExposurePct > 1)
+                    result.Errors.Add("portfolioRisk.maxTotalExposurePct must be between 0 and 1");
+                if (strategy.PortfolioRisk.MaxPerPositionPct < 0 || strategy.PortfolioRisk.MaxPerPositionPct > 1)
+                    result.Errors.Add("portfolioRisk.maxPerPositionPct must be between 0 and 1");
 
-                if (result.Errors.Any(e => e.StartsWith("risk.")))
+                if (result.Errors.Any(e => e.StartsWith("portfolioRisk.")))
                     result.IsValid = false;
             }
 
@@ -240,8 +241,8 @@ public class StrategyArtifactValidator : IArtifactValidator
                 {
                     if (string.IsNullOrEmpty(pos.Asset))
                         result.Errors.Add("position.asset is required");
-                    if (pos.Allocation < 0 || pos.Allocation > 1)
-                        result.Errors.Add($"position {pos.Asset}: allocation must be between 0 and 1");
+                    if (pos.AllocationPct < 0 || pos.AllocationPct > 1)
+                        result.Errors.Add($"position {pos.Asset}: allocationPct must be between 0 and 1");
                 }
                 if (result.Errors.Any(e => e.StartsWith("position")))
                     result.IsValid = false;
@@ -295,26 +296,51 @@ public class EvaluationArtifactValidator : IArtifactValidator
 
 public class StrategySchema
 {
+    [JsonPropertyName("mode")]
     public string? Mode { get; set; }
-    public string? ValidUntil { get; set; }
+
+    [JsonPropertyName("validityWindow")]
+    public string? ValidityWindow { get; set; }
+
+    [JsonPropertyName("posture")]
     public string? Posture { get; set; }
-    public string? Rationale { get; set; }
-    public RiskSchema? Risk { get; set; }
+
+    [JsonPropertyName("postureRationale")]
+    public string? PostureRationale { get; set; }
+
+    [JsonPropertyName("portfolioRisk")]
+    public RiskSchema? PortfolioRisk { get; set; }
+
+    [JsonPropertyName("positions")]
     public List<PositionSchema>? Positions { get; set; }
 }
 
 public class RiskSchema
 {
-    public double MaxDrawdown { get; set; }
-    public double DailyLossLimit { get; set; }
-    public double MaxExposure { get; set; }
-    public double MaxPositionSize { get; set; }
+    [JsonPropertyName("maxDrawdownPct")]
+    public double MaxDrawdownPct { get; set; }
+
+    [JsonPropertyName("dailyLossLimitUsd")]
+    public double DailyLossLimitUsd { get; set; }
+
+    [JsonPropertyName("maxTotalExposurePct")]
+    public double MaxTotalExposurePct { get; set; }
+
+    [JsonPropertyName("maxPerPositionPct")]
+    public double MaxPerPositionPct { get; set; }
 }
 
 public class PositionSchema
 {
+    [JsonPropertyName("asset")]
     public string? Asset { get; set; }
+
+    [JsonPropertyName("direction")]
     public string? Direction { get; set; }
-    public double Allocation { get; set; }
+
+    [JsonPropertyName("allocationPct")]
+    public double AllocationPct { get; set; }
+
+    [JsonPropertyName("entryType")]
     public string? EntryType { get; set; }
 }

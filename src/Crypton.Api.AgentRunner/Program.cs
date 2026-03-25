@@ -72,7 +72,7 @@ ValidateAgentRunnerConfiguration(config);
 
 var artifactManager = new ArtifactManager(config.Storage);
 var mailboxManager = new MailboxManager(config.Storage);
-var toolRegistry = new ToolRegistry(config);
+var toolRegistry = new ToolRegistry(config, mailboxManager);
 var stateMachine = new LoopStateMachine();
 var statePersistence = new StatePersistence("state.json");
 var contextBuilder = new AgentContextBuilder(artifactManager, mailboxManager, toolRegistry, config);
@@ -130,7 +130,8 @@ builder.Services.AddSingleton<IStartupValidator>(startupValidator);
 builder.Services.AddSingleton(serviceAvailabilityState);
 builder.Services.AddSingleton(startupCoordinator);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<AgentRunnerHubBroadcaster>();

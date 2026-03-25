@@ -139,8 +139,10 @@ public class AgentInvoker : IAgentInvoker
                 foreach (var call in toolCalls)
                 {
                     var result = executedTools.First(r => r.CallId == call.Id);
+                    // Avoid double-encoding: if Data is already a serialised JSON string, use it directly.
+                    var rawJson = result.Data is string s ? s : JsonSerializer.Serialize(result.Data);
                     var resultContent = result.Success
-                        ? CompactJson(JsonSerializer.Serialize(result.Data))
+                        ? CompactJson(rawJson)
                         : $"Error: {result.Error}";
 
                     // role=tool is the correct Ollama format for returning function results.
@@ -438,8 +440,9 @@ public class AgentInvoker : IAgentInvoker
             var result = await _toolExecutor.ExecuteAsync(call, cancellationToken);
             sw.Stop();
 
+            // Avoid double-encoding: if Data is already a serialised JSON string, use it directly.
             var resultJson = result.Success
-                ? JsonSerializer.Serialize(result.Data)
+                ? (result.Data is string sd ? sd : JsonSerializer.Serialize(result.Data))
                 : $"Error: {result.Error}";
 
             // Journal the full parameters and result for post-run analysis.
@@ -449,7 +452,7 @@ public class AgentInvoker : IAgentInvoker
 
             if (result.Success)
             {
-                var truncated = resultJson.Length > 200 ? resultJson[..200] + "..." : resultJson;
+                var truncated = resultJson.Length > 5000 ? resultJson[..5000] + "…" : resultJson;
                 onEvent?.Invoke($"[tool] ← {call.ToolName} OK ({sw.Elapsed.TotalSeconds:F1}s): {truncated}");
             }
             else

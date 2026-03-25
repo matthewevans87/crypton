@@ -110,47 +110,90 @@ function Gutter({ color, pulse }: { color: string; pulse?: boolean }) {
 
 // ────── Reasoning block ──────
 
-function ReasoningBlock({ block, isStreaming }: { block: ReasoningBlock; isStreaming: boolean }) {
+function ReasoningBlock({ block, isStreaming, expanded, onToggle }: { block: ReasoningBlock; isStreaming: boolean; expanded: boolean; onToggle: () => void }) {
+    const textRef = useRef<HTMLDivElement>(null);
+    const isOpen = expanded;
+
+    // Auto-scroll the text window to bottom as new tokens arrive
+    useEffect(() => {
+        if (isStreaming && textRef.current) {
+            textRef.current.scrollTop = textRef.current.scrollHeight;
+        }
+    }, [block.text, isStreaming]);
+
+    // Collapsed preview: first non-empty line, truncated
+    const preview = block.text.trim().split('\n').find((l) => l.trim()) ?? '';
+
     return (
         <div style={{ display: 'flex', gap: '8px', padding: '4px 0' }}>
             <Gutter color={ACTOR_COLOR.agent} pulse={isStreaming} />
             <div style={{ flex: 1, paddingBottom: '8px', minWidth: 0 }}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '3px' }}>
-                    <span style={{ fontSize: '10px', color: ACTOR_COLOR.agent, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        agent
-                    </span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                        {ts(block.startTs)}
-                    </span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                        {block.tokenCount} tok
-                    </span>
-                </div>
+                {/* Clickable header row */}
                 <div
+                    onClick={onToggle}
+                    role='button'
                     style={{
-                        fontSize: '11px',
-                        color: isStreaming ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        lineHeight: '1.55',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        padding: '3px 6px',
+                        border: `1px solid ${ACTOR_COLOR.agent}33`,
+                        backgroundColor: `${ACTOR_COLOR.agent}0a`,
+                        borderRadius: '2px',
+                        userSelect: 'none',
+                        marginBottom: isOpen ? '6px' : '0',
                     }}
                 >
-                    {block.text}
-                    {isStreaming && (
-                        <span
-                            style={{
-                                display: 'inline-block',
-                                width: '5px',
-                                height: '11px',
-                                backgroundColor: ACTOR_COLOR.agent,
-                                marginLeft: '1px',
-                                verticalAlign: 'middle',
-                                animation: 'pulse 1s infinite',
-                                opacity: 0.85,
-                            }}
-                        />
+                    <span style={{ fontSize: '10px', color: ACTOR_COLOR.agent, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                        agent
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                        {ts(block.startTs)}
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                        {block.tokenCount} tok
+                    </span>
+                    {!isOpen && preview && (
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {preview}
+                        </span>
                     )}
+                    <span style={{ fontSize: '9px', color: 'var(--text-tertiary)', flexShrink: 0, marginLeft: 'auto' }}>
+                        {isOpen ? '▲' : '▼'}
+                    </span>
                 </div>
+                {isOpen && (
+                    <div
+                        ref={textRef}
+                        style={{
+                            maxHeight: '320px',
+                            overflowY: 'auto',
+                            fontSize: '11px',
+                            fontFamily: 'var(--font-mono)',
+                            color: isStreaming ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            lineHeight: '1.55',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                        }}
+                    >
+                        {block.text}
+                        {isStreaming && (
+                            <span
+                                style={{
+                                    display: 'inline-block',
+                                    width: '5px',
+                                    height: '11px',
+                                    backgroundColor: ACTOR_COLOR.agent,
+                                    marginLeft: '1px',
+                                    verticalAlign: 'middle',
+                                    animation: 'pulse 1s infinite',
+                                    opacity: 0.85,
+                                }}
+                            />
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -274,7 +317,7 @@ export function AgentTracePanel() {
         setAutoScroll(scrollHeight - scrollTop - clientHeight < 64);
     };
 
-    const toggleTool = (id: string) => {
+    const toggle = (id: string) => {
         setExpanded((prev) => {
             const next = new Set(prev);
             if (next.has(id)) next.delete(id);
@@ -346,11 +389,14 @@ export function AgentTracePanel() {
                 {timeline.map((block, i) => {
                     const isLast = i === timeline.length - 1;
                     if (block.kind === 'reasoning') {
+                        const key = `r-${i}`;
                         return (
                             <ReasoningBlock
-                                key={`r-${i}`}
+                                key={key}
                                 block={block}
                                 isStreaming={isLast && isStreaming}
+                                expanded={expanded.has(key)}
+                                onToggle={() => toggle(key)}
                             />
                         );
                     }
@@ -359,7 +405,7 @@ export function AgentTracePanel() {
                             key={block.call.id}
                             call={block.call}
                             expanded={expanded.has(block.call.id)}
-                            onToggle={() => toggleTool(block.call.id)}
+                            onToggle={() => toggle(block.call.id)}
                         />
                     );
                 })}

@@ -61,6 +61,8 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _agentRunnerService.StepCompleted += OnStepCompleted;
         _agentRunnerService.TokenReceived += OnTokenReceived;
         _agentRunnerService.AgentEventReceived += OnAgentEventReceived;
+        _agentRunnerService.HealthWarning += OnHealthWarning;
+        _agentRunnerService.HealthCritical += OnHealthCritical;
 
         return Task.CompletedTask;
     }
@@ -74,6 +76,8 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
         _agentRunnerService.StepCompleted -= OnStepCompleted;
         _agentRunnerService.TokenReceived -= OnTokenReceived;
         _agentRunnerService.AgentEventReceived -= OnAgentEventReceived;
+        _agentRunnerService.HealthWarning -= OnHealthWarning;
+        _agentRunnerService.HealthCritical -= OnHealthCritical;
 
         _cts?.Cancel();
 
@@ -287,6 +291,32 @@ public sealed class AgentRunnerHubBroadcaster : IHostedService, IDisposable
                 });
         }
         // [iter N/M] and [LLM] markers are not forwarded to clients.
+    }
+
+    private void OnHealthWarning(object? sender, LoopHealthEventArgs e)
+    {
+        _ = _hub.Clients.Group(AgentRunnerHub.StatusGroup)
+            .SendAsync("StateChanged", new
+            {
+                state = e.CurrentState.ToString(),
+                cycle_id = _agentRunnerService.CurrentCycle?.CycleId,
+                is_stalled = true,
+                stall_message = e.Message,
+                timestamp = DateTimeOffset.UtcNow
+            });
+    }
+
+    private void OnHealthCritical(object? sender, LoopHealthEventArgs e)
+    {
+        _ = _hub.Clients.Group(AgentRunnerHub.StatusGroup)
+            .SendAsync("StateChanged", new
+            {
+                state = e.CurrentState.ToString(),
+                cycle_id = _agentRunnerService.CurrentCycle?.CycleId,
+                is_stalled = true,
+                stall_message = e.Message,
+                timestamp = DateTimeOffset.UtcNow
+            });
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

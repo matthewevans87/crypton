@@ -42,7 +42,8 @@ if (startupConfigErrors.Count > 0)
 
 builder.Host.UseSerilog();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
@@ -241,6 +242,10 @@ _ = Task.Run(async () =>
 });
 
 // AgentRunner: wire SignalR events → forward to DashboardHub, then connect with retry.
+// Tracks the last state name we broadcast so the periodic StatusUpdate heartbeat doesn't
+// re-emit AgentStateChanged when nothing has changed.
+string? lastBroadcastState = null;
+
 agentRunnerClient.OnStatusUpdate += (sender, payload) =>
 {
     try
@@ -251,10 +256,21 @@ agentRunnerClient.OnStatusUpdate += (sender, payload) =>
 
         if (stateName is null) return;
 
+        // Heartbeat: only emit AgentStateChanged when the state has actually changed.
+        // OnStepStarted/OnStepCompleted already handle in-cycle transitions with
+        // correct timestamps; this branch covers reconnect / initial-load scenarios.
+        if (stateName == lastBroadcastState) return;
+        lastBroadcastState = stateName;
+
+        var isStalled = payload.TryGetProperty("is_stalled", out var stalledProp) && stalledProp.GetBoolean();
+        var stallMessage = isStalled && payload.TryGetProperty("stall_message", out var sm) ? sm.GetString() : null;
+
         _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
         {
             CurrentState = stateName,
-            IsRunning = stateName is not ("WaitingForNextCycle" or "Idle" or "Paused"),
+            IsRunning = !isStalled && stateName is not ("WaitingForNextCycle" or "Idle" or "Paused"),
+            IsStalled = isStalled,
+            StallMessage = stallMessage,
             StateStartedAt = DateTime.UtcNow,
         });
     }
@@ -268,6 +284,7 @@ agentRunnerClient.OnStepStarted += (sender, payload) =>
         var stepName = payload.TryGetProperty("step_name", out var sn) ? sn.GetString() : null;
         if (stepName is null) return;
 
+        lastBroadcastState = stepName;
         _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
         {
             CurrentState = stepName,
@@ -284,9 +301,11 @@ agentRunnerClient.OnStepCompleted += (sender, payload) =>
     try
     {
         var stepName = payload.TryGetProperty("step_name", out var sn) ? sn.GetString() : null;
+        var completedState = stepName ?? "Idle";
+        lastBroadcastState = completedState;
         _ = dashboardHubContext.Clients.All.AgentStateChanged(new DashboardAgentState
         {
-            CurrentState = stepName ?? "Idle",
+            CurrentState = completedState,
             ActiveAgent = null,
             IsRunning = false,
             StateStartedAt = DateTime.UtcNow,

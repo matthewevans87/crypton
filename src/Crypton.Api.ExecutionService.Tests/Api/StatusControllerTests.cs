@@ -82,11 +82,11 @@ public sealed class StatusControllerTests : IDisposable
         var properties = body.GetType().GetProperties();
         var dict = properties.ToDictionary(p => p.Name, p => p.GetValue(body));
 
-        dict["mode"].Should().Be("paper");
-        dict["safe_mode"].Should().Be(false);
-        dict["is_degraded"].Should().Be(false);
-        dict["strategy_state"].Should().Be("active");
-        dict["strategy_id"].Should().Be("strat-123");
+        dict["Mode"].Should().Be("paper");
+        dict["SafeMode"].Should().Be(false);
+        dict["IsDegraded"].Should().Be(false);
+        dict["StrategyState"].Should().Be("active");
+        dict["StrategyId"].Should().Be("strat-123");
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public sealed class StatusControllerTests : IDisposable
         result.Should().NotBeNull();
         var dict = result!.Value!.GetType().GetProperties()
             .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
-        dict["safe_mode"].Should().Be(true);
-        dict["is_degraded"].Should().Be(true);
+        dict["SafeMode"].Should().Be(true);
+        dict["IsDegraded"].Should().Be(true);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public sealed class StatusControllerTests : IDisposable
 
         var dict = result.Value!.GetType().GetProperties()
             .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
-        dict["reason"].Should().Be("degraded");
+        dict["Reason"].Should().Be("degraded");
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class StatusControllerTests : IDisposable
         result.Should().NotBeNull();
         var dict = result!.Value!.GetType().GetProperties()
             .ToDictionary(p => p.Name, p => p.GetValue(result.Value));
-        dict["status"].Should().Be("ready");
+        dict["Status"].Should().Be("ready");
     }
 
     [Fact]

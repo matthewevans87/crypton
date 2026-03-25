@@ -8,64 +8,63 @@ public class PortfolioSummaryResponseValidatorTests
 {
     private readonly PortfolioSummaryResponseValidator _validator = new();
 
+    private static PortfolioSummaryResponse ValidResponse() => new()
+    {
+        Mode = "paper",
+        Balance = new BalanceSummaryResponse { AvailableUsd = 10000m },
+        OpenPositions = [],
+        RecentTrades = []
+    };
+
     [Fact]
     public void Validate_ValidResponse_NoErrors()
     {
-        var model = new PortfolioSummaryResponse
-        {
-            AvailableCapital = 10000m,
-            Positions = [],
-            TotalValue = 10000m
-        };
-
-        var result = _validator.TestValidate(model);
-
+        var result = _validator.TestValidate(ValidResponse());
         result.ShouldNotHaveAnyValidationErrors();
     }
 
     [Fact]
-    public void Validate_NullAvailableCapital_HasError()
+    public void Validate_NullBalance_HasError()
     {
-        var model = new PortfolioSummaryResponse
-        {
-            AvailableCapital = null,
-            Positions = []
-        };
+        var model = ValidResponse() with { Balance = null };
 
         var result = _validator.TestValidate(model);
 
-        result.ShouldHaveValidationErrorFor(x => x.AvailableCapital)
-              .WithErrorMessage("availableCapital is required — Execution Service response is incomplete");
+        result.ShouldHaveValidationErrorFor(x => x.Balance)
+              .WithErrorMessage("balance is required — Execution Service response is incomplete");
     }
 
     [Fact]
-    public void Validate_NullPositions_HasError()
+    public void Validate_NullAvailableUsd_HasError()
     {
-        var model = new PortfolioSummaryResponse
-        {
-            AvailableCapital = 10000m,
-            Positions = null
-        };
+        var model = ValidResponse() with { Balance = new BalanceSummaryResponse { AvailableUsd = null } };
 
         var result = _validator.TestValidate(model);
 
-        result.ShouldHaveValidationErrorFor(x => x.Positions)
-              .WithErrorMessage("positions is required — Execution Service response is incomplete");
+        result.ShouldHaveValidationErrorFor(x => x.Balance!.AvailableUsd)
+              .WithErrorMessage("balance.availableUsd is required — Execution Service response is incomplete");
     }
 
     [Fact]
-    public void Validate_BothFieldsMissing_HasMultipleErrors()
+    public void Validate_NullOpenPositions_HasError()
     {
-        var model = new PortfolioSummaryResponse
-        {
-            AvailableCapital = null,
-            Positions = null
-        };
+        var model = ValidResponse() with { OpenPositions = null };
 
         var result = _validator.TestValidate(model);
 
-        result.ShouldHaveValidationErrorFor(x => x.AvailableCapital);
-        result.ShouldHaveValidationErrorFor(x => x.Positions);
+        result.ShouldHaveValidationErrorFor(x => x.OpenPositions)
+              .WithErrorMessage("openPositions is required — Execution Service response is incomplete");
+    }
+
+    [Fact]
+    public void Validate_NullBalanceAndNullOpenPositions_HasMultipleErrors()
+    {
+        var model = ValidResponse() with { Balance = null, OpenPositions = null };
+
+        var result = _validator.TestValidate(model);
+
+        result.ShouldHaveValidationErrorFor(x => x.Balance);
+        result.ShouldHaveValidationErrorFor(x => x.OpenPositions);
     }
 }
 

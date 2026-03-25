@@ -28,6 +28,34 @@ Shared configuration helpers live in `Crypton.Configuration`.
 - Agent Runner writes loop artifacts (plan.md, research.md, strategy.json, etc.) to the `artifacts/` directory on disk.
 - Mailboxes are files in `mailboxes/`; max 5 messages per inbox, 1–2 sentences each.
 
+### Agent Telemetry Pipeline
+
+Agent Runner telemetry reaches the browser through a **four-stage pipeline**. Understand this fully before touching anything in `AgentInvoker`, `AgentRunnerHubBroadcaster`, `MonitoringDashboard/Program.cs`, or `signalr.ts`.
+
+```
+AgentInvoker (AgentRunner)
+  → fires string events: "[tool] → toolName({json})", "[tool] ← toolName OK (1.2s): ...", tokens
+AgentRunnerService
+  → wraps as AgentEventArgs { EventMessage, StepName }
+  → raises AgentEventReceived
+AgentRunnerHubBroadcaster
+  → parses the string events by prefix
+  → emits to SignalR groups: ToolCallStarted, ToolCallCompleted, TokenReceived, StepStarted, StepCompleted
+AgentRunnerClient (MonitoringDashboard)
+  → subscribes to hub methods and raises typed C# events: OnToolCallStarted, OnToolCallCompleted, OnTokenReceived, OnStepStarted, OnStepCompleted
+MonitoringDashboard/Program.cs
+  → all five OnXxx handlers MUST be wired; missing any = silent data loss
+  → maps payloads to DashboardToolCall / DashboardReasoningStep / DashboardAgentState
+  → emits to DashboardHub → Browser
+Browser signalr.ts / App.tsx
+  → receives ToolCallStarted, ToolCallCompleted, ReasoningUpdated, AgentStateChanged
+```
+
+**Critical invariant — ToolCallStarted / ToolCallCompleted data split:**
+- `ToolCallStarted` carries `input` (the JSON-serialised parameters) and `output = null / isCompleted = false`.
+- `ToolCallCompleted` carries `output` (result or error text) and `input = ""` — **it does not re-send the request parameters**.
+- The browser `onToolCallUpdated` handler **must merge on `id`**, preserving `input` from the Started event when the Completed event arrives. Replacing the record wholesale loses the request.
+
 ## Design Philosophy
 
 We want a system that is both _elegant_ (straightforward to understand, well-designed, efficient) and _correct_ (works as expected, robust and fault-tolerant).
@@ -67,6 +95,7 @@ This tool is made for and used by developers. Exposing technical details is a fe
 - `async`/`await` throughout; no `.Result` or `.Wait()`.
 - Prefer `record` types for DTOs and immutable data. Use `class` for stateful services.
 - All `HttpClient` instances are registered via `IHttpClientFactory`.
+- All REST API responses use **camelCase**: configure `JsonNamingPolicy.CamelCase` on `AddControllers().AddJsonOptions(...)` in every service's `Program.cs`. Never use snake_case in controller anonymous object member names or `[JsonPropertyName]` attributes on HTTP-facing models. Snake_case is reserved for disk-persistence serializers (e.g. `PositionRegistry.JsonOpts`).
 
 ### Naming
 - Namespaces mirror folder structure under each project root.

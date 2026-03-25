@@ -47,23 +47,23 @@ public sealed class StatusController : ControllerBase
     [HttpGet("/api/status")]
     public IActionResult GetStatus() => Ok(new
     {
-        mode = _mode.CurrentMode,
-        safe_mode = _safeMode.IsActive,
-        is_degraded = _safeMode.IsActive,
-        safe_mode_triggered = _riskEnforcer.SafeModeTriggered,
-        safe_mode_reason = _riskEnforcer.SafeModeTriggerReason,
-        degraded_errors = _safeMode.IsActive && !string.IsNullOrWhiteSpace(_safeMode.Reason)
+        Mode = _mode.CurrentMode,
+        SafeMode = _safeMode.IsActive,
+        IsDegraded = _safeMode.IsActive,
+        SafeModeTriggered = _riskEnforcer.SafeModeTriggered,
+        SafeModeReason = _riskEnforcer.SafeModeTriggerReason,
+        DegradedErrors = _safeMode.IsActive && !string.IsNullOrWhiteSpace(_safeMode.Reason)
             ? new[] { _safeMode.Reason }
             : Array.Empty<string>(),
-        entries_suspended = _riskEnforcer.EntriesSuspended,
-        strategy_state = _strategy.State.ToString().ToLowerInvariant(),
-        strategy_id = _strategy.ActiveStrategyId,
-        open_positions = _positions.OpenPositions.Count,
-        last_tick_at = _marketData.LastTickAt
+        EntriesSuspended = _riskEnforcer.EntriesSuspended,
+        StrategyState = _strategy.State.ToString().ToLowerInvariant(),
+        StrategyId = _strategy.ActiveStrategyId,
+        OpenPositions = _positions.OpenPositions.Count,
+        LastTickAt = _marketData.LastTickAt
     });
 
     [HttpGet("/health/live")]
-    public IActionResult Live() => Ok(new { status = "alive" });
+    public IActionResult Live() => Ok(new { Status = "alive" });
 
     [HttpGet("/health/ready")]
     public IActionResult Ready()
@@ -72,9 +72,9 @@ public sealed class StatusController : ControllerBase
         {
             return StatusCode(503, new
             {
-                status = "not ready",
-                reason = "degraded",
-                errors = !string.IsNullOrWhiteSpace(_safeMode.Reason)
+                Status = "not ready",
+                Reason = "degraded",
+                Errors = !string.IsNullOrWhiteSpace(_safeMode.Reason)
                     ? new[] { _safeMode.Reason }
                     : new[] { "safe mode active" }
             });
@@ -82,10 +82,10 @@ public sealed class StatusController : ControllerBase
 
         return Ok(new
         {
-            status = "ready",
-            checks = new[]
+            Status = "ready",
+            Checks = new[]
             {
-                new { name = "safe_mode", passed = true }
+                new { Name = "safe_mode", Passed = true }
             }
         });
     }
@@ -111,7 +111,7 @@ public sealed class StrategyController : ControllerBase
     public IActionResult GetStrategy()
     {
         var s = _strategy.ActiveStrategy;
-        return s is null ? NotFound(new { error = "No active strategy." }) : Ok(s);
+        return s is null ? NotFound(new { Error = "No active strategy." }) : Ok(s);
     }
 
     /// <summary>
@@ -123,20 +123,20 @@ public sealed class StrategyController : ControllerBase
     public async Task<IActionResult> PushStrategy(CancellationToken ct)
     {
         if (!_config.EnableRestEndpoint)
-            return StatusCode(409, new { error = "REST strategy push is disabled in config (Strategy.EnableRestEndpoint = false)." });
+            return StatusCode(409, new { Error = "REST strategy push is disabled in config (Strategy.EnableRestEndpoint = false)." });
 
         string json;
         using var reader = new System.IO.StreamReader(Request.Body);
         json = await reader.ReadToEndAsync(ct);
 
         if (string.IsNullOrWhiteSpace(json))
-            return BadRequest(new { error = "Request body must contain a JSON strategy document." });
+            return BadRequest(new { Error = "Request body must contain a JSON strategy document." });
 
         var error = await _strategy.LoadFromJsonAsync(json, ct);
         if (error is not null)
-            return UnprocessableEntity(new { error });
+            return UnprocessableEntity(new { Error = error });
 
-        return Ok(new { strategy_id = _strategy.ActiveStrategyId });
+        return Ok(new { StrategyId = _strategy.ActiveStrategyId });
     }
 }
 
@@ -158,7 +158,7 @@ public sealed class PositionsController : ControllerBase
     public IActionResult GetPosition(string id)
     {
         var pos = _registry.OpenPositions.FirstOrDefault(p => p.Id == id);
-        return pos is null ? NotFound(new { error = "Position not found." }) : Ok(pos);
+        return pos is null ? NotFound(new { Error = "Position not found." }) : Ok(pos);
     }
 }
 
@@ -255,7 +255,7 @@ public sealed class OperatorController : ControllerBase
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(body.Reason))
-            return BadRequest(new { error = "reason is required." });
+            return BadRequest(new { Error = "reason is required." });
 
         await _safeMode.ActivateAsync(body.Reason, ct);
         return NoContent();
@@ -329,15 +329,15 @@ public sealed class PortfolioController : ControllerBase
         var balance = await _exchange.GetAccountBalanceAsync(ct);
         return Ok(new
         {
-            mode = _mode.CurrentMode.ToString().ToLowerInvariant(),
-            balance = new
+            Mode = _mode.CurrentMode.ToString().ToLowerInvariant(),
+            Balance = new
             {
-                available_usd = balance.AvailableUsd,
-                asset_balances = balance.AssetBalances,
-                timestamp = balance.Timestamp
+                AvailableUsd = balance.AvailableUsd,
+                AssetBalances = balance.AssetBalances,
+                Timestamp = balance.Timestamp
             },
-            open_positions = _registry.OpenPositions,
-            recent_trades = _registry.ClosedTrades.TakeLast(50)
+            OpenPositions = _registry.OpenPositions,
+            RecentTrades = _registry.ClosedTrades.TakeLast(50)
         });
     }
 }

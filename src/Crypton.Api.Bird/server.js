@@ -13,10 +13,20 @@ const TIMEOUT_MS = parseInt(process.env.BIRD_TIMEOUT_MS ?? "30000", 10);
 
 function execBird(args, timeoutMs) {
   return new Promise((resolve) => {
-    const parts = args.match(/"[^"]*"|\S+/g) ?? [];
+    const parts = (args.match(/"[^"]*"|\S+/g) ?? []).map((p) =>
+      p.startsWith('"') && p.endsWith('"') ? p.slice(1, -1) : p
+    );
+    // Forward credentials: bird CLI expects AUTH_TOKEN and CT0 env vars.
+    // BIRD_AUTH_TOKEN / BIRD_CT0 are the Crypton-namespaced names loaded from .env.
+    const childEnv = {
+      ...process.env,
+      AUTH_TOKEN: process.env.BIRD_AUTH_TOKEN ?? process.env.AUTH_TOKEN ?? "",
+      CT0: process.env.BIRD_CT0 ?? process.env.CT0 ?? "",
+    };
     const child = spawn("bird", parts, {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: timeoutMs,
+      env: childEnv,
     });
 
     const stdout = [];

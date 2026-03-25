@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentRunner.Configuration;
 using AgentRunner.Tools;
+using AgentRunner.Mailbox;
 
 namespace AgentRunner.Tools;
 
@@ -9,18 +10,18 @@ public class ToolRegistry
     private readonly ToolExecutor _executor;
     private readonly Dictionary<string, ToolDefinition> _definitions = new();
 
-    public ToolRegistry(AgentRunnerConfig config)
+    public ToolRegistry(AgentRunnerConfig config, MailboxManager mailboxManager)
     {
         _executor = new ToolExecutor(
             defaultTimeoutSeconds: config.Tools.DefaultTimeoutSeconds,
             maxRetries: config.Tools.MaxRetries,
             maxRetryDelaySeconds: config.Tools.MaxRetryDelaySeconds);
-        InitializeTools(config);
+        InitializeTools(config, mailboxManager);
     }
 
     public ToolExecutor Executor => _executor;
 
-    private void InitializeTools(AgentRunnerConfig config)
+    private void InitializeTools(AgentRunnerConfig config, MailboxManager mailboxManager)
     {
         var httpClient = new HttpClient();
         httpClient.Timeout = TimeSpan.FromSeconds(config.Tools.DefaultTimeoutSeconds * 2);
@@ -35,13 +36,30 @@ public class ToolRegistry
             httpClient,
             config.Tools.MarketDataService.BaseUrl,
             config.Tools.CacheTtlSeconds);
+        var getPriceTool = new GetPriceTool(
+            httpClient,
+            config.Tools.MarketDataService.BaseUrl,
+            config.Tools.CacheTtlSeconds);
+        var macroSignalsTool = new MacroSignalsTool(
+            httpClient,
+            config.Tools.MarketDataService.BaseUrl,
+            config.Tools.CacheTtlSeconds);
+        var orderBookTool = new OrderBookTool(
+            httpClient,
+            config.Tools.MarketDataService.BaseUrl,
+            config.Tools.CacheTtlSeconds);
         var birdTool = new BirdTool(httpClient, config.Tools.Bird.BaseUrl, config.Tools.DefaultTimeoutSeconds);
+        var sendMailTool = new SendMailTool(mailboxManager);
 
         _executor.RegisterTool(webSearchTool);
         _executor.RegisterTool(webFetchTool);
         _executor.RegisterTool(currentPositionTool);
         _executor.RegisterTool(technicalIndicatorsTool);
+        _executor.RegisterTool(getPriceTool);
+        _executor.RegisterTool(macroSignalsTool);
+        _executor.RegisterTool(orderBookTool);
         _executor.RegisterTool(birdTool);
+        _executor.RegisterTool(sendMailTool);
 
         foreach (var tool in _executor.GetAllTools().Values)
         {

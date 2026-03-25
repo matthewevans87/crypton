@@ -62,7 +62,8 @@ var builder = WebApplication.CreateBuilder(args);
 ValidateExecutionServiceConfiguration(builder.Configuration);
 
 builder.Services.AddExecutionServiceCore(builder.Configuration);
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenApi();

@@ -52,7 +52,7 @@ public sealed class PortfolioRiskEnforcer
             SafeModeTriggerReason = $"max_drawdown_breached ({drawdownPct:P2} >= {limits.MaxDrawdownPct:P2})";
             await _eventLogger.LogAsync(EventTypes.RiskLimitBreached, currentMode, new Dictionary<string, object?>
             {
-                ["limit"] = "max_drawdown_pct",
+                ["limit"] = "maxDrawdownPct",
                 ["value"] = (double)drawdownPct,
                 ["threshold"] = (double)limits.MaxDrawdownPct,
                 ["action"] = "safe_mode"
@@ -65,7 +65,7 @@ public sealed class PortfolioRiskEnforcer
             EntriesSuspended = true;
             await _eventLogger.LogAsync(EventTypes.RiskLimitBreached, currentMode, new Dictionary<string, object?>
             {
-                ["limit"] = "max_total_exposure_pct",
+                ["limit"] = "maxTotalExposurePct",
                 ["value"] = (double)exposurePct,
                 ["threshold"] = (double)limits.MaxTotalExposurePct,
                 ["action"] = "suspend_entries"
@@ -83,7 +83,7 @@ public sealed class PortfolioRiskEnforcer
             EntriesSuspended = true;
             await _eventLogger.LogAsync(EventTypes.RiskLimitBreached, currentMode, new Dictionary<string, object?>
             {
-                ["limit"] = "daily_loss_limit_usd",
+                ["limit"] = "dailyLossLimitUsd",
                 ["value"] = (double)dailyLossUsd,
                 ["threshold"] = (double)limits.DailyLossLimitUsd,
                 ["action"] = "suspend_entries_until_utc_midnight"

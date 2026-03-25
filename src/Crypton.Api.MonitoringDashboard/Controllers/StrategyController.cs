@@ -27,7 +27,7 @@ public class StrategyController : ControllerBase
     {
         var (statusCode, body) = await _executionServiceClient.GetStrategyAsync(ct);
         if (statusCode == 404)
-            return Ok((object?)null);
+            return Content("null", "application/json", System.Text.Encoding.UTF8);
         Response.StatusCode = statusCode;
         return Content(body, "application/json", System.Text.Encoding.UTF8);
     }

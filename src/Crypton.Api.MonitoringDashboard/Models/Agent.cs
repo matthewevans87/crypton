@@ -6,6 +6,9 @@ public class AgentState
     public string? ActiveAgent { get; set; }
     public DateTime StateStartedAt { get; set; }
     public bool IsRunning { get; set; }
+    /// <summary>True when the loop has not changed state for longer than the stall warning threshold (retry backoff in progress).</summary>
+    public bool IsStalled { get; set; }
+    public string? StallMessage { get; set; }
     public TimeSpan TimeInState => DateTime.UtcNow - StateStartedAt;
     public double ProgressPercent { get; set; }
     public string? CurrentTool { get; set; }

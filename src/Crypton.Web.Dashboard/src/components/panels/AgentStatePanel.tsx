@@ -49,6 +49,21 @@ export function AgentStatePanel() {
         </div>
       )}
 
+      {/* Stall warning — shown when loop is in retry backoff with no state change */}
+      {state.isStalled && (
+        <div style={{
+          fontSize: 'var(--font-size-xs)',
+          color: 'var(--color-warning)',
+          background: 'color-mix(in srgb, var(--color-warning) 10%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '4px 8px',
+          marginTop: 'var(--space-1)',
+        }}>
+          {state.stallMessage ?? 'Retry backoff in progress — waiting before next attempt'}
+        </div>
+      )}
+
       {/* Progress Bar */}
       <div style={{ marginTop: 'var(--space-1)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: '4px' }}>

@@ -140,6 +140,9 @@ export interface AgentState {
   activeAgent?: string;
   stateStartedAt: string;
   isRunning: boolean;
+  /** True when the loop is stalled in a retry backoff and has not changed state for a while. */
+  isStalled?: boolean;
+  stallMessage?: string;
   timeInState: number;
   progressPercent: number;
   currentTool?: string;

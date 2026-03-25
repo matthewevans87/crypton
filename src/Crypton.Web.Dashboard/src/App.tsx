@@ -168,12 +168,16 @@ function App() {
         setPortfolioData({ positions: currentPositions.filter((p) => p.id !== positionId) });
       },
       onAgentStateChanged: (state) => {
-        const prevState = useDashboardStore.getState().agent.state;
-        if (state.isRunning && prevState?.currentState !== state.currentState) {
+        const prevData = useDashboardStore.getState().agent;
+        const prevState = prevData.state;
+        // Keep LoopStatePanel + AgentStatePanel in sync — agent.loop.agentState is only
+        // loaded once at initial REST load and never refreshed otherwise.
+        const loopUpdate = prevData.loop ? { loop: { ...prevData.loop, agentState: state } } : {};
+        if (!state.isStalled && state.isRunning && prevState?.currentState !== state.currentState) {
           // New step started — clear per-step streaming buffers
-          setAgentData({ state, reasoning: [], toolCalls: [] });
+          setAgentData({ state, ...loopUpdate, reasoning: [], toolCalls: [] });
         } else {
-          setAgentData({ state });
+          setAgentData({ state, ...loopUpdate });
         }
       },
       onToolCallUpdated: (toolCall: ToolCall) => {
@@ -182,7 +186,8 @@ function App() {
         let updated: ToolCall[];
         if (idx >= 0) {
           updated = [...currentCalls];
-          updated[idx] = toolCall;
+          // Preserve input from ToolCallStarted — ToolCallCompleted does not carry it
+          updated[idx] = { ...currentCalls[idx], ...toolCall, input: toolCall.input || currentCalls[idx].input };
         } else {
           updated = [...currentCalls, toolCall];
         }
