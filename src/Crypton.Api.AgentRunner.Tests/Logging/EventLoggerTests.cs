@@ -1,5 +1,6 @@
+using AgentRunner.Abstractions;
+using AgentRunner.Domain;
 using AgentRunner.Logging;
-using AgentRunner.StateMachine;
 using System.Text.Json;
 using Xunit;
 
@@ -36,7 +37,7 @@ public class EventLoggerTests : IDisposable
         var logger = MakeLogger();
         logger.LogInfo("hello world");
         var content = File.ReadAllText(_logPath);
-        Assert.Contains("[INFO] hello world", content);
+        Assert.Contains("[INFO   ] hello world", content);
     }
 
     [Fact]
@@ -45,7 +46,7 @@ public class EventLoggerTests : IDisposable
         var logger = MakeLogger();
         logger.LogWarning("watch out");
         var content = File.ReadAllText(_logPath);
-        Assert.Contains("[WARN] watch out", content);
+        Assert.Contains("[WARN   ] watch out", content);
     }
 
     [Fact]
@@ -54,7 +55,7 @@ public class EventLoggerTests : IDisposable
         var logger = MakeLogger();
         logger.LogError("something broke");
         var content = File.ReadAllText(_logPath);
-        Assert.Contains("[ERROR] something broke", content);
+        Assert.Contains("[ERROR  ] something broke", content);
     }
 
     [Fact]
@@ -263,8 +264,8 @@ public class EventLoggerTests : IDisposable
     {
         var logger = new EventLogger(_logPath, cyclesBasePath: null);
         var manifest = new InvocationManifest("model", 0.1, 65536, 1, 50, 1000, true, null);
-        var ex = Record.Exception(() => logger.LogInvocationManifest("Plan", "cycle-001", manifest));
-        Assert.Null(ex);
+        // Should not throw — if it does the test will fail automatically
+        logger.LogInvocationManifest("Plan", "cycle-001", manifest);
     }
 
     [Fact]

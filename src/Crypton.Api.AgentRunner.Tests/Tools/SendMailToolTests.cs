@@ -1,6 +1,8 @@
 using AgentRunner.Configuration;
-using AgentRunner.Mailbox;
-using AgentRunner.Tools;
+using AgentRunner.Domain;
+using AgentRunner.Execution.Tools;
+using AgentRunner.Infrastructure;
+using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
@@ -8,31 +10,28 @@ namespace AgentRunner.Tests.Tools;
 public class SendMailToolTests : IDisposable
 {
     private readonly string _tempPath;
-    private readonly MailboxManager _mailboxManager;
+    private readonly FileMailboxService _mailbox;
     private readonly SendMailTool _tool;
+    private AIFunction? _fn;
 
     public SendMailToolTests()
     {
         _tempPath = Path.Combine(Path.GetTempPath(), $"sendmail_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempPath);
-
-        var config = new StorageConfig
+        _mailbox = new FileMailboxService(new StorageConfig
         {
             BasePath = _tempPath,
             MailboxesPath = Path.Combine(_tempPath, "mailboxes"),
             MaxMailboxMessages = 5
-        };
-        _mailboxManager = new MailboxManager(config);
-        _tool = new SendMailTool(_mailboxManager);
+        });
+        _tool = new SendMailTool(_mailbox);
+        _fn = _tool.AsAIFunction();
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempPath))
-            Directory.Delete(_tempPath, recursive: true);
+        if (Directory.Exists(_tempPath)) Directory.Delete(_tempPath, recursive: true);
     }
-
-    // ── Metadata ──────────────────────────────────────────────────────────────
 
     [Fact]
     public void Name_IsSendMail()
@@ -41,70 +40,48 @@ public class SendMailToolTests : IDisposable
     }
 
     [Fact]
-    public void Parameters_RequiresToFromAndMessage()
+    public async Task ExecuteAsync_ValidRecipient_ReturnsConfirmation()
     {
-        var required = _tool.Parameters!.Required;
-        Assert.Contains("to", required);
-        Assert.Contains("from", required);
-        Assert.Contains("message", required);
-    }
-
-    // ── Parameter validation ──────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ExecuteAsync_MissingTo_ReturnsError()
-    {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
+        var args = new AIFunctionArguments(new Dictionary<string, object?>
         {
+            ["to"] = "research",
             ["from"] = "plan",
-            ["message"] = "hello"
+            ["message"] = "test message"
         });
-
-        Assert.False(result.Success);
-        Assert.Contains("to", result.Error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_MissingFrom_ReturnsError()
-    {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["to"] = "research",
-            ["message"] = "hello"
-        });
-
-        Assert.False(result.Success);
-        Assert.Contains("from", result.Error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_MissingMessage_ReturnsError()
-    {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["to"] = "research",
-            ["from"] = "plan"
-        });
-
-        Assert.False(result.Success);
-        Assert.Contains("message", result.Error, StringComparison.OrdinalIgnoreCase);
+        var result = (await _fn!.InvokeAsync(args))?.ToString();
+        Assert.Contains("delivered", result, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task ExecuteAsync_UnknownRecipient_ReturnsError()
     {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
+        var args = new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["to"] = "oracle",
             ["from"] = "plan",
-            ["message"] = "hello"
+            ["message"] = "test"
         });
-
-        Assert.False(result.Success);
-        Assert.Contains("oracle", result.Error, StringComparison.OrdinalIgnoreCase);
+        var result = (await _fn!.InvokeAsync(args))?.ToString();
+        Assert.Contains("oracle", result, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── Successful delivery ───────────────────────────────────────────────────
+    [Fact]
+    public async Task ExecuteAsync_ValidCall_DepositsToMailbox()
+    {
+        var args = new AIFunctionArguments(new Dictionary<string, object?>
+        {
+            ["to"] = "research",
+            ["from"] = "plan",
+            ["message"] = "Focus on BTC."
+        });
+        await _fn!.InvokeAsync(args);
+
+        var messages = _mailbox.GetMessages("research", 10);
+        Assert.Single(messages);
+        Assert.Equal("plan", messages[0].FromAgent);
+        Assert.Equal("research", messages[0].ToAgent);
+        Assert.Equal("Focus on BTC.", messages[0].Content);
+    }
 
     [Theory]
     [InlineData("plan")]
@@ -112,61 +89,15 @@ public class SendMailToolTests : IDisposable
     [InlineData("analysis")]
     [InlineData("synthesis")]
     [InlineData("evaluation")]
-    public async Task ExecuteAsync_ValidRecipient_Succeeds(string recipient)
+    public async Task ExecuteAsync_AllValidRecipients_Succeed(string recipient)
     {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
+        var args = new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["to"] = recipient,
             ["from"] = "plan",
-            ["message"] = "test message"
-        });
-
-        Assert.True(result.Success);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ValidCall_DepositsMessageInMailbox()
-    {
-        await _tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["to"] = "research",
-            ["from"] = "plan",
-            ["message"] = "Focus on BTC macro signals."
-        });
-
-        var messages = _mailboxManager.GetMessages("research");
-        Assert.Single(messages);
-        Assert.Equal("plan", messages[0].FromAgent);
-        Assert.Equal("research", messages[0].ToAgent);
-        Assert.Equal("Focus on BTC macro signals.", messages[0].Content);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_RecipientIsCaseInsensitive_Succeeds()
-    {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["to"] = "RESEARCH",
-            ["from"] = "Plan",
             ["message"] = "test"
         });
-
-        Assert.True(result.Success);
-        var messages = _mailboxManager.GetMessages("research");
-        Assert.Single(messages);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ReturnsToFromAndMessageInData()
-    {
-        var result = await _tool.ExecuteAsync(new Dictionary<string, object>
-        {
-            ["to"] = "analysis",
-            ["from"] = "research",
-            ["message"] = "Momentum is bullish."
-        });
-
-        Assert.True(result.Success);
-        Assert.NotNull(result.Data);
+        var result = (await _fn!.InvokeAsync(args))?.ToString();
+        Assert.DoesNotContain("Error:", result, StringComparison.OrdinalIgnoreCase);
     }
 }

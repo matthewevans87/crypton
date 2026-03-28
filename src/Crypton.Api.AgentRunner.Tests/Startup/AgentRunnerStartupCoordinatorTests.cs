@@ -1,125 +1,60 @@
-using AgentRunner.Agents;
 using AgentRunner.Configuration;
-using AgentRunner.Startup;
 using Xunit;
 
 namespace AgentRunner.Tests.Startup;
 
-public class AgentRunnerStartupCoordinatorTests
+/// <summary>Tests for configuration-level startup validation.</summary>
+public class ConfigurationStartupValidationTests
 {
     [Fact]
-    public async Task TryStartAsync_ValidationFails_EntersDegradedAndDoesNotStartLoop()
+    public void AgentRunnerConfig_DefaultValues_AreSet()
     {
-        var validator = new FakeStartupValidator(StartupValidationResultForErrors("Execution Service unavailable"));
-        var availability = new ServiceAvailabilityState();
-        var runner = new FakeAgentRunnerLifecycle();
-        var coordinator = new AgentRunnerStartupCoordinator(validator, availability, runner, CreateConfig());
+        var config = new AgentRunnerConfig();
 
-        var result = await coordinator.TryStartAsync();
-
-        Assert.False(result.Started);
-        Assert.True(result.IsDegraded);
-        Assert.Equal(1, validator.CallCount);
-        Assert.Equal(0, runner.StartCallCount);
-        Assert.True(availability.IsDegraded);
-        Assert.Single(availability.Errors);
+        Assert.NotNull(config.Cycle);
+        Assert.NotNull(config.Resilience);
+        Assert.NotNull(config.Agents);
+        Assert.NotNull(config.Tools);
+        Assert.NotNull(config.Ollama);
+        Assert.NotNull(config.Storage);
+        Assert.NotNull(config.Api);
+        Assert.NotNull(config.Logging);
     }
 
     [Fact]
-    public async Task TryStartAsync_AfterRecovery_ClearsDegradedAndStartsLoop()
+    public void AgentRunnerConfig_GetAgentSettings_ThrowsWhenNotConfigured()
     {
-        var validator = new FakeStartupValidator(
-            StartupValidationResultForErrors("Market Data unavailable"),
-            StartupValidationResultForSuccess());
-        var availability = new ServiceAvailabilityState();
-        var runner = new FakeAgentRunnerLifecycle();
-        var coordinator = new AgentRunnerStartupCoordinator(validator, availability, runner, CreateConfig());
-
-        var degradedResult = await coordinator.TryStartAsync();
-        var recoveredResult = await coordinator.TryStartAsync();
-
-        Assert.False(degradedResult.Started);
-        Assert.True(degradedResult.IsDegraded);
-
-        Assert.True(recoveredResult.Started);
-        Assert.False(recoveredResult.IsDegraded);
-        Assert.Equal(2, validator.CallCount);
-        Assert.Equal(1, runner.StartCallCount);
-        Assert.False(availability.IsDegraded);
-        Assert.Empty(availability.Errors);
+        var config = new AgentRunnerConfig();
+        Assert.Throws<InvalidOperationException>(() => config.GetAgentSettings("plan"));
     }
 
     [Fact]
-    public async Task TryStartAsync_AlreadyRunning_DoesNotRevalidateOrRestart()
+    public void AgentRunnerConfig_GetAgentSettings_ReturnsSettings()
     {
-        var validator = new FakeStartupValidator(StartupValidationResultForSuccess());
-        var availability = new ServiceAvailabilityState();
-        var runner = new FakeAgentRunnerLifecycle { IsRunning = true };
-        var coordinator = new AgentRunnerStartupCoordinator(validator, availability, runner, CreateConfig());
-
-        var result = await coordinator.TryStartAsync();
-
-        Assert.False(result.Started);
-        Assert.False(result.IsDegraded);
-        Assert.Equal(0, validator.CallCount);
-        Assert.Equal(0, runner.StartCallCount);
-    }
-
-    private static AgentRunnerConfig CreateConfig() => new()
-    {
-        Ollama = new OllamaConfig { BaseUrl = "http://localhost:11434" },
-        Tools = new ToolConfig
+        var config = new AgentRunnerConfig
         {
-            BraveSearch = new BraveSearchConfig { ApiKey = "test-key" },
-            ExecutionService = new ExecutionServiceConfig { BaseUrl = "http://localhost:5000" },
-            MarketDataService = new MarketDataServiceConfig { BaseUrl = "http://localhost:5002" }
-        }
-    };
-
-    private static StartupValidationResult StartupValidationResultForSuccess() => new(true, []);
-
-    private static StartupValidationResult StartupValidationResultForErrors(params string[] errors) =>
-        new(false, errors);
-
-    private sealed class FakeStartupValidator : IStartupValidator
-    {
-        private readonly Queue<StartupValidationResult> _results;
-
-        public FakeStartupValidator(params StartupValidationResult[] results)
-        {
-            _results = new Queue<StartupValidationResult>(results);
-        }
-
-        public int CallCount { get; private set; }
-
-        public Task<StartupValidationResult> ValidateAsync(AgentRunnerConfig config, CancellationToken cancellationToken = default)
-        {
-            CallCount++;
-            if (_results.Count == 0)
+            Agents = new Dictionary<string, AgentSettings>
             {
-                return Task.FromResult(new StartupValidationResult(true, []));
+                ["plan"] = new AgentSettings { Model = "qwen3:35b", TimeoutMinutes = 30 }
             }
+        };
 
-            return Task.FromResult(_results.Dequeue());
-        }
+        var settings = config.GetAgentSettings("plan");
+        Assert.Equal("qwen3:35b", settings.Model);
     }
 
-    private sealed class FakeAgentRunnerLifecycle : IAgentRunnerLifecycle
+    [Fact]
+    public void AgentRunnerConfig_GetAgentSettings_IsCaseInsensitive()
     {
-        public bool IsRunning { get; set; }
-        public int StartCallCount { get; private set; }
-
-        public Task StartAsync()
+        var config = new AgentRunnerConfig
         {
-            StartCallCount++;
-            IsRunning = true;
-            return Task.CompletedTask;
-        }
+            Agents = new Dictionary<string, AgentSettings>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["PLAN"] = new AgentSettings { Model = "qwen3:35b" }
+            }
+        };
 
-        public Task StopAsync()
-        {
-            IsRunning = false;
-            return Task.CompletedTask;
-        }
+        var settings = config.GetAgentSettings("plan");
+        Assert.Equal("qwen3:35b", settings.Model);
     }
 }

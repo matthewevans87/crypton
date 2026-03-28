@@ -76,20 +76,20 @@ public class AgentRunnerConfigBindingTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Agents:Plan:Model"] = "gpt-4",
-            ["Agents:Plan:Temperature"] = "0.5",
-            ["Agents:Plan:MaxTokens"] = "2048",
-            ["Agents:Plan:TimeoutMinutes"] = "15",
-            ["Agents:Plan:MaxRetries"] = "2",
+            ["Agents:plan:Model"] = "gpt-4",
+            ["Agents:plan:Temperature"] = "0.5",
+            ["Agents:plan:MaxTokens"] = "2048",
+            ["Agents:plan:TimeoutMinutes"] = "15",
+            ["Agents:plan:MaxRetries"] = "2",
         });
 
         var result = config.Get<AgentRunnerConfig>()!;
 
-        Assert.Equal("gpt-4", result.Agents.Plan.Model);
-        Assert.Equal(0.5, result.Agents.Plan.Temperature);
-        Assert.Equal(2048, result.Agents.Plan.MaxTokens);
-        Assert.Equal(15, result.Agents.Plan.TimeoutMinutes);
-        Assert.Equal(2, result.Agents.Plan.MaxRetries);
+        Assert.Equal("gpt-4", result.Agents["plan"].Model);
+        Assert.Equal(0.5, result.Agents["plan"].Temperature);
+        Assert.Equal(2048, result.Agents["plan"].MaxTokens);
+        Assert.Equal(15, result.Agents["plan"].TimeoutMinutes);
+        Assert.Equal(2, result.Agents["plan"].MaxRetries);
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -243,16 +243,25 @@ public class AgentRunnerConfigBindingTests
     // ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Bind_EmptyConfiguration_AgentMaxIterationsDefaultsTo50()
+    public void Bind_EmptyConfiguration_AgentsDictionaryIsEmpty()
     {
         var config = BuildConfig();
         var result = config.Get<AgentRunnerConfig>() ?? new AgentRunnerConfig();
 
-        Assert.Equal(50, result.Agents.Plan.MaxIterations);
-        Assert.Equal(50, result.Agents.Research.MaxIterations);
-        Assert.Equal(50, result.Agents.Analyze.MaxIterations);
-        Assert.Equal(50, result.Agents.Synthesis.MaxIterations);
-        Assert.Equal(50, result.Agents.Evaluation.MaxIterations);
+        // No agents are pre-populated; they must be explicitly configured.
+        Assert.Empty(result.Agents);
+    }
+
+    [Fact]
+    public void Bind_AgentSettings_MaxIterationsDefault_IsPopulated()
+    {
+        // When an agent is configured without MaxIterations, the property default applies.
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["Agents:plan:Model"] = "qwen3:35b",
+        });
+        var result = config.Get<AgentRunnerConfig>()!;
+        Assert.Equal(50, result.Agents["plan"].MaxIterations);
     }
 
     [Fact]
@@ -260,19 +269,16 @@ public class AgentRunnerConfigBindingTests
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
-            ["Agents:Plan:MaxIterations"] = "20",
-            ["Agents:Research:MaxIterations"] = "30",
-            ["Agents:Synthesis:MaxIterations"] = "10",
+            ["Agents:plan:MaxIterations"] = "20",
+            ["Agents:research:MaxIterations"] = "30",
+            ["Agents:synthesis:MaxIterations"] = "10",
         });
 
         var result = config.Get<AgentRunnerConfig>()!;
 
-        Assert.Equal(20, result.Agents.Plan.MaxIterations);
-        Assert.Equal(30, result.Agents.Research.MaxIterations);
-        Assert.Equal(10, result.Agents.Synthesis.MaxIterations);
-        // Unset agents retain the property default
-        Assert.Equal(50, result.Agents.Analyze.MaxIterations);
-        Assert.Equal(50, result.Agents.Evaluation.MaxIterations);
+        Assert.Equal(20, result.Agents["plan"].MaxIterations);
+        Assert.Equal(30, result.Agents["research"].MaxIterations);
+        Assert.Equal(10, result.Agents["synthesis"].MaxIterations);
     }
 
     [Fact]
@@ -281,17 +287,17 @@ public class AgentRunnerConfigBindingTests
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Agents:Plan:MaxIterations"] = "50",
+                ["Agents:plan:MaxIterations"] = "50",
             })
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Agents:Plan:MaxIterations"] = "15",
+                ["Agents:plan:MaxIterations"] = "15",
             })
             .Build();
 
         var result = config.Get<AgentRunnerConfig>()!;
 
-        Assert.Equal(15, result.Agents.Plan.MaxIterations);
+        Assert.Equal(15, result.Agents["plan"].MaxIterations);
     }
 
     // ────────────────────────────────────────────────────────────────

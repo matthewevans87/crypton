@@ -46,6 +46,22 @@
       "group": "test"
     },
     {
+      "label": "build: Crypton.AgentRunner.Cli",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Crypton.AgentRunner.Cli/Crypton.AgentRunner.Cli.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
       "label": "build: Crypton.Api.MarketData",
       "type": "process",
       "command": "dotnet",
@@ -120,6 +136,7 @@
       "label": "build: All Services",
       "dependsOn": [
         "build: Crypton.Api.AgentRunner",
+        "build: Crypton.AgentRunner.Cli",
         "build: Crypton.Api.MarketData",
         "build: Crypton.Api.MonitoringDashboard",
         "build: Crypton.Api.ExecutionService"

@@ -1,116 +1,53 @@
-using AgentRunner.Agents;
+using AgentRunner.Configuration;
+using AgentRunner.Domain;
 using Xunit;
 
 namespace AgentRunner.Tests.Agents;
 
-public class AgentInvokerCompactJsonTests
+/// <summary>Tests for domain types (replaces AgentInvokerCompactJsonTests).</summary>
+public class DomainTypesTests
 {
-    // ── Compact indented JSON ─────────────────────────────────────────────────
-
     [Fact]
-    public void CompactJson_IndentedObject_StripsWhitespace()
+    public void LoopState_HasExpectedValues()
     {
-        var indented = """
-            {
-                "symbol": "BTC/USD",
-                "rsi": 47.86,
-                "signal": "neutral"
-            }
-            """;
-
-        var result = AgentInvoker.CompactJson(indented);
-
-        Assert.Equal("""{"symbol":"BTC/USD","rsi":47.86,"signal":"neutral"}""", result);
+        var values = Enum.GetValues<LoopState>();
+        Assert.Contains(LoopState.Idle, values);
+        Assert.Contains(LoopState.Plan, values);
+        Assert.Contains(LoopState.Research, values);
+        Assert.Contains(LoopState.Analyze, values);
+        Assert.Contains(LoopState.Synthesize, values);
+        Assert.Contains(LoopState.Evaluate, values);
+        Assert.Contains(LoopState.WaitingForNextCycle, values);
     }
 
     [Fact]
-    public void CompactJson_IndentedArray_StripsWhitespace()
+    public void MailboxMessage_RecordEquals_Works()
     {
-        var indented = """
-            [
-                { "id": "1", "text": "hello" },
-                { "id": "2", "text": "world" }
-            ]
-            """;
-
-        var result = AgentInvoker.CompactJson(indented);
-
-        Assert.DoesNotContain("\n", result);
-        Assert.DoesNotContain("  ", result);
-        Assert.StartsWith("[", result);
+        var ts = DateTimeOffset.UtcNow;
+        var a = new MailboxMessage("plan", "research", "Hello", ts);
+        var b = new MailboxMessage("plan", "research", "Hello", ts);
+        Assert.Equal(a, b);
     }
 
     [Fact]
-    public void CompactJson_AlreadyCompact_IsUnchanged()
+    public void MailboxMessage_WithMutation_Works()
     {
-        var compact = """{"symbol":"BTC/USD","rsi":47.86}""";
-
-        var result = AgentInvoker.CompactJson(compact);
-
-        Assert.Equal(compact, result);
-    }
-
-    // ── Non-JSON passthrough ──────────────────────────────────────────────────
-
-    [Fact]
-    public void CompactJson_PlainString_ReturnedAsIs()
-    {
-        var plain = "No results returned (possible auth token expiry)";
-
-        var result = AgentInvoker.CompactJson(plain);
-
-        Assert.Equal(plain, result);
+        var ts = DateTimeOffset.UtcNow;
+        var original = new MailboxMessage("plan", "research", "Hello", ts);
+        var mutated = original with { Content = "Updated" };
+        Assert.Equal("Updated", mutated.Content);
+        Assert.Equal("Hello", original.Content);
     }
 
     [Fact]
-    public void CompactJson_InvalidJson_ReturnedAsIs()
+    public void StartupValidationResult_IsValid_ReflectsErrorList()
     {
-        var invalid = "{ not valid json ]";
+        var valid = new StartupValidationResult(true, false, []);
+        Assert.True(valid.IsValid);
+        Assert.Empty(valid.Errors);
 
-        var result = AgentInvoker.CompactJson(invalid);
-
-        Assert.Equal(invalid, result);
-    }
-
-    // ── Edge cases ────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void CompactJson_EmptyString_ReturnedAsIs()
-    {
-        Assert.Equal("", AgentInvoker.CompactJson(""));
-    }
-
-    [Fact]
-    public void CompactJson_NullEquivalentWhitespace_ReturnedAsIs()
-    {
-        Assert.Equal("   ", AgentInvoker.CompactJson("   "));
-    }
-
-    [Fact]
-    public void CompactJson_JsonStringValue_ReturnedCompact()
-    {
-        // A JSON-encoded string (e.g. a tool that returns a plain quoted string)
-        var jsonString = "\"hello world\"";
-
-        var result = AgentInvoker.CompactJson(jsonString);
-
-        Assert.Equal("\"hello world\"", result);
-    }
-
-    [Fact]
-    public void CompactJson_NestedObject_StripsAllWhitespace()
-    {
-        var nested = """
-            {
-                "outer": {
-                    "inner": [1, 2, 3],
-                    "flag": true
-                }
-            }
-            """;
-
-        var result = AgentInvoker.CompactJson(nested);
-
-        Assert.Equal("""{"outer":{"inner":[1,2,3],"flag":true}}""", result);
+        var invalid = new StartupValidationResult(false, true, ["Missing config"]);
+        Assert.False(invalid.IsValid);
+        Assert.Single(invalid.Errors);
     }
 }

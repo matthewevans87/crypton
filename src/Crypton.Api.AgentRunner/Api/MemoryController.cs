@@ -1,4 +1,4 @@
-using AgentRunner.Artifacts;
+using AgentRunner.Abstractions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentRunner.Api;
@@ -7,63 +7,24 @@ namespace AgentRunner.Api;
 [Route("api/memory")]
 public class MemoryController : ControllerBase
 {
-    private readonly ArtifactManager _artifactManager;
+    private readonly IArtifactStore _artifacts;
 
-    public MemoryController(ArtifactManager artifactManager)
+    public MemoryController(IArtifactStore artifacts)
     {
-        _artifactManager = artifactManager;
+        _artifacts = artifacts;
     }
 
     [HttpGet("{agent}")]
     public IActionResult GetMemory(string agent)
     {
-        var memory = _artifactManager.ReadMemory(agent);
+        var memory = _artifacts.ReadMemory(agent);
         return Ok(new { agent, content = memory ?? "" });
     }
 
-    [HttpPost("{agent}/append")]
-    public IActionResult AppendToMemory(string agent, [FromBody] MemoryAppendRequest request)
+    [HttpGet("shared")]
+    public IActionResult GetSharedMemory()
     {
-        if (string.IsNullOrEmpty(request.Content))
-        {
-            return BadRequest(new { error = "Content is required" });
-        }
-
-        var contentWithTimestamp = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {request.Content}";
-        _artifactManager.AppendToMemory(agent, contentWithTimestamp);
-
-        return Ok(new { message = $"Appended to {agent} memory", agent });
+        var memory = _artifacts.ReadSharedMemory();
+        return Ok(new { content = memory ?? "" });
     }
-
-    [HttpGet("search")]
-    public IActionResult SearchMemory([FromQuery] string query, [FromQuery] string? agent = null, [FromQuery] int maxResults = 10)
-    {
-        if (string.IsNullOrEmpty(query))
-        {
-            return BadRequest(new { error = "Query is required" });
-        }
-
-        List<MemorySearchResult> results;
-        if (!string.IsNullOrEmpty(agent))
-        {
-            results = _artifactManager.SearchMemory(agent, query, maxResults);
-        }
-        else
-        {
-            results = _artifactManager.SearchAllMemory(query, maxResults);
-        }
-
-        return Ok(results.Select(r => new
-        {
-            r.AgentName,
-            r.Content,
-            r.MatchedQuery,
-            r.Timestamp
-        }));
-    }
-}
-
-public class MemoryAppendRequest
-{
-    public string Content { get; set; } = string.Empty;
 }

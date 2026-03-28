@@ -1,151 +1,28 @@
-using AgentRunner.Tools;
-using FluentValidation.TestHelper;
+using AgentRunner.Configuration;
+using AgentRunner.Domain;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
 
-public class PortfolioSummaryResponseValidatorTests
+/// <summary>Tests for ArtifactValidator synthesis output validation.</summary>
+public class SynthesisValidatorTests
 {
-    private readonly PortfolioSummaryResponseValidator _validator = new();
-
-    private static PortfolioSummaryResponse ValidResponse() => new()
-    {
-        Mode = "paper",
-        Balance = new BalanceSummaryResponse { AvailableUsd = 10000m },
-        OpenPositions = [],
-        RecentTrades = []
-    };
-
     [Fact]
-    public void Validate_ValidResponse_NoErrors()
+    public void Validate_ValidStrategyJson_ReturnsTrue()
     {
-        var result = _validator.TestValidate(ValidResponse());
-        result.ShouldNotHaveAnyValidationErrors();
+        var json = """{"mode":"paper","validity_window":"24h","posture":"neutral","portfolio_risk":{"max_drawdown_pct":0.1,"daily_loss_limit_usd":100.0,"max_total_exposure_pct":0.5,"max_per_position_pct":0.25},"positions":[]}""";
+        Assert.True(AgentRunner.Orchestration.ArtifactValidator.Validate(LoopState.Synthesize, json).IsValid);
     }
 
     [Fact]
-    public void Validate_NullBalance_HasError()
+    public void Validate_EmptyJson_ReturnsFalse()
     {
-        var model = ValidResponse() with { Balance = null };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.Balance)
-              .WithErrorMessage("balance is required — Execution Service response is incomplete");
+        Assert.False(AgentRunner.Orchestration.ArtifactValidator.Validate(LoopState.Synthesize, "{}").IsValid);
     }
 
     [Fact]
-    public void Validate_NullAvailableUsd_HasError()
+    public void Validate_MissingRequiredFields_ReturnsFalse()
     {
-        var model = ValidResponse() with { Balance = new BalanceSummaryResponse { AvailableUsd = null } };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.Balance!.AvailableUsd)
-              .WithErrorMessage("balance.availableUsd is required — Execution Service response is incomplete");
-    }
-
-    [Fact]
-    public void Validate_NullOpenPositions_HasError()
-    {
-        var model = ValidResponse() with { OpenPositions = null };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.OpenPositions)
-              .WithErrorMessage("openPositions is required — Execution Service response is incomplete");
-    }
-
-    [Fact]
-    public void Validate_NullBalanceAndNullOpenPositions_HasMultipleErrors()
-    {
-        var model = ValidResponse() with { Balance = null, OpenPositions = null };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.Balance);
-        result.ShouldHaveValidationErrorFor(x => x.OpenPositions);
-    }
-}
-
-public class TechnicalIndicatorsResponseValidatorTests
-{
-    private readonly TechnicalIndicatorsResponseValidator _validator = new();
-
-    [Fact]
-    public void Validate_ValidResponse_NoErrors()
-    {
-        var model = new TechnicalIndicatorsResponse
-        {
-            Symbol = "BTC/USD",
-            Timeframe = "1d",
-            CurrentPrice = 65000m,
-            Rsi = 55m
-        };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldNotHaveAnyValidationErrors();
-    }
-
-    [Fact]
-    public void Validate_NullCurrentPrice_HasError()
-    {
-        var model = new TechnicalIndicatorsResponse
-        {
-            Symbol = "BTC/USD",
-            Timeframe = "1d",
-            CurrentPrice = null
-        };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.CurrentPrice)
-              .WithErrorMessage("currentPrice is required — live price data is unavailable");
-    }
-
-    [Fact]
-    public void Validate_ZeroCurrentPrice_HasError()
-    {
-        var model = new TechnicalIndicatorsResponse
-        {
-            Symbol = "BTC/USD",
-            Timeframe = "1d",
-            CurrentPrice = 0m
-        };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.CurrentPrice!.Value);
-    }
-
-    [Fact]
-    public void Validate_NegativeCurrentPrice_HasError()
-    {
-        var model = new TechnicalIndicatorsResponse
-        {
-            Symbol = "BTC/USD",
-            Timeframe = "1d",
-            CurrentPrice = -1m
-        };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.CurrentPrice!.Value);
-    }
-
-    [Fact]
-    public void Validate_EmptySymbol_HasError()
-    {
-        var model = new TechnicalIndicatorsResponse
-        {
-            Symbol = "",
-            Timeframe = "1d",
-            CurrentPrice = 65000m
-        };
-
-        var result = _validator.TestValidate(model);
-
-        result.ShouldHaveValidationErrorFor(x => x.Symbol);
+        Assert.False(AgentRunner.Orchestration.ArtifactValidator.Validate(LoopState.Synthesize, """{"strategy_version":"1.0"}""").IsValid);
     }
 }

@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Crypton.AgentRunner.Cli/Crypton.AgentRunner.Cli.csproj" />
+    <Project Path="src/Crypton.AgentRunner.Core/Crypton.AgentRunner.Core.csproj" />
     <Project Path="src/Crypton.Api.AgentRunner.Tests/Crypton.Api.AgentRunner.Tests.csproj" />
     <Project Path="src/Crypton.Api.AgentRunner/Crypton.Api.AgentRunner.csproj" />
     <Project Path="src/Crypton.Api.ExecutionService.Tests/Crypton.Api.ExecutionService.Tests.csproj" />

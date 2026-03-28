@@ -1,9 +1,5 @@
-using AgentRunner.Agents;
-using AgentRunner.Artifacts;
-using AgentRunner.Mailbox;
-using AgentRunner.Startup;
-using AgentRunner.StateMachine;
-using AgentRunner.Telemetry;
+using AgentRunner.Abstractions;
+using AgentRunner.Domain;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AgentRunner.Api;
@@ -12,24 +8,13 @@ namespace AgentRunner.Api;
 [Route("api")]
 public class StatusController : ControllerBase
 {
-    private readonly AgentRunnerService _agentRunner;
-    private readonly ArtifactManager _artifactManager;
-    private readonly MailboxManager _mailboxManager;
-    private readonly MetricsCollector _metrics;
-    private readonly ServiceAvailabilityState _availabilityState;
+    private readonly ICycleOrchestrator _orchestrator;
+    private readonly IArtifactStore _artifacts;
 
-    public StatusController(
-        AgentRunnerService agentRunner,
-        ArtifactManager artifactManager,
-        MailboxManager mailboxManager,
-        MetricsCollector metrics,
-        ServiceAvailabilityState availabilityState)
+    public StatusController(ICycleOrchestrator orchestrator, IArtifactStore artifacts)
     {
-        _agentRunner = agentRunner;
-        _artifactManager = artifactManager;
-        _mailboxManager = mailboxManager;
-        _metrics = metrics;
-        _availabilityState = availabilityState;
+        _orchestrator = orchestrator;
+        _artifacts = artifacts;
     }
 
     [HttpGet("status")]
@@ -37,120 +22,44 @@ public class StatusController : ControllerBase
     {
         return Ok(new
         {
-            currentState = _agentRunner.CurrentState.ToString(),
-            currentCycleId = _agentRunner.CurrentCycle?.CycleId,
-            lastCompletedStep = _agentRunner.CurrentCycle?.Steps
+            currentState = _orchestrator.CurrentState.ToString(),
+            currentCycleId = _orchestrator.CurrentCycle?.CycleId,
+            lastCompletedStep = _orchestrator.CurrentCycle?.Steps
                 .Where(s => s.Value.EndTime.HasValue)
                 .OrderByDescending(s => s.Value.EndTime)
-                .FirstOrDefault().Key,
-            nextScheduledTime = _agentRunner.CurrentState == LoopState.WaitingForNextCycle
-                ? _agentRunner.NextScheduledRunTime
-                : (DateTime?)null,
-            isPaused = _agentRunner.CurrentCycle?.IsPaused ?? false,
-            pauseReason = _agentRunner.CurrentCycle?.PauseReason,
-            isDegraded = _availabilityState.IsDegraded,
-            degradedErrors = _availabilityState.Errors,
-            degradedSince = _availabilityState.LastTransitionAt
+                .Select(s => s.Key.ToString())
+                .FirstOrDefault(),
+            nextScheduledTime = _orchestrator.CurrentState == LoopState.WaitingForNextCycle
+                ? (DateTimeOffset?)_orchestrator.NextScheduledAt
+                : null,
+            isPaused = _orchestrator.CurrentCycle?.IsPaused ?? false,
+            pauseReason = _orchestrator.CurrentCycle?.PauseReason,
+            restartCount = _orchestrator.RestartCount,
         });
     }
 
     [HttpGet("cycles")]
     public IActionResult GetCycles([FromQuery] int count = 10)
     {
-        var cycles = _artifactManager.GetRecentCycles(count);
+        var cycles = _artifacts.GetRecentCycleIds(count);
         return Ok(cycles.Select(c => new
         {
             cycleId = c,
-            path = _artifactManager.GetCycleDirectory(c),
-            artifacts = Directory.GetFiles(_artifactManager.GetCycleDirectory(c))
-                .Select(Path.GetFileName)
+            artifacts = _artifacts.GetCycleArtifactNames(c),
         }));
     }
 
     [HttpGet("cycles/{cycleId}")]
     public IActionResult GetCycleDetails(string cycleId)
     {
-        var cycleDir = _artifactManager.GetCycleDirectory(cycleId);
-        if (!Directory.Exists(cycleDir))
-        {
+        var names = _artifacts.GetCycleArtifactNames(cycleId);
+        if (names.Count == 0)
             return NotFound(new { error = "Cycle not found" });
-        }
 
-        var artifacts = new Dictionary<string, string?>();
-        foreach (var file in Directory.GetFiles(cycleDir))
-        {
-            artifacts[Path.GetFileName(file)] = System.IO.File.ReadAllText(file);
-        }
+        var artifactMap = names.ToDictionary(
+            name => name,
+            name => _artifacts.Read(cycleId, name));
 
-        return Ok(new
-        {
-            cycleId,
-            artifacts
-        });
-    }
-
-    [HttpGet("errors")]
-    public IActionResult GetErrors([FromQuery] int count = 20)
-    {
-        var cycles = _artifactManager.GetRecentCycles(count * 2);
-        var errors = new List<object>();
-
-        var currentCycle = _agentRunner.CurrentCycle;
-
-        foreach (var cycleId in cycles)
-        {
-            if (currentCycle?.CycleId == cycleId)
-            {
-                foreach (var step in currentCycle.Steps)
-                {
-                    if (step.Value.Outcome == StepOutcome.Failed || step.Value.Outcome == StepOutcome.Timeout)
-                    {
-                        errors.Add(new
-                        {
-                            cycleId,
-                            step = step.Key,
-                            outcome = step.Value.Outcome.ToString(),
-                            error = step.Value.ErrorMessage,
-                            timestamp = step.Value.StartTime
-                        });
-                    }
-                }
-            }
-
-            if (errors.Count >= count)
-            {
-                break;
-            }
-        }
-
-        return Ok(errors);
-    }
-
-    [HttpGet("metrics")]
-    public IActionResult GetMetrics()
-    {
-        return Ok(new
-        {
-            cycleCount = _metrics.GetCycleCount(),
-            stepSuccess = _metrics.GetStepSuccess(),
-            stepFailure = _metrics.GetStepFailure(),
-            toolExecution = _metrics.GetToolExecution()
-        });
-    }
-
-    [HttpGet("mailboxes")]
-    public IActionResult GetMailboxes()
-    {
-        return Ok(_mailboxManager.GetAllMailboxContents()
-            .ToDictionary(
-                kvp => kvp.Key,
-                kvp => kvp.Value.Select(m => new
-                {
-                    from = m.FromAgent,
-                    to = m.ToAgent,
-                    content = m.Content,
-                    timestamp = m.Timestamp,
-                    type = m.Type.ToString()
-                })));
+        return Ok(new { cycleId, artifacts = artifactMap });
     }
 }
