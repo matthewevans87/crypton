@@ -133,10 +133,27 @@
       }
     },
     {
+      "label": "build: Crypton.Tools.Cli",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/Crypton.Tools.Cli/Crypton.Tools.Cli.csproj",
+        "--configuration",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": ["$msCompile"],
+      "group": "build",
+      "presentation": { "reveal": "always" }
+    },
+    {
       "label": "build: All Services",
       "dependsOn": [
         "build: Crypton.Api.AgentRunner",
         "build: Crypton.AgentRunner.Cli",
+        "build: Crypton.Tools.Cli",
         "build: Crypton.Api.MarketData",
         "build: Crypton.Api.MonitoringDashboard",
         "build: Crypton.Api.ExecutionService"

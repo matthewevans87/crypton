@@ -1,3 +1,5 @@
+using Crypton.Tools;
+
 namespace AgentRunner.Domain;
 
 /// <summary>Input passed to <see cref="Abstractions.IAgentExecutor.ExecuteAsync"/>. Pure data — no methods.</summary>
@@ -6,7 +8,7 @@ public sealed record AgentInput(
     string CycleId,
     string SystemPrompt,
     string UserPrompt,
-    IReadOnlyList<string> AvailableTools);
+    IReadOnlyList<Type> AvailableTools);
 
 /// <summary>Result returned by <see cref="Abstractions.IAgentExecutor.ExecuteAsync"/>.</summary>
 public sealed record AgentOutput(
@@ -21,7 +23,7 @@ public sealed record AgentStateDefinition(
     string PromptFile,
     string TemplateFile,
     string[] InputArtifacts,
-    string[] AvailableTools,
+    Type[] AvailableTools,
     bool IncludeMemory = true,
     bool IncludeRecentEvaluations = false,
     int RecentEvaluationCount = 0);
@@ -48,13 +50,6 @@ public sealed record StepRecord(
     DateTimeOffset? EndTime = null,
     StepOutcome Outcome = StepOutcome.Success,
     string? ErrorMessage = null);
-
-/// <summary>A message deposited into an agent's mailbox.</summary>
-public sealed record MailboxMessage(
-    string FromAgent,
-    string ToAgent,
-    string Content,
-    DateTimeOffset Timestamp);
 
 /// <summary>Result of a startup validation pass.</summary>
 public sealed record StartupValidationResult(

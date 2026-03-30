@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Crypton.AgentRunner.Core\Crypton.AgentRunner.Core.csproj" />
+    <ProjectReference Include="..\Crypton.Tools\Crypton.Tools.csproj" />
   </ItemGroup>
 
 </Project>

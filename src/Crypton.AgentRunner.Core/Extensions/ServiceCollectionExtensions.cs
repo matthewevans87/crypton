@@ -3,10 +3,12 @@ using AgentRunner.Configuration;
 using AgentRunner.Domain;
 using AgentRunner.Domain.Events;
 using AgentRunner.Execution;
-using AgentRunner.Execution.Tools;
 using AgentRunner.Infrastructure;
 using AgentRunner.Logging;
 using AgentRunner.Orchestration;
+using Crypton.Tools;
+using Crypton.Tools.Infrastructure;
+using Crypton.Tools.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using OllamaSharp;
@@ -38,7 +40,9 @@ public static class ServiceCollectionExtensions
             capturePrompts: config.Logging.CapturePrompts));
         services.AddSingleton<ILoopStateMachine, LoopStateMachine>();
         services.AddSingleton<IArtifactStore>(sp => new FileSystemArtifactStore(config.Storage));
-        services.AddSingleton<IMailboxService>(sp => new FileMailboxService(config.Storage));
+        services.AddSingleton<IMailboxService>(sp => new FileMailboxService(
+            config.Storage.MailboxesPath,
+            config.Storage.MaxMailboxMessages));
         services.AddSingleton<IStatePersistence>(sp =>
             new JsonStatePersistence(Path.Combine(config.Storage.BasePath, "state.json")));
         services.AddSingleton<ICycleScheduler, CycleScheduler>();
@@ -46,6 +50,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IArtifactStore>(),
             sp.GetRequiredService<IMailboxService>(),
             sp.GetRequiredService<IReadOnlyDictionary<LoopState, AgentStateDefinition>>(),
+            sp.GetRequiredService<IEnumerable<IAgentTool>>(),
             config));
         services.AddSingleton<LoopRestartManager>();
         services.AddSingleton<ICycleOrchestrator, CycleOrchestrator>();
@@ -58,55 +63,8 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         AgentRunnerConfig config)
     {
-        services.AddHttpClient();
-        services.AddSingleton<IToolExecutor>(sp => new ResilientToolExecutor(config));
-
-        var toolCfg = config.Tools;
-
-        services.AddSingleton<IAgentTool>(sp => new WebSearchTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(WebSearchTool)),
-            toolCfg.BraveSearch.ApiKey,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new WebFetchTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(WebFetchTool)),
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new BirdTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BirdTool)),
-            toolCfg.Bird.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new GetPriceTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(GetPriceTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new CurrentPositionTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(CurrentPositionTool)),
-            toolCfg.ExecutionService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new TechnicalIndicatorsTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(TechnicalIndicatorsTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new MacroSignalsTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(MacroSignalsTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new OrderBookTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OrderBookTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-
-        services.AddSingleton<IAgentTool>(sp => new SendMailTool(
-            sp.GetRequiredService<IMailboxService>()));
-
+        services.AddCryptonTools(config.Tools);
         services.AddSingleton<IToolProvider, ToolRegistry>();
-
         return services;
     }
 
@@ -133,7 +91,7 @@ public static class ServiceCollectionExtensions
                 PromptFile: "plan_agent.md",
                 TemplateFile: "plan.md",
                 InputArtifacts: [],
-                AvailableTools: ["web_search", "web_fetch", "bird", "technical_indicators", "send_mail"],
+                AvailableTools: [typeof(WebSearchTool), typeof(WebFetchTool), typeof(BirdTool), typeof(GetPriceTool), typeof(TechnicalIndicatorsTool), typeof(SendMailTool)],
                 IncludeRecentEvaluations: true,
                 RecentEvaluationCount: 7),
 
@@ -142,28 +100,28 @@ public static class ServiceCollectionExtensions
                 PromptFile: "research_agent.md",
                 TemplateFile: "research.md",
                 InputArtifacts: ["plan.md"],
-                AvailableTools: ["web_search", "web_fetch", "bird", "technical_indicators", "send_mail"]),
+                AvailableTools: [typeof(WebSearchTool), typeof(WebFetchTool), typeof(BirdTool), typeof(GetPriceTool), typeof(TechnicalIndicatorsTool), typeof(SendMailTool)]),
 
             [LoopState.Analyze] = new(
                 AgentName: "Analysis",
                 PromptFile: "analysis_agent.md",
                 TemplateFile: "analysis.md",
                 InputArtifacts: ["research.md"],
-                AvailableTools: ["current_position", "technical_indicators", "macro_signals", "order_book", "send_mail"]),
+                AvailableTools: [typeof(CurrentPositionTool), typeof(TechnicalIndicatorsTool), typeof(MacroSignalsTool), typeof(OrderBookTool), typeof(GetPriceTool), typeof(SendMailTool)]),
 
             [LoopState.Synthesize] = new(
                 AgentName: "Synthesis",
                 PromptFile: "synthesis_agent.md",
                 TemplateFile: "strategy.json",
                 InputArtifacts: ["analysis.md"],
-                AvailableTools: ["current_position", "send_mail"]),
+                AvailableTools: [typeof(CurrentPositionTool), typeof(SendMailTool)]),
 
             [LoopState.Evaluate] = new(
                 AgentName: "Evaluation",
                 PromptFile: "evaluation_agent.md",
                 TemplateFile: "evaluation.md",
                 InputArtifacts: ["strategy.json", "analysis.md"],
-                AvailableTools: ["current_position", "send_mail"],
+                AvailableTools: [typeof(CurrentPositionTool), typeof(SendMailTool)],
                 IncludeMemory: false,
                 IncludeRecentEvaluations: true,
                 RecentEvaluationCount: 3),

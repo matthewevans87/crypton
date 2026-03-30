@@ -1,10 +1,10 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using AgentRunner.Abstractions;
-using AgentRunner.Configuration;
-using AgentRunner.Execution;
-using AgentRunner.Execution.Tools;
+using Crypton.Tools;
+using Crypton.Tools.Configuration;
+using Crypton.Tools.Infrastructure;
+using Crypton.Tools.Tools;
 using Microsoft.Extensions.AI;
 using NSubstitute;
 using Xunit;
@@ -15,10 +15,7 @@ public class BirdToolTests
 {
     private static BirdTool CreateTool(HttpClient httpClient, string baseUrl = "http://localhost:11435")
     {
-        var executor = new ResilientToolExecutor(new AgentRunnerConfig
-        {
-            Tools = new ToolConfig { MaxRetries = 0, DefaultTimeoutSeconds = 30 }
-        });
+        var executor = new ResilientToolExecutor(new ToolsConfig { MaxRetries = 0, DefaultTimeoutSeconds = 30 });
         return new BirdTool(httpClient, baseUrl, executor);
     }
 
@@ -67,6 +64,68 @@ public class BirdToolTests
 
         var result = (await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "BTC" })))?.ToString();
         Assert.Contains("Error:", result);
+    }
+
+    // ─── InvokeAsync ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task InvokeAsync_ValidParams_CallsToolAndReturnsOutput()
+    {
+        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "hello" } });
+        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
+        var tool = CreateTool(CreateHttpClient(json));
+
+        var result = await tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["query"] = "bitcoin ETF inflows",
+            ["count"] = "5"
+        });
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_DefaultsApplied_UsesSearchModeAndCount20()
+    {
+        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "test" } });
+        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
+
+        var tool = CreateTool(CreateHttpClient(json));
+        var result = await tool.InvokeAsync(new Dictionary<string, string> { ["query"] = "crypto" });
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_MissingQuery_ReturnsError()
+    {
+        var tool = CreateTool(new HttpClient());
+
+        var result = await tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["mode"] = "search"
+        });
+
+        Assert.StartsWith("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_InvalidCount_UsesDefault20()
+    {
+        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "test" } });
+        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
+        var tool = CreateTool(CreateHttpClient(json));
+
+        // "notanumber" should fall back to default 20 without throwing
+        var result = await tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["query"] = "bitcoin",
+            ["count"] = "notanumber"
+        });
+
+        Assert.DoesNotContain("Error:", result);
     }
 }
 

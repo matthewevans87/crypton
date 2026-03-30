@@ -1,9 +1,6 @@
 using System.Text.Json;
-using AgentRunner.Abstractions;
-using AgentRunner.Configuration;
-using AgentRunner.Domain;
 
-namespace AgentRunner.Infrastructure;
+namespace Crypton.Tools.Infrastructure;
 
 /// <summary>
 /// File-based mailbox service. Each agent has its own JSON file under the mailboxes directory.
@@ -21,10 +18,10 @@ public sealed class FileMailboxService : IMailboxService
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public FileMailboxService(StorageConfig config)
+    public FileMailboxService(string mailboxesPath, int maxMessages = 5)
     {
-        _mailboxesPath = Path.GetFullPath(config.MailboxesPath);
-        _maxMessages = config.MaxMailboxMessages;
+        _mailboxesPath = Path.GetFullPath(mailboxesPath);
+        _maxMessages = maxMessages;
         Directory.CreateDirectory(_mailboxesPath);
     }
 

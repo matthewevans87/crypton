@@ -2,6 +2,7 @@ using System.Text;
 using AgentRunner.Abstractions;
 using AgentRunner.Configuration;
 using AgentRunner.Domain;
+using Crypton.Tools;
 
 namespace AgentRunner.Orchestration;
 
@@ -17,17 +18,20 @@ public sealed class AgentContextProvider : IAgentContextProvider
     private readonly IMailboxService _mailbox;
     private readonly IReadOnlyDictionary<LoopState, AgentStateDefinition> _definitions;
     private readonly AgentRunnerConfig _config;
+    private readonly IReadOnlyDictionary<Type, IAgentTool> _toolsByType;
 
     public AgentContextProvider(
         IArtifactStore artifacts,
         IMailboxService mailbox,
         IReadOnlyDictionary<LoopState, AgentStateDefinition> definitions,
+        IEnumerable<IAgentTool> tools,
         AgentRunnerConfig config)
     {
         _artifacts = artifacts;
         _mailbox = mailbox;
         _definitions = definitions;
         _config = config;
+        _toolsByType = tools.ToDictionary(t => t.GetType(), t => (IAgentTool)t);
     }
 
     public AgentInput BuildContext(LoopState state, string cycleId, string? previousCycleId = null)
@@ -41,7 +45,7 @@ public sealed class AgentContextProvider : IAgentContextProvider
             : cycleId;
 
         var identity = LoadPromptFile(def.PromptFile);
-        var toolGuide = LoadPromptFile("tools.md");
+        var toolGuide = BuildToolReference(def.AvailableTools);
         var outputTemplate = LoadTemplate(def.TemplateFile);
 
         var messages = _mailbox.GetMessages(
@@ -189,6 +193,15 @@ public sealed class AgentContextProvider : IAgentContextProvider
     }
 
     // ─── File loading ─────────────────────────────────────────────────────────
+
+    private string BuildToolReference(Type[] toolTypes)
+    {
+        var parts = toolTypes
+            .Where(_toolsByType.ContainsKey)
+            .Select(t => _toolsByType[t])
+            .Select(t => t.Documentation.ToMarkdown(t.Name));
+        return string.Concat(parts);
+    }
 
     private static string LoadPromptFile(string fileName)
     {

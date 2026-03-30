@@ -20,5 +20,18 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Crypton.Configuration\Crypton.Configuration.csproj" />
+    <ProjectReference Include="..\Crypton.Tools\Crypton.Tools.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Crypton.Api.AgentRunner.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="agent_prompts\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="output_templates\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

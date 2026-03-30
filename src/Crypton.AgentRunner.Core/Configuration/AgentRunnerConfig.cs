@@ -1,3 +1,5 @@
+using Crypton.Tools.Configuration;
+
 namespace AgentRunner.Configuration;
 
 public class AgentRunnerConfig
@@ -8,7 +10,7 @@ public class AgentRunnerConfig
     /// <summary>Per-agent settings keyed by lowercase agent name (e.g. "plan", "research").</summary>
     public Dictionary<string, AgentSettings> Agents { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public ToolConfig Tools { get; set; } = new();
+    public ToolsConfig Tools { get; set; } = new();
     public OllamaConfig Ollama { get; set; } = new();
     public StorageConfig Storage { get; set; } = new();
     public ApiConfig Api { get; set; } = new();
@@ -56,20 +58,6 @@ public class AgentSettings
     public string SystemPromptPath { get; set; } = string.Empty;
 }
 
-public class ToolConfig
-{
-    public BraveSearchConfig BraveSearch { get; set; } = new();
-    public BirdConfig Bird { get; set; } = new();
-    public ExecutionServiceConfig ExecutionService { get; set; } = new();
-    public MarketDataServiceConfig MarketDataService { get; set; } = new();
-    public int DefaultTimeoutSeconds { get; set; } = 30;
-    public int CacheTtlSeconds { get; set; } = 60;
-    /// <summary>Maximum number of retry attempts for a failed tool call.</summary>
-    public int MaxRetries { get; set; } = 3;
-    /// <summary>Maximum delay in seconds applied between retries (exponential backoff is capped here).</summary>
-    public int MaxRetryDelaySeconds { get; set; } = 30;
-}
-
 public class OllamaConfig
 {
     /// <summary>Base URL for the Ollama API. Override via env var: Ollama__BaseUrl</summary>
@@ -89,28 +77,6 @@ public class OllamaConfig
     /// Override via env var: Ollama__NumCtx
     /// </summary>
     public int NumCtx { get; set; } = 65536;
-}
-
-public class BraveSearchConfig
-{
-    /// <summary>Injected at runtime via env var Tools__BraveSearch__ApiKey.</summary>
-    public string ApiKey { get; set; } = string.Empty;
-}
-
-public class BirdConfig
-{
-    /// <summary>Base URL for the bird HTTP server. Override via env var: AGENTRUNNER__TOOLS__BIRD__BASEURL</summary>
-    public string BaseUrl { get; set; } = "http://localhost:11435";
-}
-
-public class ExecutionServiceConfig
-{
-    public string BaseUrl { get; set; } = "http://localhost:5000";
-}
-
-public class MarketDataServiceConfig
-{
-    public string BaseUrl { get; set; } = "http://localhost:5002";
 }
 
 public class StorageConfig

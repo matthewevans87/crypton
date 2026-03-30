@@ -1,118 +1,39 @@
-using System.Diagnostics;
-using System.Text.Json;
 using AgentRunner.Abstractions;
-using AgentRunner.Domain.Events;
+using Crypton.Tools;
 using Microsoft.Extensions.AI;
 
 namespace AgentRunner.Execution;
 
 /// <summary>
-/// Filters and decorates <see cref="IAgentTool"/> instances for a given agent invocation.
-/// Each returned <see cref="AIFunction"/> is wrapped with telemetry that publishes
-/// <see cref="ToolCallStartedEvent"/> and <see cref="ToolCallCompletedEvent"/> to the per-call sink.
+/// Bridges <see cref="IAgentTool"/> implementations to the <see cref="IToolProvider"/>
+/// contract consumed by <see cref="LlmAgentExecutor"/>.
 /// </summary>
-public sealed class ToolRegistry : IToolProvider
+internal sealed class ToolRegistry : IToolProvider
 {
-    private readonly IReadOnlyDictionary<string, IAgentTool> _tools;
+    private readonly IReadOnlyDictionary<Type, IAgentTool> _toolsByType;
 
     public ToolRegistry(IEnumerable<IAgentTool> tools)
     {
-        _tools = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        _toolsByType = tools.ToDictionary(t => t.GetType());
     }
 
-    /// <inheritdoc/>
     public IReadOnlyList<AIFunction> GetFunctionsForAgent(
         string agentName,
-        IReadOnlyList<string> allowedToolNames,
+        IReadOnlyList<Type> allowedToolTypes,
         IAgentEventSink sink)
     {
-        var functions = new List<AIFunction>(allowedToolNames.Count);
-
-        foreach (var name in allowedToolNames)
-        {
-            if (!_tools.TryGetValue(name, out var tool))
-                continue;
-
-            var inner = tool.AsAIFunction();
-            functions.Add(new TelemetryAIFunction(inner, agentName, sink));
-        }
-
-        return functions;
+        return allowedToolTypes
+            .Where(_toolsByType.ContainsKey)
+            .Select(t => _toolsByType[t].AsAIFunction())
+            .ToList();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Internal decorator — wraps any AIFunction with start/complete telemetry
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private sealed class TelemetryAIFunction : AIFunction
+    public IReadOnlyList<(string Name, ToolDocumentation Documentation)> GetDocumentationFor(
+        IReadOnlyList<Type> allowedToolTypes)
     {
-        private readonly AIFunction _inner;
-        private readonly string _agentName;
-        private readonly IAgentEventSink _sink;
-
-        public TelemetryAIFunction(AIFunction inner, string agentName, IAgentEventSink sink)
-        {
-            _inner = inner;
-            _agentName = agentName;
-            _sink = sink;
-        }
-
-        public override string Name => _inner.Name;
-        public override string Description => _inner.Description;
-        public override JsonElement JsonSchema => _inner.JsonSchema;
-
-        protected override async ValueTask<object?> InvokeCoreAsync(
-            AIFunctionArguments arguments,
-            CancellationToken cancellationToken)
-        {
-            var id = Guid.NewGuid();
-            var inputJson = SerialiseArguments(arguments);
-
-            _sink.Publish(new ToolCallStartedEvent(
-                Id: id,
-                ToolName: _inner.Name,
-                InputJson: inputJson,
-                StepName: _agentName));
-
-            var sw = Stopwatch.StartNew();
-            var isError = false;
-            object? result = null;
-
-            try
-            {
-                result = await _inner.InvokeAsync(arguments, cancellationToken);
-                return result;
-            }
-            catch (Exception ex)
-            {
-                isError = true;
-                result = ex.Message;
-                throw;
-            }
-            finally
-            {
-                sw.Stop();
-                _sink.Publish(new ToolCallCompletedEvent(
-                    Id: id,
-                    ToolName: _inner.Name,
-                    Output: result?.ToString() ?? string.Empty,
-                    Duration: sw.Elapsed,
-                    IsError: isError,
-                    StepName: _agentName));
-            }
-        }
-
-        private static string SerialiseArguments(IEnumerable<KeyValuePair<string, object?>> args)
-        {
-            try
-            {
-                var dict = args.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-                return JsonSerializer.Serialize(dict);
-            }
-            catch
-            {
-                return "{}";
-            }
-        }
+        return allowedToolTypes
+            .Where(_toolsByType.ContainsKey)
+            .Select(t => (_toolsByType[t].Name, _toolsByType[t].Documentation))
+            .ToList();
     }
 }

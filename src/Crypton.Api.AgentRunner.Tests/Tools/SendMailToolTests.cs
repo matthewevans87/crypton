@@ -1,7 +1,6 @@
-using AgentRunner.Configuration;
-using AgentRunner.Domain;
-using AgentRunner.Execution.Tools;
-using AgentRunner.Infrastructure;
+using Crypton.Tools;
+using Crypton.Tools.Infrastructure;
+using Crypton.Tools.Tools;
 using Microsoft.Extensions.AI;
 using Xunit;
 
@@ -18,12 +17,7 @@ public class SendMailToolTests : IDisposable
     {
         _tempPath = Path.Combine(Path.GetTempPath(), $"sendmail_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempPath);
-        _mailbox = new FileMailboxService(new StorageConfig
-        {
-            BasePath = _tempPath,
-            MailboxesPath = Path.Combine(_tempPath, "mailboxes"),
-            MaxMailboxMessages = 5
-        });
+        _mailbox = new FileMailboxService(Path.Combine(_tempPath, "mailboxes"), 5);
         _tool = new SendMailTool(_mailbox);
         _fn = _tool.AsAIFunction();
     }
@@ -99,5 +93,64 @@ public class SendMailToolTests : IDisposable
         });
         var result = (await _fn!.InvokeAsync(args))?.ToString();
         Assert.DoesNotContain("Error:", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ─── InvokeAsync ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task InvokeAsync_ValidParams_ReturnsConfirmation()
+    {
+        var result = await _tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["to"] = "research",
+            ["from"] = "plan",
+            ["message"] = "BTC funding rates at 6-month high."
+        });
+        Assert.Contains("delivered", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_MissingTo_ReturnsError()
+    {
+        var result = await _tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["from"] = "plan",
+            ["message"] = "test"
+        });
+        Assert.StartsWith("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_MissingFrom_ReturnsError()
+    {
+        var result = await _tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["to"] = "research",
+            ["message"] = "test"
+        });
+        Assert.StartsWith("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_MissingMessage_ReturnsError()
+    {
+        var result = await _tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["to"] = "research",
+            ["from"] = "plan"
+        });
+        Assert.StartsWith("Error:", result);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_InvalidRecipient_ReturnsError()
+    {
+        var result = await _tool.InvokeAsync(new Dictionary<string, string>
+        {
+            ["to"] = "oracle",
+            ["from"] = "plan",
+            ["message"] = "test"
+        });
+        Assert.StartsWith("Error:", result);
     }
 }

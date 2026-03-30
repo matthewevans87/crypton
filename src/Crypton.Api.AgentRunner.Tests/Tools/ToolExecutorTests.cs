@@ -1,20 +1,17 @@
-using AgentRunner.Configuration;
-using AgentRunner.Execution;
+using Crypton.Tools.Configuration;
+using Crypton.Tools.Infrastructure;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
 
 public class ResilientToolExecutorTests
 {
-    private static AgentRunnerConfig MakeConfig(int maxRetries = 0, int timeoutSeconds = 30, int maxDelaySeconds = 1)
+    private static ToolsConfig MakeConfig(int maxRetries = 0, int timeoutSeconds = 30, int maxDelaySeconds = 1)
         => new()
         {
-            Tools = new ToolConfig
-            {
-                MaxRetries = maxRetries,
-                DefaultTimeoutSeconds = timeoutSeconds,
-                MaxRetryDelaySeconds = maxDelaySeconds
-            }
+            MaxRetries = maxRetries,
+            DefaultTimeoutSeconds = timeoutSeconds,
+            MaxRetryDelaySeconds = maxDelaySeconds
         };
 
     [Fact]

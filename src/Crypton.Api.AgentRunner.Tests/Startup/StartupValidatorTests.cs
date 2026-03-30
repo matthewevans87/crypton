@@ -1,6 +1,5 @@
-using AgentRunner.Configuration;
-using AgentRunner.Domain;
-using AgentRunner.Infrastructure;
+using Crypton.Tools;
+using Crypton.Tools.Infrastructure;
 using Xunit;
 
 namespace AgentRunner.Tests.Startup;
@@ -14,12 +13,7 @@ public class FileMailboxServiceTests : IDisposable
     {
         _tempPath = Path.Combine(Path.GetTempPath(), $"mailbox_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempPath);
-        _service = new FileMailboxService(new StorageConfig
-        {
-            BasePath = _tempPath,
-            MailboxesPath = Path.Combine(_tempPath, "mailboxes"),
-            MaxMailboxMessages = 3
-        });
+        _service = new FileMailboxService(Path.Combine(_tempPath, "mailboxes"), 3);
     }
 
     public void Dispose()

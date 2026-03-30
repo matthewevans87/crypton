@@ -11,5 +11,6 @@
     <Project Path="src/Crypton.Api.MonitoringDashboard/Crypton.Api.MonitoringDashboard.csproj" />
     <Project Path="src/Crypton.Configuration/Crypton.Configuration.csproj" />
     <Project Path="src/Crypton.Configuration.Tests/Crypton.Configuration.Tests.csproj" />
+    <Project Path="src/Crypton.Tools/Crypton.Tools.csproj" />
   </Folder>
 </Solution>

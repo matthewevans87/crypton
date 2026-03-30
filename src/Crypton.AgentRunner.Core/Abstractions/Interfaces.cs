@@ -1,6 +1,7 @@
 using AgentRunner.Configuration;
 using AgentRunner.Domain;
 using AgentRunner.Domain.Events;
+using Crypton.Tools;
 using Microsoft.Extensions.AI;
 
 namespace AgentRunner.Abstractions;
@@ -70,13 +71,6 @@ public interface IArtifactStore
     IReadOnlyList<string> GetCycleArtifactNames(string cycleId);
 }
 
-/// <summary>Per-agent mailbox — delivers short messages between agents in the same cycle.</summary>
-public interface IMailboxService
-{
-    IReadOnlyList<MailboxMessage> GetMessages(string agentName, int maxCount);
-    void Send(MailboxMessage message);
-}
-
 /// <summary>Persists loop state across process restarts.</summary>
 public interface IStatePersistence
 {
@@ -98,14 +92,6 @@ public interface ICycleScheduler
 
 // ─── Execution-layer ──────────────────────────────────────────────────────────
 
-/// <summary>A single named capability a LLM agent can invoke.</summary>
-public interface IAgentTool
-{
-    string Name { get; }
-    string Description { get; }
-    AIFunction AsAIFunction();
-}
-
 /// <summary>
 /// Returns the <see cref="AIFunction"/> list for a given agent, with telemetry decoration.
 /// The <paramref name="sink"/> is per-call so each invocation captures events independently.
@@ -114,17 +100,11 @@ public interface IToolProvider
 {
     IReadOnlyList<AIFunction> GetFunctionsForAgent(
         string agentName,
-        IReadOnlyList<string> allowedToolNames,
+        IReadOnlyList<Type> allowedToolTypes,
         IAgentEventSink sink);
-}
 
-/// <summary>Wraps a tool invocation with retry, circuit-breaker, and timeout logic.</summary>
-public interface IToolExecutor
-{
-    Task<T> ExecuteWithResilienceAsync<T>(
-        string toolName,
-        Func<CancellationToken, Task<T>> work,
-        CancellationToken ct = default);
+    /// <summary>Returns the documentation for each type in <paramref name="allowedToolTypes"/>, in order.</summary>
+    IReadOnlyList<(string Name, ToolDocumentation Documentation)> GetDocumentationFor(IReadOnlyList<Type> allowedToolTypes);
 }
 
 // ─── Infrastructure ───────────────────────────────────────────────────────────

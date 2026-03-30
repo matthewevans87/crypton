@@ -1,5 +1,6 @@
 using AgentRunner.Configuration;
 using AgentRunner.Domain;
+using Crypton.Tools;
 using Xunit;
 
 namespace AgentRunner.Tests.Agents;

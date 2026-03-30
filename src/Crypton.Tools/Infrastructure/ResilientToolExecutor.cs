@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using AgentRunner.Abstractions;
-using AgentRunner.Configuration;
+using Crypton.Tools.Configuration;
 
-namespace AgentRunner.Execution;
+namespace Crypton.Tools.Infrastructure;
 
 /// <summary>
 /// Wraps every tool invocation with per-tool circuit-breaker, exponential-backoff retry,
@@ -11,10 +10,10 @@ namespace AgentRunner.Execution;
 /// </summary>
 public sealed class ResilientToolExecutor : IToolExecutor
 {
-    private readonly AgentRunnerConfig _config;
+    private readonly ToolsConfig _config;
     private readonly ConcurrentDictionary<string, CircuitBreaker> _circuitBreakers = new();
 
-    public ResilientToolExecutor(AgentRunnerConfig config)
+    public ResilientToolExecutor(ToolsConfig config)
     {
         _config = config;
     }
@@ -31,9 +30,9 @@ public sealed class ResilientToolExecutor : IToolExecutor
             throw new InvalidOperationException(
                 $"Circuit breaker is open for tool '{toolName}'. Too many recent failures.");
 
-        var maxRetries = _config.Tools.MaxRetries;
-        var maxDelaySeconds = _config.Tools.MaxRetryDelaySeconds;
-        var timeoutSeconds = _config.Tools.DefaultTimeoutSeconds;
+        var maxRetries = _config.MaxRetries;
+        var maxDelaySeconds = _config.MaxRetryDelaySeconds;
+        var timeoutSeconds = _config.DefaultTimeoutSeconds;
 
         Exception? lastException = null;
 

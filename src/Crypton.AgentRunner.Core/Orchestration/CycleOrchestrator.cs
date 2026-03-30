@@ -4,6 +4,7 @@ using AgentRunner.Configuration;
 using AgentRunner.Domain;
 using AgentRunner.Domain.Events;
 using AgentRunner.Infrastructure;
+using Crypton.Tools;
 
 namespace AgentRunner.Orchestration;
 
@@ -258,6 +259,7 @@ public sealed class CycleOrchestrator : ICycleOrchestrator
                         if (ExceedsMaxDuration())
                         {
                             _logger.LogWarning("Max cycle duration exceeded — forcing Evaluate.");
+                            _sink.Publish(new LoopHealthEvent("Max cycle duration exceeded — forcing Evaluate.", _sm.CurrentState, IsCritical: true));
                             ForceTransitionToEvaluate();
                             break;
                         }
@@ -310,6 +312,9 @@ public sealed class CycleOrchestrator : ICycleOrchestrator
         _logger.LogAgentInvocation(state.ToString(), cycleId);
         _sink.Publish(new StepStartedEvent(state.ToString(), cycleId, startedAt));
 
+        using var monitorCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var monitorTask = MonitorStepAsync(state, startedAt, monitorCts.Token);
+
         StepRecord stepRecord;
         try
         {
@@ -340,6 +345,7 @@ public sealed class CycleOrchestrator : ICycleOrchestrator
                 stepRecord = new StepRecord(state, startedAt, DateTimeOffset.UtcNow, StepOutcome.Failed, msg);
                 _currentCycle = RecordStep(_currentCycle, stepRecord);
                 PublishStepCompleted(state, cycleId, false, msg, startedAt);
+                _logger.LogAgentCompletion(state.ToString(), cycleId, false);
                 await HandleStepFailureAsync(state, msg, ct);
                 return;
             }
@@ -360,8 +366,54 @@ public sealed class CycleOrchestrator : ICycleOrchestrator
             stepRecord = new StepRecord(state, startedAt, DateTimeOffset.UtcNow, StepOutcome.Timeout, "Timed out");
             _currentCycle = RecordStep(_currentCycle!, stepRecord);
             PublishStepCompleted(state, cycleId, false, "Timed out", startedAt);
+            _logger.LogAgentCompletion(state.ToString(), cycleId, false);
             _sm.TransitionTo(LoopState.Failed);
             throw;
+        }
+        finally
+        {
+            monitorCts.Cancel();
+            try { await monitorTask; } catch (OperationCanceledException) { }
+        }
+    }
+
+    /// <summary>
+    /// Runs concurrently with each step and publishes <see cref="LoopHealthEvent"/> when
+    /// the step exceeds the warning or critical stall thresholds from <see cref="ResilienceConfig"/>.
+    /// Exits immediately when <paramref name="ct"/> is cancelled.
+    /// </summary>
+    private async Task MonitorStepAsync(LoopState state, DateTimeOffset startedAt, CancellationToken ct)
+    {
+        var warningFired = false;
+        var criticalFired = false;
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(60), ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            var elapsed = (DateTimeOffset.UtcNow - startedAt).TotalMinutes;
+
+            if (!criticalFired && elapsed >= _config.Resilience.StallCriticalMinutes)
+            {
+                var msg = $"Step {state} stalled ({(int)elapsed} min)";
+                _logger.LogError(msg);
+                _sink.Publish(new LoopHealthEvent(msg, state, IsCritical: true));
+                criticalFired = true;
+            }
+            else if (!warningFired && elapsed >= _config.Resilience.StallWarningMinutes)
+            {
+                var msg = $"Step {state} stalled ({(int)elapsed} min)";
+                _logger.LogWarning(msg);
+                _sink.Publish(new LoopHealthEvent(msg, state, IsCritical: false));
+                warningFired = true;
+            }
         }
     }
 
