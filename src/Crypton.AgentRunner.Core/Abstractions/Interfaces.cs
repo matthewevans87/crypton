@@ -2,7 +2,6 @@ using AgentRunner.Configuration;
 using AgentRunner.Domain;
 using AgentRunner.Domain.Events;
 using Crypton.Tools;
-using Microsoft.Extensions.AI;
 
 namespace AgentRunner.Abstractions;
 
@@ -91,22 +90,6 @@ public interface ICycleScheduler
 }
 
 // ─── Execution-layer ──────────────────────────────────────────────────────────
-
-/// <summary>
-/// Returns the <see cref="AIFunction"/> list for a given agent, with telemetry decoration.
-/// The <paramref name="sink"/> is per-call so each invocation captures events independently.
-/// </summary>
-public interface IToolProvider
-{
-    IReadOnlyList<AIFunction> GetFunctionsForAgent(
-        string agentName,
-        IReadOnlyList<Type> allowedToolTypes,
-        IAgentEventSink sink);
-
-    /// <summary>Returns the documentation for each type in <paramref name="allowedToolTypes"/>, in order.</summary>
-    IReadOnlyList<(string Name, ToolDocumentation Documentation)> GetDocumentationFor(IReadOnlyList<Type> allowedToolTypes);
-}
-
 // ─── Infrastructure ───────────────────────────────────────────────────────────
 
 /// <summary>Typed event bus. Implementations fan out to SignalR, console, or test capture.</summary>

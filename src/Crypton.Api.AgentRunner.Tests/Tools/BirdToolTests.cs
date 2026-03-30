@@ -5,142 +5,104 @@ using Crypton.Tools;
 using Crypton.Tools.Configuration;
 using Crypton.Tools.Infrastructure;
 using Crypton.Tools.Tools;
-using Microsoft.Extensions.AI;
-using NSubstitute;
+using Spectre.Console.Cli;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
 
 public class BirdToolTests
 {
-    private static BirdTool CreateTool(HttpClient httpClient, string baseUrl = "http://localhost:11435")
+    private static readonly ToolsConfig Config = new() { MaxRetries = 0, DefaultTimeoutSeconds = 30 };
+
+    private static (ToolRegistry Registry, InProcessVirtualTerminal Vt) BuildVt(
+        HttpClient http, string baseUrl = "http://localhost:11435")
     {
-        var executor = new ResilientToolExecutor(new ToolsConfig { MaxRetries = 0, DefaultTimeoutSeconds = 30 });
-        return new BirdTool(httpClient, baseUrl, executor);
+        var registry = new ToolRegistry();
+        registry.Register<BirdTool, BirdTool.Settings>(
+            "bird",
+            console =>
+            {
+                var tool = new BirdTool(http, baseUrl, console);
+                var reg = new InProcessTypeRegistrar();
+                reg.RegisterInstance(typeof(BirdTool), tool);
+                var app = new CommandApp<BirdTool>(reg);
+                app.Configure(c => c.PropagateExceptions());
+                return app;
+            });
+        return (registry, new InProcessVirtualTerminal(registry, Config));
     }
 
-    private static HttpClient CreateHttpClient(string responseJson, HttpStatusCode status = HttpStatusCode.OK)
+    private static HttpClient BirdHttp(int exitCode, string? stdout = null, string? stderr = null)
     {
-        var handler = new FakeHttpMessageHandler(status, responseJson);
-        return new HttpClient(handler);
-    }
-
-    [Fact]
-    public void Name_IsBird()
-    {
-        var tool = CreateTool(new HttpClient());
-        Assert.Equal("bird", tool.Name);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_SearchMode_ReturnsStdout()
-    {
-        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "hello" } });
-        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
-        var tool = CreateTool(CreateHttpClient(json));
-        var fn = tool.AsAIFunction();
-
-        var result = (await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "BTC" })))?.ToString();
-        Assert.NotNull(result);
-        Assert.DoesNotContain("Error:", result);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_NonZeroExitCode_ReturnsError()
-    {
-        var json = JsonSerializer.Serialize(new { exitCode = 1, stdout = "", stderr = "auth failed" });
-        var tool = CreateTool(CreateHttpClient(json));
-        var fn = tool.AsAIFunction();
-
-        var result = (await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "BTC" })))?.ToString();
-        Assert.Contains("Error:", result);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_HttpError_ReturnsError()
-    {
-        var tool = CreateTool(CreateHttpClient("{}", HttpStatusCode.ServiceUnavailable));
-        var fn = tool.AsAIFunction();
-
-        var result = (await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "BTC" })))?.ToString();
-        Assert.Contains("Error:", result);
-    }
-
-    // ─── InvokeAsync ──────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task InvokeAsync_ValidParams_CallsToolAndReturnsOutput()
-    {
-        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "hello" } });
-        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
-        var tool = CreateTool(CreateHttpClient(json));
-
-        var result = await tool.InvokeAsync(new Dictionary<string, string>
+        var body = JsonSerializer.Serialize(new
         {
-            ["query"] = "bitcoin ETF inflows",
-            ["count"] = "5"
+            exitCode,
+            stdout = stdout ?? "[]",
+            stderr = stderr ?? "",
         });
-
-        Assert.NotNull(result);
-        Assert.DoesNotContain("Error:", result);
+        return new HttpClient(new BirdFakeHandler(HttpStatusCode.OK, body));
     }
 
     [Fact]
-    public async Task InvokeAsync_DefaultsApplied_UsesSearchModeAndCount20()
+    public async Task RunAsync_SearchMode_ReturnsSuccess()
+    {
+        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "BTC ATH" } });
+        var (_, vt) = BuildVt(BirdHttp(0, tweets));
+
+        var result = await vt.RunAsync("bird", "{\"query\": \"BTC\"}");
+
+        Assert.True(result.IsSuccess, $"Expected success. Output: {result.Output}");
+        Assert.DoesNotContain("Error:", result.Output);
+    }
+
+    [Fact]
+    public async Task RunAsync_NonZeroExitCode_WritesErrorOutput()
+    {
+        var (_, vt) = BuildVt(BirdHttp(1, "", "auth failed"));
+
+        var result = await vt.RunAsync("bird", "{\"query\": \"BTC\"}");
+
+        // Tool returns exit code 1 → IsSuccess = false, output should mention error
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RunAsync_BirdServerDown_ReturnsFailure()
+    {
+        var http = new HttpClient(new BirdFakeHandler(HttpStatusCode.ServiceUnavailable, "{}"));
+        var (_, vt) = BuildVt(http);
+
+        var result = await vt.RunAsync("bird", "{\"query\": \"BTC\"}");
+
+        Assert.False(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithModeAndCount_ReturnsSuccess()
     {
         var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "test" } });
-        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
+        var (_, vt) = BuildVt(BirdHttp(0, tweets));
 
-        var tool = CreateTool(CreateHttpClient(json));
-        var result = await tool.InvokeAsync(new Dictionary<string, string> { ["query"] = "crypto" });
+        var result = await vt.RunAsync("bird",
+            "{\"query\": \"bitcoin ETF\", \"mode\": \"search\", \"count\": 5}");
 
-        Assert.NotNull(result);
-        Assert.DoesNotContain("Error:", result);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_MissingQuery_ReturnsError()
-    {
-        var tool = CreateTool(new HttpClient());
-
-        var result = await tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["mode"] = "search"
-        });
-
-        Assert.StartsWith("Error:", result);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_InvalidCount_UsesDefault20()
-    {
-        var tweets = JsonSerializer.Serialize(new[] { new { id = "1", text = "test" } });
-        var json = JsonSerializer.Serialize(new { exitCode = 0, stdout = tweets, stderr = "" });
-        var tool = CreateTool(CreateHttpClient(json));
-
-        // "notanumber" should fall back to default 20 without throwing
-        var result = await tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["query"] = "bitcoin",
-            ["count"] = "notanumber"
-        });
-
-        Assert.DoesNotContain("Error:", result);
+        Assert.True(result.IsSuccess, $"Expected success. Output: {result.Output}");
     }
 }
 
-internal sealed class FakeHttpMessageHandler : HttpMessageHandler
+file sealed class BirdFakeHandler : HttpMessageHandler
 {
     private readonly HttpStatusCode _status;
     private readonly string _content;
 
-    public FakeHttpMessageHandler(HttpStatusCode status, string content)
+    public BirdFakeHandler(HttpStatusCode status, string content)
     {
         _status = status;
         _content = content;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage _, CancellationToken __)
         => Task.FromResult(new HttpResponseMessage(_status)
         {
             Content = new StringContent(_content, Encoding.UTF8, "application/json")

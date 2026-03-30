@@ -1,5 +1,3 @@
-using Crypton.Tools;
-
 namespace AgentRunner.Domain;
 
 /// <summary>Input passed to <see cref="Abstractions.IAgentExecutor.ExecuteAsync"/>. Pure data — no methods.</summary>
@@ -8,7 +6,7 @@ public sealed record AgentInput(
     string CycleId,
     string SystemPrompt,
     string UserPrompt,
-    IReadOnlyList<Type> AvailableTools);
+    IReadOnlyList<string> AvailableTools);
 
 /// <summary>Result returned by <see cref="Abstractions.IAgentExecutor.ExecuteAsync"/>.</summary>
 public sealed record AgentOutput(
@@ -23,7 +21,7 @@ public sealed record AgentStateDefinition(
     string PromptFile,
     string TemplateFile,
     string[] InputArtifacts,
-    Type[] AvailableTools,
+    string[] AvailableTools,
     bool IncludeMemory = true,
     bool IncludeRecentEvaluations = false,
     int RecentEvaluationCount = 0);

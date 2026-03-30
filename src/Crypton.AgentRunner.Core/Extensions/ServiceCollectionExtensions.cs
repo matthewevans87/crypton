@@ -1,14 +1,12 @@
 using AgentRunner.Abstractions;
 using AgentRunner.Configuration;
 using AgentRunner.Domain;
-using AgentRunner.Domain.Events;
 using AgentRunner.Execution;
 using AgentRunner.Infrastructure;
 using AgentRunner.Logging;
 using AgentRunner.Orchestration;
 using Crypton.Tools;
 using Crypton.Tools.Infrastructure;
-using Crypton.Tools.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using OllamaSharp;
@@ -50,7 +48,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IArtifactStore>(),
             sp.GetRequiredService<IMailboxService>(),
             sp.GetRequiredService<IReadOnlyDictionary<LoopState, AgentStateDefinition>>(),
-            sp.GetRequiredService<IEnumerable<IAgentTool>>(),
+            sp.GetRequiredService<IToolRegistry>(),
             config));
         services.AddSingleton<LoopRestartManager>();
         services.AddSingleton<ICycleOrchestrator, CycleOrchestrator>();
@@ -58,13 +56,15 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers all tool implementations and the <see cref="IToolProvider"/>.</summary>
+    /// <summary>
+    /// Registers all Crypton tool implementations, <see cref="IToolRegistry"/>, and
+    /// <see cref="IVirtualTerminal"/> via <see cref="CryptonToolsExtensions.AddCryptonTools"/>.
+    /// </summary>
     public static IServiceCollection AddAgentTools(
         this IServiceCollection services,
         AgentRunnerConfig config)
     {
         services.AddCryptonTools(config.Tools);
-        services.AddSingleton<IToolProvider, ToolRegistry>();
         return services;
     }
 
@@ -91,7 +91,7 @@ public static class ServiceCollectionExtensions
                 PromptFile: "plan_agent.md",
                 TemplateFile: "plan.md",
                 InputArtifacts: [],
-                AvailableTools: [typeof(WebSearchTool), typeof(WebFetchTool), typeof(BirdTool), typeof(GetPriceTool), typeof(TechnicalIndicatorsTool), typeof(SendMailTool)],
+                AvailableTools: ["web_search", "web_fetch", "bird", "get_price", "technical_indicators", "send_mail"],
                 IncludeRecentEvaluations: true,
                 RecentEvaluationCount: 7),
 
@@ -100,28 +100,28 @@ public static class ServiceCollectionExtensions
                 PromptFile: "research_agent.md",
                 TemplateFile: "research.md",
                 InputArtifacts: ["plan.md"],
-                AvailableTools: [typeof(WebSearchTool), typeof(WebFetchTool), typeof(BirdTool), typeof(GetPriceTool), typeof(TechnicalIndicatorsTool), typeof(SendMailTool)]),
+                AvailableTools: ["web_search", "web_fetch", "bird", "get_price", "technical_indicators", "send_mail"]),
 
             [LoopState.Analyze] = new(
                 AgentName: "Analysis",
                 PromptFile: "analysis_agent.md",
                 TemplateFile: "analysis.md",
                 InputArtifacts: ["research.md"],
-                AvailableTools: [typeof(CurrentPositionTool), typeof(TechnicalIndicatorsTool), typeof(MacroSignalsTool), typeof(OrderBookTool), typeof(GetPriceTool), typeof(SendMailTool)]),
+                AvailableTools: ["current_position", "technical_indicators", "macro_signals", "order_book", "get_price", "send_mail"]),
 
             [LoopState.Synthesize] = new(
                 AgentName: "Synthesis",
                 PromptFile: "synthesis_agent.md",
                 TemplateFile: "strategy.json",
                 InputArtifacts: ["analysis.md"],
-                AvailableTools: [typeof(CurrentPositionTool), typeof(SendMailTool)]),
+                AvailableTools: ["current_position", "send_mail"]),
 
             [LoopState.Evaluate] = new(
                 AgentName: "Evaluation",
                 PromptFile: "evaluation_agent.md",
                 TemplateFile: "evaluation.md",
                 InputArtifacts: ["strategy.json", "analysis.md"],
-                AvailableTools: [typeof(CurrentPositionTool), typeof(SendMailTool)],
+                AvailableTools: ["current_position", "send_mail"],
                 IncludeMemory: false,
                 IncludeRecentEvaluations: true,
                 RecentEvaluationCount: 3),

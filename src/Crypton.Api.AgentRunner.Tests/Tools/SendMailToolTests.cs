@@ -1,74 +1,72 @@
 using Crypton.Tools;
+using Crypton.Tools.Configuration;
 using Crypton.Tools.Infrastructure;
 using Crypton.Tools.Tools;
-using Microsoft.Extensions.AI;
+using Spectre.Console.Cli;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
 
 public class SendMailToolTests : IDisposable
 {
+    private static readonly ToolsConfig Config = new() { MaxRetries = 0, DefaultTimeoutSeconds = 30 };
+
     private readonly string _tempPath;
     private readonly FileMailboxService _mailbox;
-    private readonly SendMailTool _tool;
-    private AIFunction? _fn;
+    private readonly (ToolRegistry Registry, InProcessVirtualTerminal Vt) _vt;
 
     public SendMailToolTests()
     {
         _tempPath = Path.Combine(Path.GetTempPath(), $"sendmail_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempPath);
         _mailbox = new FileMailboxService(Path.Combine(_tempPath, "mailboxes"), 5);
-        _tool = new SendMailTool(_mailbox);
-        _fn = _tool.AsAIFunction();
+
+        var registry = new ToolRegistry();
+        registry.Register<SendMailTool, SendMailTool.Settings>(
+            "send_mail",
+            console =>
+            {
+                var tool = new SendMailTool(_mailbox, console);
+                var reg = new InProcessTypeRegistrar();
+                reg.RegisterInstance(typeof(SendMailTool), tool);
+                var app = new CommandApp<SendMailTool>(reg);
+                app.Configure(c => c.PropagateExceptions());
+                return app;
+            });
+        _vt = (registry, new InProcessVirtualTerminal(registry, Config));
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempPath)) Directory.Delete(_tempPath, recursive: true);
+        if (Directory.Exists(_tempPath))
+            Directory.Delete(_tempPath, recursive: true);
     }
 
     [Fact]
-    public void Name_IsSendMail()
+    public async Task RunAsync_ValidRecipient_ReturnsSuccess()
     {
-        Assert.Equal("send_mail", _tool.Name);
+        var result = await _vt.Vt.RunAsync("send_mail",
+            "{\"to\": \"research\", \"from\": \"plan\", \"message\": \"test message\"}");
+
+        Assert.True(result.IsSuccess, $"Expected success. Output: {result.Output}");
+        Assert.Contains("delivered", result.Output, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task ExecuteAsync_ValidRecipient_ReturnsConfirmation()
+    public async Task RunAsync_UnknownRecipient_ReturnsFailure()
     {
-        var args = new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["to"] = "research",
-            ["from"] = "plan",
-            ["message"] = "test message"
-        });
-        var result = (await _fn!.InvokeAsync(args))?.ToString();
-        Assert.Contains("delivered", result, StringComparison.OrdinalIgnoreCase);
+        var result = await _vt.Vt.RunAsync("send_mail",
+            "{\"to\": \"oracle\", \"from\": \"plan\", \"message\": \"test\"}");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("oracle", result.Output, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task ExecuteAsync_UnknownRecipient_ReturnsError()
+    public async Task RunAsync_ValidCall_DepositsToMailbox()
     {
-        var args = new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["to"] = "oracle",
-            ["from"] = "plan",
-            ["message"] = "test"
-        });
-        var result = (await _fn!.InvokeAsync(args))?.ToString();
-        Assert.Contains("oracle", result, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ValidCall_DepositsToMailbox()
-    {
-        var args = new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["to"] = "research",
-            ["from"] = "plan",
-            ["message"] = "Focus on BTC."
-        });
-        await _fn!.InvokeAsync(args);
+        await _vt.Vt.RunAsync("send_mail",
+            "{\"to\": \"research\", \"from\": \"plan\", \"message\": \"Focus on BTC.\"}");
 
         var messages = _mailbox.GetMessages("research", 10);
         Assert.Single(messages);
@@ -83,74 +81,22 @@ public class SendMailToolTests : IDisposable
     [InlineData("analysis")]
     [InlineData("synthesis")]
     [InlineData("evaluation")]
-    public async Task ExecuteAsync_AllValidRecipients_Succeed(string recipient)
+    public async Task RunAsync_AllValidRecipients_Succeed(string recipient)
     {
-        var args = new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["to"] = recipient,
-            ["from"] = "plan",
-            ["message"] = "test"
-        });
-        var result = (await _fn!.InvokeAsync(args))?.ToString();
-        Assert.DoesNotContain("Error:", result, StringComparison.OrdinalIgnoreCase);
-    }
+        var result = await _vt.Vt.RunAsync("send_mail",
+            $"{{\"to\": \"{recipient}\", \"from\": \"plan\", \"message\": \"test\"}}");
 
-    // ─── InvokeAsync ──────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task InvokeAsync_ValidParams_ReturnsConfirmation()
-    {
-        var result = await _tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["to"] = "research",
-            ["from"] = "plan",
-            ["message"] = "BTC funding rates at 6-month high."
-        });
-        Assert.Contains("delivered", result, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.IsSuccess,
+            $"Expected success for recipient '{recipient}'. Output: {result.Output}");
     }
 
     [Fact]
-    public async Task InvokeAsync_MissingTo_ReturnsError()
+    public async Task RunAsync_MissingTo_ReturnsFailure()
     {
-        var result = await _tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["from"] = "plan",
-            ["message"] = "test"
-        });
-        Assert.StartsWith("Error:", result);
-    }
+        // --to is required; omitting it causes Spectre.Console.Cli to fail before ExecuteAsync
+        var result = await _vt.Vt.RunAsync("send_mail",
+            "{\"from\": \"plan\", \"message\": \"test\"}");
 
-    [Fact]
-    public async Task InvokeAsync_MissingFrom_ReturnsError()
-    {
-        var result = await _tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["to"] = "research",
-            ["message"] = "test"
-        });
-        Assert.StartsWith("Error:", result);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_MissingMessage_ReturnsError()
-    {
-        var result = await _tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["to"] = "research",
-            ["from"] = "plan"
-        });
-        Assert.StartsWith("Error:", result);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_InvalidRecipient_ReturnsError()
-    {
-        var result = await _tool.InvokeAsync(new Dictionary<string, string>
-        {
-            ["to"] = "oracle",
-            ["from"] = "plan",
-            ["message"] = "test"
-        });
-        Assert.StartsWith("Error:", result);
+        Assert.False(result.IsSuccess);
     }
 }

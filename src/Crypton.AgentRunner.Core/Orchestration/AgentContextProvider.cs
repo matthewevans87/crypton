@@ -9,8 +9,6 @@ namespace AgentRunner.Orchestration;
 /// <summary>
 /// Builds a fully-formed <see cref="AgentInput"/> for the given loop state and cycle.
 /// Loads prompt files and output templates from disk (relative to <c>AppContext.BaseDirectory</c>).
-/// The <see cref="AgentInput"/> carries pre-built <c>SystemPrompt</c> and <c>UserPrompt</c>
-/// strings — all formatting decisions live here, not in the executor.
 /// </summary>
 public sealed class AgentContextProvider : IAgentContextProvider
 {
@@ -18,20 +16,20 @@ public sealed class AgentContextProvider : IAgentContextProvider
     private readonly IMailboxService _mailbox;
     private readonly IReadOnlyDictionary<LoopState, AgentStateDefinition> _definitions;
     private readonly AgentRunnerConfig _config;
-    private readonly IReadOnlyDictionary<Type, IAgentTool> _toolsByType;
+    private readonly IToolRegistry _toolRegistry;
 
     public AgentContextProvider(
         IArtifactStore artifacts,
         IMailboxService mailbox,
         IReadOnlyDictionary<LoopState, AgentStateDefinition> definitions,
-        IEnumerable<IAgentTool> tools,
+        IToolRegistry toolRegistry,
         AgentRunnerConfig config)
     {
         _artifacts = artifacts;
         _mailbox = mailbox;
         _definitions = definitions;
         _config = config;
-        _toolsByType = tools.ToDictionary(t => t.GetType(), t => (IAgentTool)t);
+        _toolRegistry = toolRegistry;
     }
 
     public AgentInput BuildContext(LoopState state, string cycleId, string? previousCycleId = null)
@@ -39,13 +37,12 @@ public sealed class AgentContextProvider : IAgentContextProvider
         if (!_definitions.TryGetValue(state, out var def))
             throw new InvalidOperationException($"No agent state definition for {state}.");
 
-        // Evaluation reads its input artifacts from the previous cycle.
         var sourceCycleId = state == LoopState.Evaluate
             ? previousCycleId ?? cycleId
             : cycleId;
 
         var identity = LoadPromptFile(def.PromptFile);
-        var toolGuide = BuildToolReference(def.AvailableTools);
+        var toolList = BuildToolList(def.AvailableTools);
         var outputTemplate = LoadTemplate(def.TemplateFile);
 
         var messages = _mailbox.GetMessages(
@@ -66,7 +63,7 @@ public sealed class AgentContextProvider : IAgentContextProvider
         if (state == LoopState.Evaluate)
             inputArtifacts["evaluated_cycle_id"] = sourceCycleId;
 
-        var systemPrompt = BuildSystemPrompt(identity, toolGuide);
+        var systemPrompt = BuildSystemPrompt(identity, toolList);
         var userPrompt = BuildUserPrompt(
             def.AgentName, messages, memory, sharedMemory,
             recentEvals, inputArtifacts, outputTemplate);
@@ -81,7 +78,7 @@ public sealed class AgentContextProvider : IAgentContextProvider
 
     // ─── Prompt builders ──────────────────────────────────────────────────────
 
-    private static string BuildSystemPrompt(string identity, string toolGuide)
+    private static string BuildSystemPrompt(string identity, string toolList)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# Agent Identity");
@@ -90,8 +87,17 @@ public sealed class AgentContextProvider : IAgentContextProvider
         sb.AppendLine("# Current Date and Time");
         sb.AppendLine(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"));
         sb.AppendLine();
-        sb.AppendLine("# Tool Reference");
-        sb.AppendLine(toolGuide);
+        sb.AppendLine("# Available Tools");
+        sb.AppendLine();
+        sb.AppendLine("When you need to call a tool, respond ONLY with valid JSON:");
+        sb.AppendLine("  {\"tool\": \"<tool_name>\"}");
+        sb.AppendLine();
+        sb.AppendLine("You will then be prompted for the tool's arguments.");
+        sb.AppendLine("When you have no more tool calls to make, respond with:");
+        sb.AppendLine("  {\"tool\": null}");
+        sb.AppendLine();
+        sb.AppendLine("Tools available to you:");
+        sb.AppendLine(toolList);
         return sb.ToString();
     }
 
@@ -164,7 +170,7 @@ public sealed class AgentContextProvider : IAgentContextProvider
         sb.AppendLine("- Follow the procedure in your identity instructions step by step.");
         sb.AppendLine("- **IMPORTANT — No preamble or postamble.** When writing your output document, start the document IMMEDIATELY on the first line. Do NOT include sentences like 'Based on the data gathered...' or 'Here is the draft of...' before the document. Your entire response should be the document itself.");
         sb.AppendLine("- **Replace all template placeholders.** The Output Template contains example placeholder text like `[Signal name]`, `[Headline / Event]`, `<!-- date -->`, etc. Replace every placeholder with real content from your research. If there is nothing to report for a section, write 'None identified this cycle.' Do NOT copy placeholder brackets literally into your output.");
-        sb.AppendLine("- **STOP at the end of your document.** The '---' separator above and the text 'BEGIN your work now.' are system triggers, NOT part of your output document. Do NOT copy the phrase 'BEGIN your work now.' anywhere in your output. Your document must end at its natural conclusion (e.g., the Emerging Signals section for analysis.md, or the last mailbox step).");
+        sb.AppendLine("- **STOP at the end of your document.** The '---' separator above and the text 'BEGIN your work now.' are system triggers, NOT part of your output document. Do NOT copy the phrase 'BEGIN your work now.' anywhere in your output. Your document must end at its natural conclusion.");
 
         AppendAgentSpecificGuidance(sb, agentName);
 
@@ -194,13 +200,16 @@ public sealed class AgentContextProvider : IAgentContextProvider
 
     // ─── File loading ─────────────────────────────────────────────────────────
 
-    private string BuildToolReference(Type[] toolTypes)
+    private string BuildToolList(string[] toolNames)
     {
-        var parts = toolTypes
-            .Where(_toolsByType.ContainsKey)
-            .Select(t => _toolsByType[t])
-            .Select(t => t.Documentation.ToMarkdown(t.Name));
-        return string.Concat(parts);
+        var descriptions = _toolRegistry.GetDescriptions(toolNames);
+        if (descriptions.Count == 0)
+            return "(no tools available)";
+
+        var sb = new StringBuilder();
+        foreach (var (name, description) in descriptions)
+            sb.AppendLine($"- **{name}**: {description}");
+        return sb.ToString().TrimEnd();
     }
 
     private static string LoadPromptFile(string fileName)

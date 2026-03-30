@@ -1,138 +1,99 @@
 using System.ComponentModel;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.Extensions.AI;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace Crypton.Tools.Tools;
 
-/// <summary>Web search via the Brave Search API.</summary>
-public sealed class WebSearchTool : IAgentTool
+/// <summary>Searches the web for current information via the Brave Search API.</summary>
+[Description("Search the web for current news, events, and information. Returns titles, URLs, and descriptions. Use web_fetch to read a result in full.")]
+public sealed class WebSearchTool : AsyncCommand<WebSearchTool.Settings>
 {
     private readonly HttpClient _http;
     private readonly string _apiKey;
-    private readonly IToolExecutor _executor;
+    private readonly IAnsiConsole _console;
 
-    public string Name => "web_search";
-    public string Description => "Performs a web search via the Brave Search API. Be specific — include asset names, dates, and key terms.";
-
-    public ToolDocumentation Documentation { get; } = new(
-        LongDescription: "Search the web via the Brave Search API. Returns a ranked list of results suitable for identifying sources to fetch. Do NOT use this to get crypto prices — use `get_price` instead.",
-        Parameters:
-        [
-            new("query",   "string",  Required: true,  Default: null,    "The search query. Be specific. Include asset names, dates, and key terms rather than broad keywords."),
-            new("count",   "integer", Required: false, Default: "10",    "Number of results to return. Range: 1–20."),
-            new("recency", "string",  Required: false, Default: "\"any\"", "Filter results by age. Accepts: \"day\", \"week\", \"month\", \"year\", \"any\"."),
-        ],
-        Returns: "A list of up to `count` results, each containing: `title` (page title), `url` (full URL), `description` (1–2 sentence excerpt).",
-        Examples:
-        [
-            "{\"query\": \"Kraken exchange withdrawal issues February 2026\", \"count\": 5, \"recency\": \"week\"}",
-            "{\"query\": \"Fed funds rate decision March 2026\", \"recency\": \"day\"}",
-        ],
-        Notes:
-        [
-            "Results contain snippets only — use `web_fetch` to read content in full.",
-            "Prefer specific queries over broad ones. `\"Fed funds rate decision March 2026\"` returns better results than `\"Fed interest rates\"`.",
-            "Use `recency` aggressively. For news and sentiment signals, stale results are worse than no results.",
-            "Never use this to retrieve a crypto spot price. Use `get_price` instead.",
-        ]);
-
-    public WebSearchTool(HttpClient http, string apiKey, IToolExecutor executor)
+    public WebSearchTool(HttpClient http, string apiKey, IAnsiConsole? console = null)
     {
         _http = http;
         _apiKey = apiKey;
-        _executor = executor;
+        _console = console ?? AnsiConsole.Console;
     }
 
-    public AIFunction AsAIFunction() => AIFunctionFactory.Create(ExecuteCoreAsync, Name);
-
-    public Task<string> InvokeAsync(IReadOnlyDictionary<string, string> parameters, CancellationToken ct = default)
+    public sealed class Settings : CommandSettings
     {
-        if (!parameters.TryGetValue("query", out var query) || string.IsNullOrWhiteSpace(query))
-            return Task.FromResult("Error: 'query' is required.");
+        [CommandOption("--query <QUERY>")]
+        [Description("The search query. Include asset names, dates, and key terms.")]
+        public required string Query { get; init; }
 
-        var count = parameters.TryGetValue("count", out var countStr) && int.TryParse(countStr, out var c) ? c : 10;
-        var recency = parameters.TryGetValue("recency", out var r) && !string.IsNullOrWhiteSpace(r) ? r : "any";
+        [CommandOption("--count <COUNT>")]
+        [Description("Number of results (1-20).")]
+        [DefaultValue(10)]
+        public int Count { get; init; } = 10;
 
-        return ExecuteCoreAsync(query, count, recency, ct);
+        [CommandOption("--recency <RECENCY>")]
+        [Description("Age filter: day, week, month, year, any.")]
+        [DefaultValue("any")]
+        public string Recency { get; init; } = "any";
     }
 
-    [Description("Searches the web for current information about a topic. Returns titles, URLs, and descriptions.")]
-    internal async Task<string> ExecuteCoreAsync(
-        [Description("The search query. Include asset names, dates, and key terms.")] string query,
-        [Description("Number of results (1–20).")] int count = 10,
-        [Description("Age filter: day, week, month, year, any.")] string recency = "any",
-        CancellationToken cancellationToken = default)
+    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        return await _executor.ExecuteWithResilienceAsync(Name, async ct =>
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            if (string.IsNullOrWhiteSpace(_apiKey))
-                return "Error: Brave Search API key not configured (Tools__BraveSearch__ApiKey).";
+            _console.WriteLine("Error: Brave Search API key not configured (AGENTRUNNER__TOOLS__BRAVESEARCH__APIKEY).");
+            return 1;
+        }
 
-            count = Math.Clamp(count, 1, 20);
-            var freshness = recency switch
+        try
+        {
+            var count = Math.Clamp(settings.Count, 1, 20);
+            var freshness = settings.Recency switch
             {
-                "day" => "pd",
-                "week" => "pw",
+                "day"   => "pd",
+                "week"  => "pw",
                 "month" => "pm",
-                "year" => "py",
-                _ => null
+                "year"  => "py",
+                _       => null
             };
 
-            var url = $"https://api.search.brave.com/res/v1/web/search?q={Uri.EscapeDataString(query)}&count={count}";
-            if (freshness is not null) url += $"&freshness={freshness}";
+            var url = $"https://api.search.brave.com/res/v1/web/search?q={Uri.EscapeDataString(settings.Query)}&count={count}";
+            if (freshness is not null)
+                url += $"&freshness={freshness}";
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Add("Accept", "application/json");
             request.Headers.Add("X-Subscription-Token", _apiKey);
 
-            var response = await _http.SendAsync(request, ct);
+            var response = await _http.SendAsync(request, cancellationToken);
             response.EnsureSuccessStatusCode();
 
-            var body = await response.Content.ReadAsStringAsync(ct);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
             var doc = JsonDocument.Parse(body);
 
             var results = new List<object>();
             if (doc.RootElement.TryGetProperty("web", out var web) &&
-                web.TryGetProperty("results", out var arr))
+                web.TryGetProperty("results", out var items))
             {
-                foreach (var r in arr.EnumerateArray())
+                foreach (var item in items.EnumerateArray().Take(count))
+                {
                     results.Add(new
                     {
-                        title = r.TryGetProperty("title", out var t) ? t.GetString() : "",
-                        url = r.TryGetProperty("url", out var u) ? u.GetString() : "",
-                        description = r.TryGetProperty("description", out var d) ? d.GetString() : ""
+                        title = item.TryGetProperty("title", out var t) ? t.GetString() : "",
+                        url = item.TryGetProperty("url", out var u) ? u.GetString() : "",
+                        description = item.TryGetProperty("description", out var d) ? d.GetString() : "",
                     });
+                }
             }
 
-            return JsonSerializer.Serialize(results);
-        }, cancellationToken);
-    }
-
-    // ─── Spectre.Console Command ─────────────────────────────────────────────
-
-    public sealed class Command(WebSearchTool tool) : AsyncCommand<Command.Settings>
-    {
-        public sealed class Settings : CommandSettings
-        {
-            [CommandArgument(0, "<QUERY>")]
-            public string Query { get; init; } = string.Empty;
-
-            [CommandOption("--count <COUNT>")]
-            [DefaultValue(10)]
-            public int Count { get; init; } = 10;
-
-            [CommandOption("--recency <RECENCY>")]
-            [DefaultValue("any")]
-            public string Recency { get; init; } = "any";
-        }
-
-        public override async Task<int> ExecuteAsync(CommandContext context, Settings settings, CancellationToken cancellationToken)
-        {
-            var result = await tool.ExecuteCoreAsync(settings.Query, settings.Count, settings.Recency);
-            Console.WriteLine(result);
+            _console.WriteLine(JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = false }));
             return 0;
+        }
+        catch (Exception ex)
+        {
+            _console.WriteLine($"Error: {ex.Message}");
+            return 1;
         }
     }
 }

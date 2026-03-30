@@ -1,6 +1,8 @@
 using Crypton.Tools.Configuration;
 using Crypton.Tools.Infrastructure;
+using Crypton.Tools.Tools;
 using Microsoft.Extensions.DependencyInjection;
+using Spectre.Console.Cli;
 
 namespace Crypton.Tools;
 
@@ -10,73 +12,153 @@ namespace Crypton.Tools;
 public static class CryptonToolsExtensions
 {
     /// <summary>
-    /// Registers <see cref="IToolExecutor"/>, <see cref="IHttpClientFactory"/>, and all nine
-    /// tool implementations as concrete singletons and as <see cref="IAgentTool"/> registrations.
+    /// Registers <see cref="IToolRegistry"/>, <see cref="IVirtualTerminal"/>,
+    /// <see cref="IHttpClientFactory"/>, and all tool commands as singleton instances.
     /// </summary>
     /// <remarks>
     /// <see cref="IMailboxService"/> is NOT registered here — callers must register it before
-    /// calling this method (e.g. <c>services.AddSingleton&lt;IMailboxService&gt;(new FileMailboxService(...))</c>).
+    /// calling this method.
     /// </remarks>
     public static IServiceCollection AddCryptonTools(
         this IServiceCollection services,
         ToolsConfig config)
     {
         services.AddHttpClient();
-        services.AddSingleton<IToolExecutor>(new ResilientToolExecutor(config));
 
-        var toolCfg = config;
+        var registry = new ToolRegistry();
 
-        services.AddSingleton(sp => new Tools.WebSearchTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.WebSearchTool)),
-            toolCfg.BraveSearch.ApiKey,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.WebSearchTool>());
+        // We resolve HttpClients lazily from a factory — stored so each registration
+        // can close over its own client name.
+        services.AddSingleton<IToolRegistry>(sp =>
+        {
+            RegisterAllTools(registry, sp, config);
+            return registry;
+        });
 
-        services.AddSingleton(sp => new Tools.WebFetchTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.WebFetchTool)),
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.WebFetchTool>());
-
-        services.AddSingleton(sp => new Tools.BirdTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.BirdTool)),
-            toolCfg.Bird.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.BirdTool>());
-
-        services.AddSingleton(sp => new Tools.GetPriceTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.GetPriceTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.GetPriceTool>());
-
-        services.AddSingleton(sp => new Tools.CurrentPositionTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.CurrentPositionTool)),
-            toolCfg.ExecutionService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.CurrentPositionTool>());
-
-        services.AddSingleton(sp => new Tools.TechnicalIndicatorsTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.TechnicalIndicatorsTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.TechnicalIndicatorsTool>());
-
-        services.AddSingleton(sp => new Tools.MacroSignalsTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.MacroSignalsTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.MacroSignalsTool>());
-
-        services.AddSingleton(sp => new Tools.OrderBookTool(
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(Tools.OrderBookTool)),
-            toolCfg.MarketDataService.BaseUrl,
-            sp.GetRequiredService<IToolExecutor>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.OrderBookTool>());
-
-        services.AddSingleton(sp => new Tools.SendMailTool(
-            sp.GetRequiredService<IMailboxService>()));
-        services.AddSingleton<IAgentTool>(sp => sp.GetRequiredService<Tools.SendMailTool>());
+        services.AddSingleton<IVirtualTerminal>(sp =>
+            new InProcessVirtualTerminal(sp.GetRequiredService<IToolRegistry>(), config));
 
         return services;
+    }
+
+    private static void RegisterAllTools(ToolRegistry registry, IServiceProvider sp, ToolsConfig config)
+    {
+        var factory = sp.GetRequiredService<IHttpClientFactory>();
+
+        // web_search
+        registry.Register<WebSearchTool, WebSearchTool.Settings>(
+            "web_search",
+            console =>
+            {
+                var tool = new WebSearchTool(factory.CreateClient(nameof(WebSearchTool)), config.BraveSearch.ApiKey, console);
+                var registrar = BuildRegistrar(typeof(WebSearchTool), tool);
+                var app = new CommandApp<WebSearchTool>(registrar);
+                app.Configure(c => c.SetApplicationName("web_search").PropagateExceptions());
+                return app;
+            });
+
+        // web_fetch
+        registry.Register<WebFetchTool, WebFetchTool.Settings>(
+            "web_fetch",
+            console =>
+            {
+                var tool = new WebFetchTool(factory.CreateClient(nameof(WebFetchTool)), console);
+                var registrar = BuildRegistrar(typeof(WebFetchTool), tool);
+                var app = new CommandApp<WebFetchTool>(registrar);
+                app.Configure(c => c.SetApplicationName("web_fetch").PropagateExceptions());
+                return app;
+            });
+
+        // bird
+        registry.Register<BirdTool, BirdTool.Settings>(
+            "bird",
+            console =>
+            {
+                var tool = new BirdTool(factory.CreateClient(nameof(BirdTool)), config.Bird.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(BirdTool), tool);
+                var app = new CommandApp<BirdTool>(registrar);
+                app.Configure(c => c.SetApplicationName("bird").PropagateExceptions());
+                return app;
+            });
+
+        // get_price
+        registry.Register<GetPriceTool, GetPriceTool.Settings>(
+            "get_price",
+            console =>
+            {
+                var tool = new GetPriceTool(factory.CreateClient(nameof(GetPriceTool)), config.MarketDataService.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(GetPriceTool), tool);
+                var app = new CommandApp<GetPriceTool>(registrar);
+                app.Configure(c => c.SetApplicationName("get_price").PropagateExceptions());
+                return app;
+            });
+
+        // current_position
+        registry.Register<CurrentPositionTool, CurrentPositionTool.Settings>(
+            "current_position",
+            console =>
+            {
+                var tool = new CurrentPositionTool(factory.CreateClient(nameof(CurrentPositionTool)), config.ExecutionService.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(CurrentPositionTool), tool);
+                var app = new CommandApp<CurrentPositionTool>(registrar);
+                app.Configure(c => c.SetApplicationName("current_position").PropagateExceptions());
+                return app;
+            });
+
+        // technical_indicators
+        registry.Register<TechnicalIndicatorsTool, TechnicalIndicatorsTool.Settings>(
+            "technical_indicators",
+            console =>
+            {
+                var tool = new TechnicalIndicatorsTool(factory.CreateClient(nameof(TechnicalIndicatorsTool)), config.MarketDataService.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(TechnicalIndicatorsTool), tool);
+                var app = new CommandApp<TechnicalIndicatorsTool>(registrar);
+                app.Configure(c => c.SetApplicationName("technical_indicators").PropagateExceptions());
+                return app;
+            });
+
+        // macro_signals
+        registry.Register<MacroSignalsTool, MacroSignalsTool.Settings>(
+            "macro_signals",
+            console =>
+            {
+                var tool = new MacroSignalsTool(factory.CreateClient(nameof(MacroSignalsTool)), config.MarketDataService.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(MacroSignalsTool), tool);
+                var app = new CommandApp<MacroSignalsTool>(registrar);
+                app.Configure(c => c.SetApplicationName("macro_signals").PropagateExceptions());
+                return app;
+            });
+
+        // order_book
+        registry.Register<OrderBookTool, OrderBookTool.Settings>(
+            "order_book",
+            console =>
+            {
+                var tool = new OrderBookTool(factory.CreateClient(nameof(OrderBookTool)), config.MarketDataService.BaseUrl, console);
+                var registrar = BuildRegistrar(typeof(OrderBookTool), tool);
+                var app = new CommandApp<OrderBookTool>(registrar);
+                app.Configure(c => c.SetApplicationName("order_book").PropagateExceptions());
+                return app;
+            });
+
+        // send_mail — needs IMailboxService from the outer IServiceProvider
+        registry.Register<SendMailTool, SendMailTool.Settings>(
+            "send_mail",
+            console =>
+            {
+                var mailbox = sp.GetRequiredService<IMailboxService>();
+                var tool = new SendMailTool(mailbox, console);
+                var registrar = BuildRegistrar(typeof(SendMailTool), tool);
+                var app = new CommandApp<SendMailTool>(registrar);
+                app.Configure(c => c.SetApplicationName("send_mail").PropagateExceptions());
+                return app;
+            });
+    }
+
+    private static InProcessTypeRegistrar BuildRegistrar(Type commandType, object instance)
+    {
+        var registrar = new InProcessTypeRegistrar();
+        registrar.RegisterInstance(commandType, instance);
+        return registrar;
     }
 }

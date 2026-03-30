@@ -1,223 +1,153 @@
-using AgentRunner.Abstractions;
-using Crypton.Tools;
+using System.Text.Json;
+using Crypton.Tools.Infrastructure;
 using Crypton.Tools.Tools;
+using Spectre.Console.Cli;
 using Xunit;
 
 namespace AgentRunner.Tests.Tools;
 
-public class ToolDocumentationTests
+/// <summary>
+/// Unit tests for <see cref="ToolSchemaGenerator"/>.
+/// </summary>
+public class ToolSchemaGeneratorTests
 {
-    // ─── ToMarkdown ───────────────────────────────────────────────────────────
+    // ─── GenerateSchema ──────────────────────────────────────────────────────
 
     [Fact]
-    public void ToMarkdown_IncludesToolNameAsHeading()
+    public void GenerateSchema_ReturnsValidJson()
     {
-        var doc = BuildMinimalDoc();
-        var md = doc.ToMarkdown("my_tool");
-        Assert.Contains("## `my_tool`", md);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+
+        Assert.NotNull(json);
+        var doc = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Object, doc.RootElement.ValueKind);
     }
 
     [Fact]
-    public void ToMarkdown_IncludesLongDescription()
+    public void GenerateSchema_RootTypeIsObject()
     {
-        var doc = BuildMinimalDoc();
-        var md = doc.ToMarkdown("t");
-        Assert.Contains("A detailed description.", md);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+        var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("object", doc.RootElement.GetProperty("type").GetString());
     }
 
     [Fact]
-    public void ToMarkdown_IncludesReturnsSection()
+    public void GenerateSchema_IncludesQueryPropertyInProperties()
     {
-        var doc = BuildMinimalDoc();
-        var md = doc.ToMarkdown("t");
-        Assert.Contains("### Returns", md);
-        Assert.Contains("Return value text.", md);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+        var doc = JsonDocument.Parse(json);
+
+        var props = doc.RootElement.GetProperty("properties");
+        Assert.True(props.TryGetProperty("--query", out _),
+            "Expected '--query' in properties");
     }
 
     [Fact]
-    public void ToMarkdown_WhenHasParameters_IncludesParameterTable()
+    public void GenerateSchema_StringPropertiesAreNotInRequiredArray()
     {
-        var doc = new ToolDocumentation(
-            LongDescription: "desc",
-            Parameters:
-            [
-                new("query",  "string",  Required: true,  Default: null,    "The query."),
-                new("count",  "integer", Required: false, Default: "10",    "Number of results."),
-            ],
-            Returns: "Some results.",
-            Examples: [],
-            Notes: []);
+        // String properties are reference types; per schema generator convention they
+        // are treated as optional and NOT placed in the "required" array.
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+        var doc = JsonDocument.Parse(json);
 
-        var md = doc.ToMarkdown("t");
-
-        Assert.Contains("### Parameters", md);
-        Assert.Contains("| `query` |", md);
-        Assert.Contains("| yes |", md);
-        Assert.Contains("| `count` |", md);
-        Assert.Contains("| no |", md);
-        Assert.Contains("| `10` |", md);
-        Assert.Contains("| \u2014 |", md);   // null default renders as em-dash
+        // No "required" field at all for WebSearchTool.Settings (all props are optional types)
+        Assert.False(doc.RootElement.TryGetProperty("required", out _),
+            "String reference-type properties should not produce a 'required' array");
     }
 
     [Fact]
-    public void ToMarkdown_WhenNoParameters_OmitsParameterSection()
+    public void GenerateSchema_IncludesDescriptionOnProperty()
     {
-        var doc = new ToolDocumentation(
-            LongDescription: "desc",
-            Parameters: [],
-            Returns: "r",
-            Examples: [],
-            Notes: []);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+        var doc = JsonDocument.Parse(json);
 
-        var md = doc.ToMarkdown("t");
-        Assert.DoesNotContain("### Parameters", md);
+        var queryProp = doc.RootElement.GetProperty("properties").GetProperty("--query");
+        var desc = queryProp.GetProperty("description").GetString();
+
+        Assert.False(string.IsNullOrWhiteSpace(desc));
     }
 
     [Fact]
-    public void ToMarkdown_WhenHasExamples_IncludesJsonCodeBlock()
+    public void GenerateSchema_IncludesDefaultValueOnOptionalProperty()
     {
-        var doc = new ToolDocumentation(
-            LongDescription: "d",
-            Parameters: [],
-            Returns: "r",
-            Examples: ["{\"query\": \"bitcoin\"}"],
-            Notes: []);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(WebSearchTool.Settings));
+        var doc = JsonDocument.Parse(json);
 
-        var md = doc.ToMarkdown("t");
-        Assert.Contains("### Example", md);
-        Assert.Contains("```json", md);
-        Assert.Contains("{\"query\": \"bitcoin\"}", md);
+        var countProp = doc.RootElement.GetProperty("properties").GetProperty("--count");
+        Assert.True(countProp.TryGetProperty("default", out var defaultVal));
+        Assert.Equal(10, defaultVal.GetInt32());
     }
 
     [Fact]
-    public void ToMarkdown_WhenNoExamples_OmitsExampleSection()
+    public void GenerateSchema_NoOptionsType_ReturnsEmptyObjectSchema()
     {
-        var doc = new ToolDocumentation(
-            LongDescription: "d",
-            Parameters: [],
-            Returns: "r",
-            Examples: [],
-            Notes: []);
+        var json = ToolSchemaGenerator.GenerateSchema(typeof(EmptySettings));
+        var doc = JsonDocument.Parse(json);
 
-        var md = doc.ToMarkdown("t");
-        Assert.DoesNotContain("### Example", md);
+        Assert.Equal("object", doc.RootElement.GetProperty("type").GetString());
+        Assert.Equal(0, doc.RootElement.GetProperty("properties").EnumerateObject().Count());
+        Assert.False(doc.RootElement.TryGetProperty("required", out _));
+    }
+
+    // ─── JsonToArgs ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void JsonToArgs_SingleStringProperty_ReturnsOptionValuePair()
+    {
+        var args = ToolSchemaGenerator.JsonToArgs(
+            typeof(WebSearchTool.Settings), "{\"query\": \"bitcoin\"}");
+
+        Assert.Equal(new[] { "--query", "bitcoin" }, args);
     }
 
     [Fact]
-    public void ToMarkdown_WhenHasNotes_IncludesBulletedNotes()
+    public void JsonToArgs_MultipleProperties_ReturnsAllPairs()
     {
-        var doc = new ToolDocumentation(
-            LongDescription: "d",
-            Parameters: [],
-            Returns: "r",
-            Examples: [],
-            Notes: ["First note.", "Second note."]);
+        var args = ToolSchemaGenerator.JsonToArgs(
+            typeof(WebSearchTool.Settings), "{\"query\": \"eth\", \"count\": 5}");
 
-        var md = doc.ToMarkdown("t");
-        Assert.Contains("### Notes", md);
-        Assert.Contains("- First note.", md);
-        Assert.Contains("- Second note.", md);
+        Assert.Contains("--query", args);
+        Assert.Contains("eth", args);
+        Assert.Contains("--count", args);
+        Assert.Contains("5", args);
     }
 
     [Fact]
-    public void ToMarkdown_WhenNoNotes_OmitsNotesSection()
+    public void JsonToArgs_ArgsEnvelope_Unwraps()
     {
-        var doc = BuildMinimalDoc();
-        var md = doc.ToMarkdown("t");
-        Assert.DoesNotContain("### Notes", md);
-    }
+        var args = ToolSchemaGenerator.JsonToArgs(
+            typeof(WebSearchTool.Settings), "{\"args\": {\"query\": \"sol\"}}");
 
-    // ─── Tool class Documentation spot-checks ─────────────────────────────────
-
-    [Fact]
-    public void GetPriceTool_Documentation_NotesContainGetPricePreferenceHint()
-    {
-        var tool = GetPriceToolFactory.Create();
-        var md = tool.Documentation.ToMarkdown(tool.Name);
-        Assert.Contains("get_price", md);
-        Assert.Matches("(?i)instead of.*web_search|web_search.*instead", md);
+        Assert.Equal(new[] { "--query", "sol" }, args);
     }
 
     [Fact]
-    public void WebSearchTool_Documentation_ToMarkdownContainsToolName()
+    public void JsonToArgs_EmptyJson_ReturnsEmpty()
     {
-        var tool = WebSearchToolFactory.Create();
-        var md = tool.Documentation.ToMarkdown(tool.Name);
-        Assert.Contains("## `web_search`", md);
+        var args = ToolSchemaGenerator.JsonToArgs(typeof(WebSearchTool.Settings), "{}");
+        Assert.Empty(args);
     }
 
     [Fact]
-    public void AllToolClasses_HaveNonNullDocumentation()
+    public void JsonToArgs_InvalidJson_ReturnsEmpty()
     {
-        IAgentTool[] tools =
-        [
-            WebSearchToolFactory.Create(),
-            WebFetchToolFactory.Create(),
-            GetPriceToolFactory.Create(),
-            MacroSignalsToolFactory.Create(),
-            OrderBookToolFactory.Create(),
-            TechnicalIndicatorsToolFactory.Create(),
-        ];
-
-        foreach (var tool in tools)
-        {
-            Assert.NotNull(tool.Documentation);
-            Assert.False(string.IsNullOrWhiteSpace(tool.Documentation.LongDescription),
-                $"{tool.Name} LongDescription must be set");
-            Assert.False(string.IsNullOrWhiteSpace(tool.Documentation.Returns),
-                $"{tool.Name} Returns must be set");
-        }
+        var args = ToolSchemaGenerator.JsonToArgs(typeof(WebSearchTool.Settings), "not json");
+        Assert.Empty(args);
     }
 
-    // ─── Helpers ──────────────────────────────────────────────────────────────
+    [Fact]
+    public void JsonToArgs_OptionLongNameAsKey_MapsCorrectly()
+    {
+        // Key uses the property name (lowercase) — the option long name without dashes
+        var args = ToolSchemaGenerator.JsonToArgs(
+            typeof(WebSearchTool.Settings), "{\"query\": \"sol\"}");
 
-    private static ToolDocumentation BuildMinimalDoc() => new(
-        LongDescription: "A detailed description.",
-        Parameters: [],
-        Returns: "Return value text.",
-        Examples: [],
-        Notes: []);
-}
+        Assert.Contains("--query", args);
+        Assert.Contains("sol", args);
+    }
 
-// Minimal factory helpers so tests don't depend on DI or live HTTP.
-file static class GetPriceToolFactory
-{
-    public static GetPriceTool Create() =>
-        new(new HttpClient(), "http://localhost", new NoOpToolExecutor());
-}
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
-file static class WebSearchToolFactory
-{
-    public static WebSearchTool Create() =>
-        new(new HttpClient(), "fake-api-key", new NoOpToolExecutor());
-}
-
-file static class WebFetchToolFactory
-{
-    public static WebFetchTool Create() =>
-        new(new HttpClient(), new NoOpToolExecutor());
-}
-
-file static class MacroSignalsToolFactory
-{
-    public static MacroSignalsTool Create() =>
-        new(new HttpClient(), "http://localhost", new NoOpToolExecutor());
-}
-
-file static class OrderBookToolFactory
-{
-    public static OrderBookTool Create() =>
-        new(new HttpClient(), "http://localhost", new NoOpToolExecutor());
-}
-
-file static class TechnicalIndicatorsToolFactory
-{
-    public static TechnicalIndicatorsTool Create() =>
-        new(new HttpClient(), "http://localhost", new NoOpToolExecutor());
-}
-
-file sealed class NoOpToolExecutor : Crypton.Tools.IToolExecutor
-{
-    public Task<T> ExecuteWithResilienceAsync<T>(string toolName, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
-        => operation(ct);
+    private sealed class EmptySettings : CommandSettings { }
 }
